@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0165CD94A6DBDC49F2AFB479 /* Pods_SosMienTrung.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D2774B2A7B9E28145D8CC0A /* Pods_SosMienTrung.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		3BE85A5B2EE35F20007BF228 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,9 +28,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		2D2774B2A7B9E28145D8CC0A /* Pods_SosMienTrung.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SosMienTrung.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3BE85A462EE35F1F007BF228 /* SosMienTrung.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SosMienTrung.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3BE85A5A2EE35F20007BF228 /* SosMienTrungTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SosMienTrungTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3BE85A642EE35F20007BF228 /* SosMienTrungUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SosMienTrungUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB54F4536388C04F605BB3D0 /* Pods-SosMienTrung.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SosMienTrung.debug.xcconfig"; path = "Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung.debug.xcconfig"; sourceTree = "<group>"; };
+		E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SosMienTrung.release.xcconfig"; path = "Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0165CD94A6DBDC49F2AFB479 /* Pods_SosMienTrung.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +100,8 @@
 				3BE85A5D2EE35F20007BF228 /* SosMienTrungTests */,
 				3BE85A672EE35F20007BF228 /* SosMienTrungUITests */,
 				3BE85A472EE35F1F007BF228 /* Products */,
+				9735B6338A991EC7ADED18F2 /* Pods */,
+				52D687DC4020F967F913A11A /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,6 +115,23 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		52D687DC4020F967F913A11A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2D2774B2A7B9E28145D8CC0A /* Pods_SosMienTrung.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9735B6338A991EC7ADED18F2 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				BB54F4536388C04F605BB3D0 /* Pods-SosMienTrung.debug.xcconfig */,
+				E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */,
+			);
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -112,9 +139,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3BE85A6D2EE35F20007BF228 /* Build configuration list for PBXNativeTarget "SosMienTrung" */;
 			buildPhases = (
+				E053DB399317FF361FB84A3A /* [CP] Check Pods Manifest.lock */,
 				3BE85A422EE35F1F007BF228 /* Sources */,
 				3BE85A432EE35F1F007BF228 /* Frameworks */,
 				3BE85A442EE35F1F007BF228 /* Resources */,
+				73787C291394CB8C5BEFF247 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -124,8 +153,6 @@
 				3BE85A482EE35F1F007BF228 /* SosMienTrung */,
 			);
 			name = SosMienTrung;
-			packageProductDependencies = (
-			);
 			productName = SosMienTrung;
 			productReference = 3BE85A462EE35F1F007BF228 /* SosMienTrung.app */;
 			productType = "com.apple.product-type.application";
@@ -147,8 +174,6 @@
 				3BE85A5D2EE35F20007BF228 /* SosMienTrungTests */,
 			);
 			name = SosMienTrungTests;
-			packageProductDependencies = (
-			);
 			productName = SosMienTrungTests;
 			productReference = 3BE85A5A2EE35F20007BF228 /* SosMienTrungTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -170,8 +195,6 @@
 				3BE85A672EE35F20007BF228 /* SosMienTrungUITests */,
 			);
 			name = SosMienTrungUITests;
-			packageProductDependencies = (
-			);
 			productName = SosMienTrungUITests;
 			productReference = 3BE85A642EE35F20007BF228 /* SosMienTrungUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -244,6 +267,52 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		73787C291394CB8C5BEFF247 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		E053DB399317FF361FB84A3A /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-SosMienTrung-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		3BE85A422EE35F1F007BF228 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -284,6 +353,7 @@
 /* Begin XCBuildConfiguration section */
 		3BE85A6E2EE35F20007BF228 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = BB54F4536388C04F605BB3D0 /* Pods-SosMienTrung.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -292,6 +362,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SosMienTrung/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -318,6 +389,7 @@
 		};
 		3BE85A6F2EE35F20007BF228 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -326,6 +398,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SosMienTrung/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -388,7 +461,7 @@
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -403,7 +476,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -452,7 +525,7 @@
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -461,7 +534,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -479,7 +552,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.huynhkimcuong.SosMienTrungTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -501,7 +574,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.huynhkimcuong.SosMienTrungTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";

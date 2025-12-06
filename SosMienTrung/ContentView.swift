@@ -1,86 +1,55 @@
-//
-//  ContentView.swift
-//  SosMienTrung
-//
-//  Created by Huỳnh Kim Cương on 6/12/25.
-//
-
 import SwiftUI
-import CoreData
+import MultipeerConnectivity
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    @StateObject private var nearbyManager: NearbyInteractionManager
+    @StateObject private var multipeerSession: MultipeerSession
+    @StateObject private var bridgefyManager = BridgefyNetworkManager.shared
+    @State private var selectedPeer: MCPeerID?
+    
+    init() {
+        let manager = NearbyInteractionManager()
+        _nearbyManager = StateObject(wrappedValue: manager)
+        _multipeerSession = StateObject(wrappedValue: MultipeerSession(nearbyManager: manager))
+    }
+    
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        TabView {
+            RescuersView(
+                nearbyManager: nearbyManager,
+                multipeerSession: multipeerSession,
+                selectedPeer: $selectedPeer
+            )
+            .tabItem {
+                Label("Rescuers", systemImage: "location.fill")
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+            
+            ChatView(bridgefyManager: bridgefyManager)
+                .tabItem {
+                    Label("Chat", systemImage: "message.fill")
                 }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-            Text("Select an item")
+                .badge(unreadCount)
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+        .onAppear {
+            bridgefyManager.start()
+        }
+        .onChange(of: multipeerSession.connectedPeers) { peers in
+            if peers.count == 1, selectedPeer == nil {
+                selectedPeer = peers.first
+                nearbyManager.setActivePeer(peers.first)
+            } else if let selected = selectedPeer, !peers.contains(selected) {
+                selectedPeer = nil
+                nearbyManager.setActivePeer(nil)
             }
         }
     }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
+    
+    private var unreadCount: Int {
+        let count = bridgefyManager.messages.filter { !$0.isFromMe }.count
+        return count > 0 ? count : 0
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    ContentView()
 }

@@ -1,0 +1,16 @@
+PODS:
+  - BridgefySDK (1.2.4)
+
+DEPENDENCIES:
+  - BridgefySDK
+
+SPEC REPOS:
+  trunk:
+    - BridgefySDK
+
+SPEC CHECKSUMS:
+  BridgefySDK: 6205abffb48188eeb8bf963f0bb90dc59b5eaada
+
+PODFILE CHECKSUM: 2536bc9ffa518e0742e88e2e412cd505e772209e
+
+COCOAPODS: 1.16.2

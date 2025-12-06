@@ -6,5 +6,22 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>RescueFinder uses the local network to discover and connect to nearby rescuers.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rescuefinder._udp</string>
+		<string>_rescuefinder._tcp</string>
+	</array>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Ứng dụng cần Bluetooth để kết nối với các thiết bị gần đó khi không có internet.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Cho phép ứng dụng chia sẻ dữ liệu qua Bluetooth.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SosMienTrung cần truy cập vị trí để gửi tọa độ cứu hộ cho người xung quanh.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
 </dict>
 </plist>

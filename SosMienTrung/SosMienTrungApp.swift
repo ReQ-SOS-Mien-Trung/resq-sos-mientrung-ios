@@ -1,21 +1,13 @@
-//
-//  SosMienTrungApp.swift
-//  SosMienTrung
-//
-//  Created by Huỳnh Kim Cương on 6/12/25.
-//
-
 import SwiftUI
-import CoreData
+import UIKit
 
 @main
 struct SosMienTrungApp: App {
-    let persistenceController = PersistenceController.shared
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }
 }
