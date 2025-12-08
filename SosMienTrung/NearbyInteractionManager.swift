@@ -34,6 +34,9 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         super.init()
         session.delegate = self
 
+        #if compiler(>=5.5)
+        #warning("Using deprecated NISession.isSupported - replace when newer API is available")
+        #endif
         guard NISession.isSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
             return

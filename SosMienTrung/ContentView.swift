@@ -5,7 +5,9 @@ struct ContentView: View {
     @StateObject private var nearbyManager: NearbyInteractionManager
     @StateObject private var multipeerSession: MultipeerSession
     @StateObject private var bridgefyManager = BridgefyNetworkManager.shared
+    @StateObject private var userProfile = UserProfile.shared
     @State private var selectedPeer: MCPeerID?
+    @State private var isSetupComplete = false
     
     init() {
         let manager = NearbyInteractionManager()
@@ -14,24 +16,32 @@ struct ContentView: View {
     }
     
     var body: some View {
-        TabView {
-            RescuersView(
-                nearbyManager: nearbyManager,
-                multipeerSession: multipeerSession,
-                selectedPeer: $selectedPeer
-            )
-            .tabItem {
-                Label("Rescuers", systemImage: "location.fill")
+        Group {
+            if !userProfile.isSetupComplete || !isSetupComplete {
+                SetupProfileView(isSetupComplete: $isSetupComplete)
+            } else {
+                MainTabView(
+                    nearbyManager: nearbyManager,
+                    multipeerSession: multipeerSession,
+                    bridgefyManager: bridgefyManager,
+                    selectedPeer: $selectedPeer
+                )
             }
-            
-            ChatView(bridgefyManager: bridgefyManager)
-                .tabItem {
-                    Label("Chat", systemImage: "message.fill")
-                }
-                .badge(unreadCount)
         }
         .onAppear {
-            bridgefyManager.start()
+            // Check if setup is complete
+            isSetupComplete = userProfile.isSetupComplete
+            
+            // Khởi động Bridgefy khi app mở
+            if userProfile.isSetupComplete {
+                bridgefyManager.start()
+            }
+        }
+        .onChange(of: isSetupComplete) { newValue in
+            if newValue {
+                // Start Bridgefy after setup complete
+                bridgefyManager.start()
+            }
         }
         .onChange(of: multipeerSession.connectedPeers) { peers in
             if peers.count == 1, selectedPeer == nil {
@@ -42,11 +52,6 @@ struct ContentView: View {
                 nearbyManager.setActivePeer(nil)
             }
         }
-    }
-    
-    private var unreadCount: Int {
-        let count = bridgefyManager.messages.filter { !$0.isFromMe }.count
-        return count > 0 ? count : 0
     }
 }
 
