@@ -29,15 +29,15 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     private weak var multipeerSession: MultipeerSession?
     private var lastDistanceForHaptics: Float?
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private var isNearbyInteractionSupported: Bool {
+        NISession.deviceCapabilities.supportsPreciseDistanceMeasurement
+    }
 
     override init() {
         super.init()
         session.delegate = self
 
-        #if compiler(>=5.5)
-        #warning("Using deprecated NISession.isSupported - replace when newer API is available")
-        #endif
-        guard NISession.isSupported else {
+        guard isNearbyInteractionSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
@@ -51,7 +51,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     }
 
     func setActivePeer(_ peer: MCPeerID?) {
-        guard NISession.isSupported else {
+        guard isNearbyInteractionSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
@@ -68,18 +68,21 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         if let tokenData = tokenData(token) {
             peerByTokenData[tokenData] = peer
         }
+        
+        print("📡 Received discovery token from \(peer.displayName)")
 
+        // Only auto-track if no peer is currently tracked
         if trackedPeer == nil {
             trackedPeer = peer
-        }
-
-        if let active = trackedPeer, active == peer {
+            configureSession(for: peer, token: token)
+        } else if let active = trackedPeer, active == peer {
+            // Re-configure if this is the actively tracked peer
             configureSession(for: peer, token: token)
         }
     }
 
     private func configureSession(for peer: MCPeerID, token: NIDiscoveryToken) {
-        guard NISession.isSupported else {
+        guard isNearbyInteractionSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
@@ -121,27 +124,40 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
 
 extension NearbyInteractionManager: NISessionDelegate {
     func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
+        guard !nearbyObjects.isEmpty else { return }
+        
         for object in nearbyObjects {
             guard let tokenData = tokenData(object.discoveryToken),
-                  let peer = peerByTokenData[tokenData] else { continue }
+                  let peer = peerByTokenData[tokenData] else { 
+                print("⚠️ Could not find peer for discovery token")
+                continue 
+            }
 
             DispatchQueue.main.async {
-                if self.trackedPeer == nil {
-                    self.trackedPeer = peer
+                // Only update if this is the actively tracked peer
+                guard peer == self.trackedPeer else { 
+                    print("📍 Ignoring update from non-tracked peer \(peer.displayName)")
+                    return 
                 }
 
-                guard peer == self.trackedPeer else { return }
-
+                var updated = false
+                
                 if let distance = object.distance {
                     self.latestDistance = distance
                     self.handleHaptics(newDistance: distance)
+                    updated = true
+                    print("📏 Distance: \(String(format: "%.2f", distance))m")
                 }
 
                 if let direction = object.direction {
                     self.latestDirection = direction
+                    updated = true
+                    print("🧭 Direction: x=\(String(format: "%.2f", direction.x)), y=\(String(format: "%.2f", direction.y)), z=\(String(format: "%.2f", direction.z))")
                 }
-
-                self.statusMessage = "Tracking \(peer.displayName)"
+                
+                if updated {
+                    self.statusMessage = "Tracking \(peer.displayName)"
+                }
             }
         }
     }

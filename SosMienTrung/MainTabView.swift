@@ -1,18 +1,26 @@
 import SwiftUI
 import MultipeerConnectivity
 
+extension View {
+    @ViewBuilder
+    func apply<V: View>(@ViewBuilder _ transform: (Self) -> V) -> some View {
+        transform(self)
+    }
+}
+
 struct MainTabView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @Binding var selectedPeer: MCPeerID?
+    @State private var selectedTab: Int = 0
     
     var unreadMessagesCount: Int {
         bridgefyManager.messages.filter { !$0.isFromMe && $0.recipientId == nil }.count
     }
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             RescuersView(
                 nearbyManager: nearbyManager,
                 multipeerSession: multipeerSession,
@@ -27,14 +35,26 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Users", systemImage: "person.3.fill")
                 }
-                .badge(bridgefyManager.connectedUsersList.count > 0 ? bridgefyManager.connectedUsersList.count : nil)
+                .apply { view in
+                    if bridgefyManager.connectedUsersList.count > 0 {
+                        view.badge(bridgefyManager.connectedUsersList.count)
+                    } else {
+                        view
+                    }
+                }
                 .tag(1)
             
             ChatView(bridgefyManager: bridgefyManager)
                 .tabItem {
                     Label("Chat", systemImage: "message.fill")
                 }
-                .badge(unreadMessagesCount > 0 ? unreadMessagesCount : nil)
+                .apply { view in
+                    if unreadMessagesCount > 0 {
+                        view.badge(unreadMessagesCount)
+                    } else {
+                        view
+                    }
+                }
                 .tag(2)
             
             SOSMapView(messages: $bridgefyManager.messages)

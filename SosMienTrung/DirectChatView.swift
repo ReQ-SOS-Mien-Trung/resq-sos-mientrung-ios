@@ -98,7 +98,7 @@ struct DirectChatView: View {
                         }
                         .padding()
                     }
-                    .onChange(of: directMessages.count) { _ in
+                    .onChange(of: directMessages.count) {
                         if let lastMessage = directMessages.last {
                             withAnimation {
                                 proxy.scrollTo(lastMessage.id, anchor: .bottom)

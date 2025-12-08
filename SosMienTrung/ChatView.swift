@@ -6,6 +6,13 @@ struct ChatView: View {
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
     
+    // Only show broadcast messages (no recipientId = general chat)
+    var generalMessages: [Message] {
+        bridgefyManager.messages.filter { message in
+            message.recipientId == nil
+        }
+    }
+    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -45,13 +52,13 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
-                            if bridgefyManager.messages.isEmpty {
+                            if generalMessages.isEmpty {
                                 Text("No messages yet. Send a message to start the conversation!")
                                     .foregroundStyle(.white.opacity(0.5))
                                     .multilineTextAlignment(.center)
                                     .padding(.top, 60)
                             } else {
-                                ForEach(bridgefyManager.messages) { message in
+                                ForEach(generalMessages) { message in
                                     MessageBubble(message: message)
                                         .environmentObject(bridgefyManager)
                                         .id(message.id)
@@ -60,8 +67,8 @@ struct ChatView: View {
                         }
                         .padding()
                     }
-                    .onChange(of: bridgefyManager.messages.count) { _ in
-                        if let lastMessage = bridgefyManager.messages.last {
+                    .onChange(of: generalMessages.count) {
+                        if let lastMessage = generalMessages.last {
                             withAnimation {
                                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
                             }
@@ -205,7 +212,7 @@ struct MessageBubble: View {
                                 statusOpacity = 1.0
                             }
                         }
-                        .onChange(of: message.status) { _ in
+                        .onChange(of: message.status) {
                             // Fade out and fade in effect when status changes
                             withAnimation(.easeOut(duration: 0.2)) {
                                 statusOpacity = 0.3
@@ -248,22 +255,24 @@ struct LocationDetailMapView: View {
     let longitude: Double
     let title: String
     
-    @State private var region: MKCoordinateRegion
+    @State private var cameraPosition: MapCameraPosition
     
     init(latitude: Double, longitude: Double, title: String) {
         self.latitude = latitude
         self.longitude = longitude
         self.title = title
         
-        _region = State(initialValue: MKCoordinateRegion(
+        let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
             span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        ))
+        )
+        _cameraPosition = State(initialValue: .region(region))
     }
     
     var body: some View {
-        Map(coordinateRegion: $region, annotationItems: [makeAnnotation()]) { annotation in
-            MapAnnotation(coordinate: annotation.coordinate) {
+        let annotation = makeAnnotation()
+        Map(position: $cameraPosition) {
+            Annotation(annotation.title ?? "SOS", coordinate: annotation.coordinate) {
                 VStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.title)
@@ -276,7 +285,7 @@ struct LocationDetailMapView: View {
                 }
             }
         }
-        .edgesIgnoringSafeArea(.bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
     
     private func makeAnnotation() -> LocationAnnotation {

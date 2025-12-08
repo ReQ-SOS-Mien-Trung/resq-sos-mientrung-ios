@@ -5,28 +5,32 @@ struct SOSMapView: View {
     @StateObject private var locationManager = LocationManager()
     @Binding var messages: [Message]
     
-    @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 16.047079, longitude: 108.206230),
-        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    @State private var cameraPosition = MapCameraPosition.region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 16.047079, longitude: 108.206230),
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
     )
     
     var body: some View {
         ZStack {
-            Map(coordinateRegion: $region, annotationItems: locationAnnotations) { annotation in
-                MapAnnotation(coordinate: annotation.coordinate) {
-                    VStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundColor(.red)
-                        Text(annotation.title ?? "SOS")
-                            .font(.caption)
-                            .padding(4)
-                            .background(Color.white.opacity(0.8))
-                            .cornerRadius(4)
+            Map(position: $cameraPosition) {
+                ForEach(locationAnnotations) { annotation in
+                    Annotation(annotation.title ?? "SOS", coordinate: annotation.coordinate) {
+                        VStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title)
+                                .foregroundColor(.red)
+                            Text(annotation.title ?? "SOS")
+                                .font(.caption)
+                                .padding(4)
+                                .background(Color.white.opacity(0.8))
+                                .cornerRadius(4)
+                        }
                     }
                 }
             }
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
             
             VStack {
                 HStack {
@@ -47,7 +51,7 @@ struct SOSMapView: View {
             locationManager.requestPermission()
             locationManager.startUpdating()
         }
-        .onChange(of: locationManager.currentLocation) { newLocation in
+        .onChange(of: locationManager.currentLocation) { _, newLocation in
             if let location = newLocation {
                 centerMap(on: location.coordinate)
             }
@@ -81,9 +85,11 @@ struct SOSMapView: View {
     
     private func centerMap(on coordinate: CLLocationCoordinate2D) {
         withAnimation {
-            region = MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                )
             )
         }
     }

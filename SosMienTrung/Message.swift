@@ -48,9 +48,10 @@ struct Message: Identifiable, Codable {
     
     init(id: UUID = UUID(), 
          type: MessageType = .text, 
-         text: String, 
-         senderId: UUID, 
+         text: String,
+         senderId: UUID,
          isFromMe: Bool,
+         timestamp: Date = Date(),
          status: MessageStatus = .sending,
          senderName: String = "",
          senderPhone: String = "",
@@ -62,7 +63,7 @@ struct Message: Identifiable, Codable {
         self.type = type
         self.text = text
         self.senderId = senderId
-        self.timestamp = Date()
+        self.timestamp = timestamp
         self.isFromMe = isFromMe
         self.status = isFromMe ? status : .delivered
         self.senderName = senderName

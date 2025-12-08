@@ -63,13 +63,19 @@ struct TrackingView: View {
     private func angleForArrow(from direction: simd_float3?) -> Double {
         guard let direction else { return 0 }
         // Project the 3D direction vector onto the horizontal X-Z plane.
-        // We treat (x, z) as a 2D vector and use atan2(x, z) to get the yaw
-        // between device-forward (positive z) and the peer; degrees feed SwiftUI rotation.
+        // X-axis is left/right, Z-axis is forward/back
+        // atan2(x, z) gives angle from forward (z-axis) rotating towards right (x-axis)
         let horizontal = simd_float2(direction.x, direction.z)
         let magnitude = simd_length(horizontal)
-        guard magnitude > .leastNonzeroMagnitude else { return 0 }
-        let normalized = horizontal / magnitude
-        let radians = atan2(Double(normalized.x), Double(normalized.y))
-        return radians * 180 / .pi
+        guard magnitude > 0.01 else { return 0 } // Threshold to avoid noise
+        
+        // atan2(x, z) gives the angle in radians
+        // Positive x = right, positive z = forward
+        let radians = atan2(Double(horizontal.x), Double(horizontal.y))
+        let degrees = radians * 180.0 / .pi
+        
+        // Convert to 0-360 range
+        let normalizedDegrees = degrees < 0 ? degrees + 360 : degrees
+        return normalizedDegrees
     }
 }

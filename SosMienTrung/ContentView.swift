@@ -37,13 +37,13 @@ struct ContentView: View {
                 bridgefyManager.start()
             }
         }
-        .onChange(of: isSetupComplete) { newValue in
+        .onChange(of: isSetupComplete) { _, newValue in
             if newValue {
                 // Start Bridgefy after setup complete
                 bridgefyManager.start()
             }
         }
-        .onChange(of: multipeerSession.connectedPeers) { peers in
+        .onChange(of: multipeerSession.connectedPeers) { _, peers in
             if peers.count == 1, selectedPeer == nil {
                 selectedPeer = peers.first
                 nearbyManager.setActivePeer(peers.first)
