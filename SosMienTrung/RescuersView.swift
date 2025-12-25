@@ -4,25 +4,30 @@ import MultipeerConnectivity
 struct RescuersView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
+    @StateObject private var headingManager = HeadingManager()
     @Binding var selectedPeer: MCPeerID?
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
+
             VStack(alignment: .leading, spacing: 18) {
                 header
                 peerList
-                
+
                 if let peer = selectedPeer ?? multipeerSession.connectedPeers.first {
-                    TrackingView(peer: peer, nearbyManager: nearbyManager)
+                    TrackingView(
+                        peer: peer,
+                        nearbyManager: nearbyManager,
+                        headingManager: headingManager
+                    )
                 } else {
                     Text("Waiting for nearby rescuers...")
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 40)
                 }
-                
+
                 Spacer()
             }
             .padding()

@@ -23,5 +23,7 @@
 	<string>SosMienTrung cần truy cập vị trí để gửi tọa độ cứu hộ cho người xung quanh.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SosMienTrung sử dụng camera để hiển thị AR và hướng dẫn bạn tìm đến người cần cứu hộ.</string>
 </dict>
 </plist>

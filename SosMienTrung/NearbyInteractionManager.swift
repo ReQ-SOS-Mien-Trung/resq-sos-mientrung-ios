@@ -18,6 +18,10 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     @Published var latestDirection: simd_float3?
     @Published var trackedPeer: MCPeerID?
 
+    // Smoothed values để giảm jitter
+    @Published var smoothedDistance: Float?
+    @Published var smoothedDirection: simd_float3?
+
     var discoveryTokenData: Data? {
         guard let token = session.discoveryToken else { return nil }
         return try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
@@ -32,6 +36,13 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     private var isNearbyInteractionSupported: Bool {
         NISession.deviceCapabilities.supportsPreciseDistanceMeasurement
     }
+
+    // Debouncing và smoothing
+    private var lastUpdateTime: Date = Date()
+    private let minimumUpdateInterval: TimeInterval = 0.05 // ~20 FPS max (giảm từ 30 để nhẹ hơn)
+    private var distanceHistory: [Float] = []
+    private var directionHistory: [simd_float3] = []
+    private let historySize = 8 // Tăng lên 8 samples để mượt hơn
 
     override init() {
         super.init()
@@ -87,12 +98,19 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             return
         }
 
+        print("🎯 Configuring NI session for peer: \(peer.displayName)")
+
         let configuration = NINearbyPeerConfiguration(peerToken: token)
         session.run(configuration)
         statusMessage = "Tracking \(peer.displayName)"
+
+        // Clear all data khi bắt đầu session mới
         latestDistance = nil
         latestDirection = nil
+        smoothedDistance = nil
+        smoothedDirection = nil
         lastDistanceForHaptics = nil
+        clearHistory()
 
         // Ensure the peer has our latest token (important after a session restart).
         multipeerSession?.broadcastDiscoveryTokenToConnectedPeers()
@@ -120,43 +138,102 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         }
         lastDistanceForHaptics = newDistance
     }
+
+    // MARK: - Smoothing Functions
+
+    private func smoothDistance(_ newDistance: Float) -> Float {
+        distanceHistory.append(newDistance)
+        if distanceHistory.count > historySize {
+            distanceHistory.removeFirst()
+        }
+
+        // Moving average
+        let sum = distanceHistory.reduce(0, +)
+        return sum / Float(distanceHistory.count)
+    }
+
+    private func smoothDirection(_ newDirection: simd_float3) -> simd_float3 {
+        directionHistory.append(newDirection)
+        if directionHistory.count > historySize {
+            directionHistory.removeFirst()
+        }
+
+        // Normalize và average các vectors
+        var sumX: Float = 0
+        var sumY: Float = 0
+        var sumZ: Float = 0
+
+        for dir in directionHistory {
+            sumX += dir.x
+            sumY += dir.y
+            sumZ += dir.z
+        }
+
+        let count = Float(directionHistory.count)
+        let avgDirection = simd_float3(sumX / count, sumY / count, sumZ / count)
+
+        // Normalize để giữ unit vector
+        let length = simd_length(avgDirection)
+        if length > 0.001 {
+            return avgDirection / length
+        }
+        return avgDirection
+    }
+
+    func clearHistory() {
+        distanceHistory.removeAll()
+        directionHistory.removeAll()
+        smoothedDistance = nil
+        smoothedDirection = nil
+    }
 }
 
 extension NearbyInteractionManager: NISessionDelegate {
     func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
         guard !nearbyObjects.isEmpty else { return }
-        
+
+        // Debouncing: skip update nếu quá nhanh
+        let now = Date()
+        guard now.timeIntervalSince(lastUpdateTime) >= minimumUpdateInterval else { return }
+
         for object in nearbyObjects {
             guard let tokenData = tokenData(object.discoveryToken),
-                  let peer = peerByTokenData[tokenData] else { 
-                print("⚠️ Could not find peer for discovery token")
-                continue 
+                  let peer = peerByTokenData[tokenData] else {
+                print("⚠️ NI: Could not find peer for token")
+                continue
             }
 
-            DispatchQueue.main.async {
-                // Only update if this is the actively tracked peer
-                guard peer == self.trackedPeer else { 
-                    print("📍 Ignoring update from non-tracked peer \(peer.displayName)")
-                    return 
-                }
+            // Only update if this is the actively tracked peer
+            guard peer == self.trackedPeer else {
+                print("📍 NI: Ignoring update from non-tracked peer: \(peer.displayName)")
+                continue
+            }
 
+            // Cập nhật lastUpdateTime sau khi tìm được tracked peer
+            lastUpdateTime = now
+
+            // Log raw data
+            print("📏 NI Raw - distance: \(object.distance ?? -1), direction: \(object.direction?.debugDescription ?? "nil")")
+
+            DispatchQueue.main.async {
                 var updated = false
-                
+
                 if let distance = object.distance {
                     self.latestDistance = distance
+                    self.smoothedDistance = self.smoothDistance(distance)
                     self.handleHaptics(newDistance: distance)
                     updated = true
-                    print("📏 Distance: \(String(format: "%.2f", distance))m")
                 }
 
                 if let direction = object.direction {
                     self.latestDirection = direction
+                    self.smoothedDirection = self.smoothDirection(direction)
                     updated = true
-                    print("🧭 Direction: x=\(String(format: "%.2f", direction.x)), y=\(String(format: "%.2f", direction.y)), z=\(String(format: "%.2f", direction.z))")
                 }
-                
+
                 if updated {
                     self.statusMessage = "Tracking \(peer.displayName)"
+                    print("✅ NI Updated - smoothedDistance: \(self.smoothedDistance ?? -1)")
                 }
             }
         }
