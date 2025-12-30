@@ -4,25 +4,6 @@ enum MessageType: String, Codable {
     case text
     case sosLocation
     case userInfo  // Share user profile
-    case deliveryReceipt  // Message delivery confirmation
-}
-
-enum MessageStatus: String, Codable {
-    case sending     // Đang gửi
-    case sent        // Đã gửi
-    case delivered   // Đã nhận
-    case read        // Đã xem
-    case failed      // Gửi thất bại
-    
-    var displayText: String {
-        switch self {
-        case .sending: return "Đang gửi"
-        case .sent: return "Đã gửi"
-        case .delivered: return "Đã nhận"
-        case .read: return "Đã xem"
-        case .failed: return "Thất bại"
-        }
-    }
 }
 
 struct Message: Identifiable, Codable {
@@ -32,7 +13,6 @@ struct Message: Identifiable, Codable {
     let senderId: UUID
     let timestamp: Date
     let isFromMe: Bool
-    var status: MessageStatus  // Make mutable
     
     // User info
     let senderName: String
@@ -52,7 +32,6 @@ struct Message: Identifiable, Codable {
          senderId: UUID,
          isFromMe: Bool,
          timestamp: Date = Date(),
-         status: MessageStatus = .sending,
          senderName: String = "",
          senderPhone: String = "",
          channelId: UUID? = nil,
@@ -65,7 +44,6 @@ struct Message: Identifiable, Codable {
         self.senderId = senderId
         self.timestamp = timestamp
         self.isFromMe = isFromMe
-        self.status = isFromMe ? status : .delivered
         self.senderName = senderName
         self.senderPhone = senderPhone
         self.channelId = channelId
@@ -81,16 +59,6 @@ struct Message: Identifiable, Codable {
     var isDirectMessage: Bool {
         return recipientId != nil
     }
-    
-    var statusIcon: String {
-        switch status {
-        case .sending: return "clock"
-        case .sent: return "checkmark"
-        case .delivered: return "checkmark.circle"
-        case .read: return "checkmark.circle.fill"
-        case .failed: return "exclamationmark.circle"
-        }
-    }
 }
 
 struct MessagePayload: Codable {
@@ -105,8 +73,6 @@ struct MessagePayload: Codable {
     let recipientId: UUID?
     let latitude: Double?
     let longitude: Double?
-    let status: MessageStatus?
-    let originalMessageId: UUID? // For delivery receipts
     
     init(type: MessageType = .text, 
          text: String, 
@@ -118,9 +84,7 @@ struct MessagePayload: Codable {
          channelId: UUID? = nil,
          recipientId: UUID? = nil,
          latitude: Double? = nil, 
-         longitude: Double? = nil,
-         status: MessageStatus? = nil,
-         originalMessageId: UUID? = nil) {
+         longitude: Double? = nil) {
         self.type = type
         self.text = text
         self.messageId = messageId
@@ -132,7 +96,5 @@ struct MessagePayload: Codable {
         self.recipientId = recipientId
         self.latitude = latitude
         self.longitude = longitude
-        self.status = status
-        self.originalMessageId = originalMessageId
     }
 }

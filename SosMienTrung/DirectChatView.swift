@@ -16,9 +16,10 @@ struct DirectChatView: View {
     
     var directMessages: [Message] {
         bridgefyManager.messages.filter { message in
+            // Only include messages with recipientId (exclude broadcast messages)
             // Messages sent to this user or received from this user
             (message.recipientId == recipient.id && message.isFromMe) ||
-            (message.senderId == recipient.id && !message.isFromMe)
+            (message.senderId == recipient.id && message.recipientId != nil && !message.isFromMe)
         }
     }
     

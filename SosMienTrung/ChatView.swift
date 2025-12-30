@@ -130,7 +130,6 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: Message
     @State private var showMap = false
-    @State private var statusOpacity: Double = 0
     @EnvironmentObject var bridgefyManager: BridgefyNetworkManager
     
     var body: some View {
@@ -150,12 +149,6 @@ struct MessageBubble: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message.text)
                         .foregroundColor(.white)
-                        .onAppear {
-                            // Mark message as read when it appears on screen
-                            if !message.isFromMe {
-                                bridgefyManager.markMessageAsRead(message.id)
-                            }
-                        }
                     
                     // Hiển thị thông tin vị trí nếu có
                     if message.hasLocation, let lat = message.latitude, let long = message.longitude {
@@ -190,39 +183,10 @@ struct MessageBubble: View {
                 .foregroundColor(.white)
                 .cornerRadius(16)
                 
-                HStack(spacing: 4) {
-                    Text(message.timestamp, style: .time)
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                    
-                    // Show status with icon and label for messages from me
-                    if message.isFromMe {
-                        HStack(spacing: 3) {
-                            Image(systemName: message.statusIcon)
-                                .font(.caption2)
-                            
-                            Text(message.status.displayText)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(message.status == .failed ? .red : .blue.opacity(0.7))
-                        .opacity(statusOpacity)
-                        .animation(.easeInOut(duration: 0.4), value: message.status)
-                        .onAppear {
-                            withAnimation(.easeIn(duration: 0.3)) {
-                                statusOpacity = 1.0
-                            }
-                        }
-                        .onChange(of: message.status) {
-                            // Fade out and fade in effect when status changes
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                statusOpacity = 0.3
-                            }
-                            withAnimation(.easeIn(duration: 0.4).delay(0.2)) {
-                                statusOpacity = 1.0
-                            }
-                        }
-                    }
-                }
+                // Just show time, no status
+                Text(message.timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
             }
             .frame(maxWidth: 250, alignment: message.isFromMe ? .trailing : .leading)
             

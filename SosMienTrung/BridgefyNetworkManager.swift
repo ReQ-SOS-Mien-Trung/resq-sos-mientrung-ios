@@ -7,27 +7,12 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     static let shared = BridgefyNetworkManager()
 
     private var bridgefy: Bridgefy?
-    private var outgoingMessageMap: [UUID: UUID] = [:] // Bridgefy messageId -> app messageId
     @Published var messages: [Message] = []
     @Published var connectedUsers: Set<UUID> = []
     @Published var connectedUsersList: [User] = []  // List of known users with profiles
     
     let locationManager = LocationManager()
     private var userProfiles: [UUID: User] = [:]  // Cache user profiles
-
-    // Mark message as read
-    func markMessageAsRead(_ messageId: UUID) {
-        DispatchQueue.main.async {
-            if let index = self.messages.firstIndex(where: { $0.id == messageId }) {
-                // Only mark delivered messages as read
-                if self.messages[index].status == .delivered && !self.messages[index].isFromMe {
-                    print("📖 Marking message \(messageId) as read")
-                    self.messages[index].status = .read
-                    self.objectWillChange.send()
-                }
-            }
-        }
-    }
 
     func start() {
         #if targetEnvironment(simulator)
@@ -110,8 +95,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         
         do {
             let data = try JSONEncoder().encode(payload)
-            let bridgefyMessageId = try bridgefy.send(data, using: .broadcast(senderId: sender))
-            outgoingMessageMap[bridgefyMessageId] = messageId
+            try bridgefy.send(data, using: .broadcast(senderId: sender))
             
             // Add to local messages immediately
             let message = Message(
@@ -125,7 +109,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             )
             self.messages.append(message)
             self.objectWillChange.send()
-            print("📤 Broadcast message added locally: \(text) (\(messageId))")
+            print("📤 Broadcast message sent: \(text)")
         } catch {
             print("❌ Bridgefy send failed: \(error.localizedDescription)")
         }
@@ -158,8 +142,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         do {
             let data = try JSONEncoder().encode(payload)
             // Use P2P for direct messages
-            let bridgefyMessageId = try bridgefy.send(data, using: .p2p(userId: recipient.id))
-            outgoingMessageMap[bridgefyMessageId] = messageId
+            try bridgefy.send(data, using: .p2p(userId: recipient.id))
             
             // Add to local messages immediately
             let message = Message(
@@ -174,40 +157,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             )
             self.messages.append(message)
             self.objectWillChange.send()
-            print("📤 Direct message added locally to \(recipient.name): \(text) (\(messageId))")
+            print("📤 Direct message sent to \(recipient.name): \(text)")
         } catch {
             print("❌ Failed to send direct message: \(error.localizedDescription)")
-        }
-    }
-    
-    // Send delivery receipt back to sender
-    private func sendDeliveryReceipt(for messageId: UUID, to recipientId: UUID) {
-        guard let bridgefy, let currentUserId = bridgefy.currentUserId else {
-            return
-        }
-        
-        guard let currentUser = UserProfile.shared.currentUser else {
-            return
-        }
-        
-        let receiptId = UUID()
-        let payload = MessagePayload(
-            type: .deliveryReceipt,
-            text: "Receipt",
-            messageId: receiptId,
-            timestamp: Date(),
-            senderId: currentUserId,
-            senderName: currentUser.name,
-            senderPhone: currentUser.phoneNumber,
-            originalMessageId: messageId
-        )
-        
-        do {
-            let data = try JSONEncoder().encode(payload)
-            _ = try bridgefy.send(data, using: .p2p(userId: recipientId))
-            print("📬 Sent delivery receipt for message \(messageId)")
-        } catch {
-            print("❌ Failed to send delivery receipt: \(error.localizedDescription)")
         }
     }
     
@@ -246,8 +198,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         
         do {
             let data = try JSONEncoder().encode(payload)
-            let bridgefyMessageId = try bridgefy.send(data, using: .broadcast(senderId: sender))
-            outgoingMessageMap[bridgefyMessageId] = messageId
+            try bridgefy.send(data, using: .broadcast(senderId: sender))
             
             // Add to local messages
             let message = Message(
@@ -264,9 +215,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             )
             self.messages.append(message)
             
-            print("SOS sent with location: \(coords.latitude), \(coords.longitude)")
+            print("📤 SOS sent with location: \(coords.latitude), \(coords.longitude)")
         } catch {
-            print("Bridgefy send failed: \(error.localizedDescription)")
+            print("❌ Bridgefy send failed: \(error.localizedDescription)")
         }
     }
 
@@ -329,36 +280,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
     func bridgefyDidSendMessage(with messageId: UUID) {
         print("✅ Message sent successfully: \(messageId)")
-        
-        // Update message status to .sent
-        DispatchQueue.main.async {
-            let originalId = self.outgoingMessageMap[messageId] ?? messageId
-            self.outgoingMessageMap.removeValue(forKey: messageId)
-            
-            guard let index = self.messages.firstIndex(where: { $0.id == originalId }) else {
-                print("⚠️ Could not find message \(originalId) to update status")
-                return
-            }
-            print("🔄 Updating message status from \(self.messages[index].status) to .sent")
-            self.messages[index].status = .sent
-            self.objectWillChange.send()
-        }
     }
 
     func bridgefyDidFailSendingMessage(with messageId: UUID, withError error: BridgefyError) {
         print("❌ Failed to send message \(messageId): \(error)")
-        
-        // Update message status to .failed
-        DispatchQueue.main.async {
-            let originalId = self.outgoingMessageMap[messageId] ?? messageId
-            self.outgoingMessageMap.removeValue(forKey: messageId)
-            
-            if let index = self.messages.firstIndex(where: { $0.id == originalId }) {
-                print("🔄 Updating message status to .failed")
-                self.messages[index].status = .failed
-                self.objectWillChange.send()
-            }
-        }
     }
 
     func bridgefyDidReceiveData(_ data: Data, with messageId: UUID, using transmissionMode: TransmissionMode) {
@@ -368,22 +293,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             
             // Extract real sender from payload (not the relay)
             let senderId = payload.senderId
-            
-            // Handle delivery receipts
-            if payload.type == .deliveryReceipt {
-                DispatchQueue.main.async {
-                    if let originalId = payload.originalMessageId,
-                       let index = self.messages.firstIndex(where: { $0.id == originalId }) {
-                        print("🔄 Updating message status from \(self.messages[index].status) to .delivered")
-                        self.messages[index].status = .delivered
-                        self.objectWillChange.send()
-                        print("✅ Message \(originalId) marked as delivered")
-                    } else {
-                        print("⚠️ Could not find message with originalId to mark as delivered")
-                    }
-                }
-                return
-            }
             
             // Handle user info messages
             if payload.type == .userInfo {
@@ -428,7 +337,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
                 if !self.messages.contains(where: { $0.id == message.id }) {
                     self.messages.append(message)
                     self.objectWillChange.send()
-                    print("📨 Message added from \(payload.senderName): \(message.text) (\(message.id))")
+                    print("📨 Message received from \(payload.senderName): \(message.text)")
                     
                     // Log nếu là tin nhắn SOS có vị trí
                     if message.type == .sosLocation, let lat = message.latitude, let long = message.longitude {
@@ -446,9 +355,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
                         self.userProfiles[senderId] = user
                         self.updateConnectedUsersList()
                     }
-                    
-                    // Send delivery receipt immediately
-                    self.sendDeliveryReceipt(for: payload.messageId, to: senderId)
                 }
             }
         } catch {
