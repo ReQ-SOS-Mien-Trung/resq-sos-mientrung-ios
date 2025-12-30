@@ -67,9 +67,8 @@ struct MainTabView: View {
             if newValue.count == 1, selectedPeer == nil {
                 selectedPeer = newValue.first
                 nearbyManager.setActivePeer(newValue.first)
-            } else if let selected = selectedPeer, !newValue.contains(selected) {
-                selectedPeer = nil
-                nearbyManager.setActivePeer(nil)
+            } else {
+                // KHÔNG xóa active peer khi Multipeer rớt; NI vẫn tiếp tục sau khi đã trao đổi token.
             }
         }
     }

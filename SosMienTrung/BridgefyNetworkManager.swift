@@ -30,6 +30,11 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func start() {
+        #if targetEnvironment(simulator)
+        print("ℹ️ Bridgefy is not supported on the Simulator. Skipping start().")
+        return
+        #endif
+        
         guard bridgefy == nil else { 
             print("⚠️ Bridgefy already started, skipping")
             return 

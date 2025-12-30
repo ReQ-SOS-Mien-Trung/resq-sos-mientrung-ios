@@ -47,10 +47,15 @@ struct ContentView: View {
             if peers.count == 1, selectedPeer == nil {
                 selectedPeer = peers.first
                 nearbyManager.setActivePeer(peers.first)
-            } else if let selected = selectedPeer, !peers.contains(selected) {
+            } 
+            // Commented out to prevent UWB disconnection when Multipeer drops.
+            // UWB operates independently once tokens are exchanged and often has better range/stability.
+            /*
+            else if let selected = selectedPeer, !peers.contains(selected) {
                 selectedPeer = nil
                 nearbyManager.setActivePeer(nil)
             }
+            */
         }
     }
 }
