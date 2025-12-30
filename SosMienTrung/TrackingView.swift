@@ -3,6 +3,7 @@ import MultipeerConnectivity
 import simd
 import AVFoundation
 import ARKit
+import RealityKit
 
 #if targetEnvironment(simulator)
 // Trên Simulator: không dùng ARKit camera
@@ -98,61 +99,30 @@ struct CameraPreview: UIViewRepresentable {
 struct TrackingView: View {
     let peer: MCPeerID
     @ObservedObject var nearbyManager: NearbyInteractionManager
+    let findingMode: FindingMode
 
     var body: some View {
-        let distance = nearbyManager.latestDistance
-        let direction = nearbyManager.latestDirection
-        let color = backgroundColor(for: distance)
-        let arrowAngle = computedArrowAngle(direction: direction, horizontalAngle: nearbyManager.latestHorizontalAngle)
+        let showBlur = nearbyManager.currentWorldTransform == nil || nearbyManager.showCoachingOverlay
 
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Text("Tracking \(peer.displayName)")
                 .foregroundStyle(.white)
                 .font(.headline)
                 .shadow(radius: 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            ZStack {
-                Circle()
-                    .fill(Color.black.opacity(0.4))
-                    .frame(width: 220, height: 220)
-                
-                Image(systemName: "location.north.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 160, height: 160)
-                    .foregroundStyle(color)
-                    .rotationEffect(.degrees(arrowAngle))
-                    .shadow(color: .black.opacity(0.5), radius: 4)
-            }
-
-            if let distance {
-                Text(String(format: "%.2fm", distance))
-                    .font(.system(size: 64, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 2)
-            } else {
-                Text("Locating...")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .shadow(radius: 2)
-            }
+            Spacer()
             
-            // Gợi ý khi chưa có hướng (Simulator thường không có hướng)
-            if nearbyManager.latestHorizontalAngle == nil && direction == nil && distance != nil {
-                Text("Point camera at rescuer for direction")
-                    .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.top, 4)
-                    .shadow(radius: 1)
-            }
+            // NICoachingOverlay sẽ hiển thị arrow + distance + guidance ở center
+            
+            Spacer()
 
-            // Hiển thị chất lượng đo đạc (EDM)
+            // Quality badge ở dưới (không trùng với overlay)
             qualityBadge(nearbyManager.latestQuality)
 
-            Text("Move slowly and keep devices facing each other for strongest UWB signal.")
+            Text("Di chuyển chậm và giữ thiết bị hướng về nhau để tín hiệu UWB mạnh nhất.")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .shadow(radius: 1)
@@ -162,45 +132,35 @@ struct TrackingView: View {
         .background(
             ZStack {
                 #if targetEnvironment(simulator)
-                // Simulator: không dùng ARKit camera
+                // Simulator: không dùng camera
                 Color.black
                 #else
-                // Device: dùng ARKit camera để hỗ trợ Camera Assistance
-                ARKitCameraView()
+                // Device: dùng RealityKit AR với NI camera assistance + animated spheres/text
+                NICameraAssistanceView(findingMode: findingMode, nearbyManager: nearbyManager)
                 #endif
-                color.opacity(0.3)
+                // Slight overlay để tạo depth
+                Color.black.opacity(0.15)
+                if showBlur {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .blur(radius: 10)
+                }
             }
         )
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
         .clipShape(RoundedRectangle(cornerRadius: 20))
-    }
-
-    private func backgroundColor(for distance: Float?) -> Color {
-        guard let distance else { return .orange }
-        if distance < 3 { return .green }
-        if distance < 10 { return .yellow }
-        return .red
-    }
-
-    // Ưu tiên horizontalAngle (iOS 17+, EDM + Camera Assistance), fallback sang vector direction
-    private func computedArrowAngle(direction: simd_float3?, horizontalAngle: Float?) -> Double {
-        if #available(iOS 17.0, *), let angle = horizontalAngle {
-            // horizontalAngle là radian → đổi sang độ
-            return Double(angle) * 180.0 / .pi
-        } else {
-            return angleForArrow(from: direction)
+        .overlay(alignment: .center) {
+            NICoachingOverlay(
+                findingMode: findingMode,
+                isConverged: false, // TODO: track convergence status
+                measurementQuality: nearbyManager.latestQuality,
+                distance: nearbyManager.latestDistance,
+                horizontalAngle: nearbyManager.latestHorizontalAngle,
+                showCoachingOverlay: nearbyManager.showCoachingOverlay,
+                showUpdownText: nearbyManager.showUpDownText != nil
+            )
         }
-    }
-
-    private func angleForArrow(from direction: simd_float3?) -> Double {
-        guard let direction else { return 0 }
-        let horizontal = simd_float2(direction.x, direction.z)
-        let magnitude = simd_length(horizontal)
-        guard magnitude > 0.01 else { return 0 }
-        let radians = atan2(Double(horizontal.x), Double(horizontal.y))
-        let degrees = radians * 180.0 / .pi
-        return degrees < 0 ? degrees + 360 : degrees
     }
 
     @ViewBuilder

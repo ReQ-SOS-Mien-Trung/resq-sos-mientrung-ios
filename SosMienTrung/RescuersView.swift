@@ -11,7 +11,7 @@ struct RescuersView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
                 header
                 peerList
 
@@ -19,7 +19,7 @@ struct RescuersView: View {
                     TrackingView(
                         peer: peer,
                         nearbyManager: nearbyManager,
-                        headingManager: headingManager
+                        findingMode: .visitor  // visitor mode: text + sphere
                     )
                 } else {
                     Text("Waiting for nearby rescuers...")
@@ -35,14 +35,18 @@ struct RescuersView: View {
     }
     
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack {
             Text("RescueFinder")
-                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-            Text(nearbyManager.statusMessage)
-                .foregroundStyle(.white.opacity(0.7))
+            Spacer()
+            if selectedPeer == nil {
+                Text(nearbyManager.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private var peerList: some View {
