@@ -10,9 +10,13 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     @Published var messages: [Message] = []
     @Published var connectedUsers: Set<UUID> = []
     @Published var connectedUsersList: [User] = []  // List of known users with profiles
-    
+
     let locationManager = LocationManager()
     private var userProfiles: [UUID: User] = [:]  // Cache user profiles
+
+    private let networkMonitor = NetworkMonitor.shared
+    private let sosRelayService = SOSRelayService.shared
+    private var processedSOSPacketIds: Set<String> = []  // Avoid reprocessing
 
     func start() {
         #if targetEnvironment(simulator)
@@ -163,55 +167,213 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         }
     }
     
-    /// Gửi tin nhắn SOS kèm tọa độ vị trí hiện tại
+    /// Gửi tin nhắn SOS kèm tọa độ vị trí hiện tại (legacy - không upload)
     func sendSOSWithLocation(_ text: String = "🆘 Cần giúp đỡ gấp!") {
         guard let bridgefy, let sender = bridgefy.currentUserId else {
             print("Bridgefy not started or missing userId")
             return
         }
-        
+
         guard let currentUser = UserProfile.shared.currentUser else {
             print("User profile not set")
             return
         }
-        
+
+        guard let coords = locationManager.coordinates else {
+            print("Location not available")
+            // Fallback: gửi tin nhắn không có vị trí
+            sendBroadcastMessage(text)
+            return
+        }
+
         let messageId = UUID()
         let timestamp = Date()
-        let coords = locationManager.coordinates
-        let message = Message(
-            id: messageId,
+
+        let payload = MessagePayload(
             type: .sosLocation,
             text: text,
-            senderId: sender,
-            isFromMe: true,
+            messageId: messageId,
             timestamp: timestamp,
+            senderId: sender,
             senderName: currentUser.name,
             senderPhone: currentUser.phoneNumber,
-            latitude: coords?.latitude,
-            longitude: coords?.longitude
+            latitude: coords.latitude,
+            longitude: coords.longitude
         )
-        self.messages.append(message)
-        self.objectWillChange.send()
 
-        let locString: String
-        if let coords = coords {
-            locString = "\(coords.latitude),\(coords.longitude)"
-            print("📤 SOS prepared with location: \(coords.latitude), \(coords.longitude)")
-        } else {
-            locString = ""
-            print("📤 SOS prepared without location")
+        do {
+            let data = try JSONEncoder().encode(payload)
+            try bridgefy.send(data, using: .broadcast(senderId: sender))
+
+            let message = Message(
+                id: messageId,
+                type: .sosLocation,
+                text: text,
+                senderId: sender,
+                isFromMe: true,
+                timestamp: timestamp,
+                senderName: currentUser.name,
+                senderPhone: currentUser.phoneNumber,
+                latitude: coords.latitude,
+                longitude: coords.longitude
+            )
+            self.messages.append(message)
+            self.objectWillChange.send()
+
+            print("📤 SOS sent with location: \(coords.latitude), \(coords.longitude)")
+        } catch {
+            print("❌ Bridgefy send failed: \(error.localizedDescription)")
         }
 
         let packet = SOSPacket(
             packetId: messageId.uuidString,
             originId: sender.uuidString,
-            msg: text,
-            loc: locString,
+            timestamp: timestamp,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            message: text,
             hopCount: 0,
-            path: [],
-            timestamp: timestamp.timeIntervalSince1970
+            path: []
         )
         MeshRouter.shared.sendOrRelaySOS(packet)
+    }
+
+    /// Gửi SOS với khả năng upload lên server (nếu có mạng) hoặc relay qua mesh
+    func sendSOSWithUpload(_ text: String) async {
+        guard let bridgefy, let sender = bridgefy.currentUserId else {
+            print("Bridgefy not started or missing userId")
+            return
+        }
+
+        guard UserProfile.shared.currentUser != nil else {
+            print("User profile not set")
+            return
+        }
+
+        guard let coords = locationManager.coordinates else {
+            print("Location not available")
+            await MainActor.run {
+                sendBroadcastMessage(text)
+            }
+            return
+        }
+
+        let messageId = UUID()
+        let timestamp = Date()
+
+        // Tạo SOSPacket cho server
+        let sosPacket = SOSPacket(
+            packetId: messageId.uuidString,
+            originId: sender.uuidString,
+            timestamp: timestamp,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            message: text,
+            hopCount: 0,
+            path: [sender.uuidString]
+        )
+
+        // Nếu có mạng, gửi trực tiếp lên server
+        if networkMonitor.isConnected {
+            print("🌐 Has network - uploading SOS directly to server")
+            let success = await sosRelayService.uploadSOS(sosPacket)
+            if success {
+                print("✅ SOS uploaded directly to server")
+            }
+        } else {
+            print("📴 No network - will relay via mesh")
+        }
+
+        // Luôn broadcast qua mesh network (để các device khác có thể relay)
+        await MainActor.run {
+            broadcastSOSPacket(sosPacket, originalMessage: text, timestamp: timestamp)
+        }
+    }
+
+    /// Broadcast SOS packet qua mesh network
+    private func broadcastSOSPacket(_ sosPacket: SOSPacket, originalMessage: String, timestamp: Date) {
+        guard let bridgefy, let sender = bridgefy.currentUserId else { return }
+        guard let currentUser = UserProfile.shared.currentUser else { return }
+
+        let messageId = UUID(uuidString: sosPacket.packetId) ?? UUID()
+
+        // Tạo MeshPayload chứa SOSPacket
+        let meshPayload = MeshPayload(sosPacket: sosPacket)
+
+        do {
+            let data = try JSONEncoder().encode(meshPayload)
+            try bridgefy.send(data, using: .broadcast(senderId: sender))
+
+            // Add to local messages
+            let locParts = sosPacket.loc.split(separator: ",")
+            let lat = Double(locParts.first ?? "0") ?? 0
+            let long = Double(locParts.last ?? "0") ?? 0
+
+            let message = Message(
+                id: messageId,
+                type: .sosLocation,
+                text: originalMessage,
+                senderId: sender,
+                isFromMe: true,
+                timestamp: timestamp,
+                senderName: currentUser.name,
+                senderPhone: currentUser.phoneNumber,
+                latitude: lat,
+                longitude: long
+            )
+            self.messages.append(message)
+
+            print("📤 SOS broadcast via mesh: \(sosPacket.packetId)")
+            print("📤 SOS sent with location: \(lat), \(long)")
+        } catch {
+            print("❌ Failed to broadcast SOS: \(error.localizedDescription)")
+        }
+    }
+
+    /// Xử lý SOS packet nhận được từ mesh - relay lên server nếu có mạng
+    private func handleReceivedSOSPacket(_ sosPacket: SOSPacket) {
+        guard let bridgefy, let myId = bridgefy.currentUserId else { return }
+
+        // Tránh xử lý trùng lặp
+        guard !processedSOSPacketIds.contains(sosPacket.packetId) else {
+            print("⏭️ Already processed SOS packet: \(sosPacket.packetId)")
+            return
+        }
+        processedSOSPacketIds.insert(sosPacket.packetId)
+
+        print("📨 Received SOS packet: \(sosPacket.packetId) from \(sosPacket.originId)")
+        print("   Hop count: \(sosPacket.hopCount), Path: \(sosPacket.path)")
+
+        // Nếu có mạng, upload lên server
+        if networkMonitor.isConnected {
+            print("🌐 Has network - relaying SOS to server")
+            let relayedPacket = sosPacket.relayed(by: myId.uuidString)
+
+            Task {
+                let success = await sosRelayService.uploadSOS(relayedPacket)
+                if success {
+                    print("✅ SOS relayed to server successfully")
+                }
+            }
+        } else {
+            // Không có mạng - tiếp tục relay qua mesh
+            print("📴 No network - forwarding SOS via mesh")
+            let relayedPacket = sosPacket.relayed(by: myId.uuidString)
+
+            // Chỉ relay nếu hop count chưa quá cao (tránh loop)
+            if relayedPacket.hopCount < 10 {
+                let meshPayload = MeshPayload(sosPacket: relayedPacket)
+                do {
+                    let data = try JSONEncoder().encode(meshPayload)
+                    try bridgefy.send(data, using: .broadcast(senderId: myId))
+                    print("📤 Forwarded SOS packet, hop count: \(relayedPacket.hopCount)")
+                } catch {
+                    print("❌ Failed to forward SOS: \(error.localizedDescription)")
+                }
+            } else {
+                print("⚠️ SOS packet hop count too high, not forwarding")
+            }
+        }
     }
 
     // MARK: - BridgefyDelegate
@@ -287,78 +449,137 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             return
         }
 
+        if let meshPayload = try? JSONDecoder().decode(MeshPayload.self, from: data) {
+            handleMeshPayload(meshPayload, messageId: messageId, transmissionMode: transmissionMode)
+            return
+        }
+
         do {
             let payload = try JSONDecoder().decode(MessagePayload.self, from: data)
-            print("📨 Received message \(messageId) via \(transmissionMode): \(payload.text)")
-
-            // Extract real sender from payload (not the relay)
-            let senderId = payload.senderId
-
-            // Handle user info messages
-            if payload.type == .userInfo {
-                let user = User(
-                    id: senderId,
-                    name: payload.senderName,
-                    phoneNumber: payload.senderPhone,
-                    isOnline: true
-                )
-                DispatchQueue.main.async {
-                    self.userProfiles[senderId] = user
-                    self.updateConnectedUsersList()
-                    print("👤 Received user profile: \(user.name)")
-                }
-                return
-            }
-
-            // Check if this is a direct message for us
-            let currentUserId = bridgefy?.currentUserId
-            if let recipientId = payload.recipientId, recipientId != currentUserId {
-                print("📪 Message not for us, ignoring")
-                return
-            }
-
-            let message = Message(
-                id: payload.messageId,
-                type: payload.type,
-                text: payload.text,
-                senderId: senderId,
-                isFromMe: false,
-                timestamp: payload.timestamp,
-                senderName: payload.senderName,
-                senderPhone: payload.senderPhone,
-                channelId: payload.channelId,
-                recipientId: payload.recipientId,
-                latitude: payload.latitude,
-                longitude: payload.longitude
-            )
-
-            DispatchQueue.main.async {
-                // Avoid duplicates
-                if !self.messages.contains(where: { $0.id == message.id }) {
-                    self.messages.append(message)
-                    self.objectWillChange.send()
-                    print("📨 Message received from \(payload.senderName): \(message.text)")
-
-                    // Log nếu là tin nhắn SOS có vị trí
-                    if message.type == .sosLocation, let lat = message.latitude, let long = message.longitude {
-                        print("⚠️ SOS Location received: \(lat), \(long)")
-                    }
-
-                    // Update user profile if not cached
-                    if self.userProfiles[senderId] == nil {
-                        let user = User(
-                            id: senderId,
-                            name: payload.senderName,
-                            phoneNumber: payload.senderPhone,
-                            isOnline: true
-                        )
-                        self.userProfiles[senderId] = user
-                        self.updateConnectedUsersList()
-                    }
-                }
-            }
+            handleLegacyPayload(payload, messageId: messageId, transmissionMode: transmissionMode)
         } catch {
             print("Failed to decode message: \(error)")
+        }
+    }
+
+    private func handleMeshPayload(_ meshPayload: MeshPayload, messageId: UUID, transmissionMode: TransmissionMode) {
+        switch meshPayload.meshType {
+        case .sosRelay:
+            // Nhận SOS packet cần relay
+            if let sosPacket = meshPayload.sosPacket {
+                print("📨 Received SOS relay packet via \(transmissionMode)")
+                handleReceivedSOSPacket(sosPacket)
+
+                // Cũng hiển thị như message trong chat
+                displaySOSPacketAsMessage(sosPacket)
+            }
+
+        case .chat, .sosLocation, .userInfo:
+            // Các loại message thường - dùng chatPayload
+            if let payload = meshPayload.chatPayload {
+                handleLegacyPayload(payload, messageId: messageId, transmissionMode: transmissionMode)
+            }
+        }
+    }
+
+    private func displaySOSPacketAsMessage(_ sosPacket: SOSPacket) {
+        let locParts = sosPacket.loc.split(separator: ",")
+        let lat = Double(locParts.first ?? "0") ?? 0
+        let long = Double(locParts.last ?? "0") ?? 0
+
+        let packetMessageId = UUID(uuidString: sosPacket.packetId) ?? UUID()
+        let originId = UUID(uuidString: sosPacket.originId) ?? UUID()
+
+        let message = Message(
+            id: packetMessageId,
+            type: .sosLocation,
+            text: sosPacket.msg,
+            senderId: originId,
+            isFromMe: false,
+            timestamp: Date(timeIntervalSince1970: TimeInterval(sosPacket.ts)),
+            senderName: "SOS từ \(sosPacket.originId.prefix(8))...",
+            senderPhone: "",
+            latitude: lat,
+            longitude: long
+        )
+
+        DispatchQueue.main.async {
+            if !self.messages.contains(where: { $0.id == message.id }) {
+                self.messages.append(message)
+                self.objectWillChange.send()
+                print("⚠️ SOS Location received: \(lat), \(long)")
+            }
+        }
+    }
+
+    private func handleLegacyPayload(_ payload: MessagePayload, messageId: UUID, transmissionMode: TransmissionMode) {
+        print("📨 Received message \(messageId) via \(transmissionMode): \(payload.text)")
+
+        // Extract real sender from payload (not the relay)
+        let senderId = payload.senderId
+
+        // Handle user info messages
+        if payload.type == .userInfo {
+            let user = User(
+                id: senderId,
+                name: payload.senderName,
+                phoneNumber: payload.senderPhone,
+                isOnline: true
+            )
+            DispatchQueue.main.async {
+                self.userProfiles[senderId] = user
+                self.updateConnectedUsersList()
+                print("👤 Received user profile: \(user.name)")
+            }
+            return
+        }
+
+        // Check if this is a direct message for us
+        let currentUserId = bridgefy?.currentUserId
+        if let recipientId = payload.recipientId, recipientId != currentUserId {
+            print("📪 Message not for us, ignoring")
+            return
+        }
+
+        let message = Message(
+            id: payload.messageId,
+            type: payload.type,
+            text: payload.text,
+            senderId: senderId,
+            isFromMe: false,
+            timestamp: payload.timestamp,
+            senderName: payload.senderName,
+            senderPhone: payload.senderPhone,
+            channelId: payload.channelId,
+            recipientId: payload.recipientId,
+            latitude: payload.latitude,
+            longitude: payload.longitude
+        )
+
+        DispatchQueue.main.async {
+            // Avoid duplicates
+            if !self.messages.contains(where: { $0.id == message.id }) {
+                self.messages.append(message)
+                self.objectWillChange.send()
+                print("📨 Message received from \(payload.senderName): \(message.text)")
+
+                // Log nếu là tin nhắn SOS có vị trí
+                if message.type == .sosLocation, let lat = message.latitude, let long = message.longitude {
+                    print("⚠️ SOS Location received: \(lat), \(long)")
+                }
+
+                // Update user profile if not cached
+                if self.userProfiles[senderId] == nil {
+                    let user = User(
+                        id: senderId,
+                        name: payload.senderName,
+                        phoneNumber: payload.senderPhone,
+                        isOnline: true
+                    )
+                    self.userProfiles[senderId] = user
+                    self.updateConnectedUsersList()
+                }
+            }
         }
     }
     
@@ -426,7 +647,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             text: packet.msg,
             senderId: senderId,
             isFromMe: isFromMe,
-            timestamp: Date(timeIntervalSince1970: packet.timestamp),
+            timestamp: Date(timeIntervalSince1970: TimeInterval(packet.ts)),
             senderName: profile?.name ?? "",
             senderPhone: profile?.phoneNumber ?? "",
             latitude: coords?.latitude,

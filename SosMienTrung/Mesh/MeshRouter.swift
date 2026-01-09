@@ -30,9 +30,7 @@ final class MeshRouter {
             return
         }
 
-        var forwardedPacket = packet
-        forwardedPacket.path.append(meshManager.myDeviceId)
-        forwardedPacket.hopCount += 1
+        let forwardedPacket = packet.relayed(by: meshManager.myDeviceId)
 
         print("[Mesh] SOS accepted: packetId=\(packet.packetId) hopCount=\(forwardedPacket.hopCount) level=\(meshManager.currentLevel()).")
         routeForwardedPacket(forwardedPacket)

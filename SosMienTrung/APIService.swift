@@ -74,7 +74,7 @@ final class APIService {
         let payload = SOSUploadPayload(
             packetId: packet.packetId,
             originId: packet.originId,
-            ts: Int(packet.timestamp),
+            ts: Int(packet.ts),
             loc: packet.loc,
             msg: packet.msg,
             hopCount: packet.hopCount,

@@ -25,34 +25,6 @@ struct HeartbeatPayload: Codable, Hashable {
     let battery: Int
 }
 
-struct SOSPacket: Codable, Hashable {
-    let packetId: String
-    let originId: String
-    let msg: String
-    let loc: String
-    var hopCount: Int
-    var path: [String]
-    let timestamp: TimeInterval
-
-    var content: String {
-        let payload = ["msg": msg, "loc": loc]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else {
-            return ""
-        }
-        return String(data: data, encoding: .utf8) ?? ""
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case packetId = "packet_id"
-        case originId = "origin_id"
-        case msg
-        case loc
-        case hopCount = "hop_count"
-        case path
-        case timestamp
-    }
-}
-
 final class Neighbor {
     let id: String
     var level: Int
