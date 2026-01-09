@@ -4,8 +4,9 @@ import MapKit
 struct ChatView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @State private var messageText = ""
+    @State private var showSOSForm = false
     @FocusState private var isTextFieldFocused: Bool
-    
+
     // Only show broadcast messages (no recipientId = general chat)
     var generalMessages: [Message] {
         bridgefyManager.messages.filter { message in
@@ -78,9 +79,10 @@ struct ChatView: View {
                 
                 // Message Input
                 HStack(spacing: 12) {
-                    // Nút SOS
+                    // Nút SOS - hiện form khi bấm
                     Button {
-                        sendSOSMessage()
+                        print("🆘 SOS button tapped, showing form...")
+                        showSOSForm = true
                     } label: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 24))
@@ -110,19 +112,17 @@ struct ChatView: View {
                 .background(Color(white: 0.1))
             }
         }
+        .fullScreenCover(isPresented: $showSOSForm) {
+            SOSFormView(bridgefyManager: bridgefyManager)
+        }
     }
-    
+
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
-        
+
         bridgefyManager.sendBroadcastMessage(trimmedText)
         messageText = ""
-        isTextFieldFocused = false
-    }
-    
-    private func sendSOSMessage() {
-        bridgefyManager.sendSOSWithLocation()
         isTextFieldFocused = false
     }
 }
