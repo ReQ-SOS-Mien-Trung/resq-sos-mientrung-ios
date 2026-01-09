@@ -4,6 +4,8 @@ import MapKit
 struct ChatView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @State private var messageText = ""
+    @State private var showSOSForm = false
+    @State private var sosMessageText = "🆘 Cần giúp đỡ gấp!"
     @FocusState private var isTextFieldFocused: Bool
     
     // Only show broadcast messages (no recipientId = general chat)
@@ -80,7 +82,9 @@ struct ChatView: View {
                 HStack(spacing: 12) {
                     // Nút SOS
                     Button {
-                        sendSOSMessage()
+                        print("🆘 SOS button tapped, showing form...")
+                        isTextFieldFocused = false
+                        showSOSForm = true
                     } label: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 24))
@@ -110,6 +114,21 @@ struct ChatView: View {
                 .background(Color(white: 0.1))
             }
         }
+        .sheet(isPresented: $showSOSForm) {
+            SOSFormView(
+                messageText: $sosMessageText,
+                currentCoordinates: bridgefyManager.locationManager.coordinates,
+                onSend: {
+                    sendSOSMessage(text: sosMessageText)
+                    sosMessageText = "🆘 Cần giúp đỡ gấp!"
+                    showSOSForm = false
+                },
+                onCancel: {
+                    sosMessageText = "🆘 Cần giúp đỡ gấp!"
+                    showSOSForm = false
+                }
+            )
+        }
     }
     
     private func sendMessage() {
@@ -121,9 +140,67 @@ struct ChatView: View {
         isTextFieldFocused = false
     }
     
-    private func sendSOSMessage() {
-        bridgefyManager.sendSOSWithLocation()
+    private func sendSOSMessage(text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalText = trimmedText.isEmpty ? "🆘 Cần giúp đỡ gấp!" : trimmedText
+        bridgefyManager.sendSOSWithLocation(finalText)
         isTextFieldFocused = false
+    }
+}
+
+struct SOSFormView: View {
+    @Binding var messageText: String
+    let currentCoordinates: (latitude: Double, longitude: Double)?
+    let onSend: () -> Void
+    let onCancel: () -> Void
+
+    private var trimmedMessage: String {
+        messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Nội dung SOS")
+                    .font(.headline)
+
+                TextField("Gãy chân, kẹt ở khu 4...", text: $messageText)
+                    .textInputAutocapitalization(.sentences)
+                    .padding(12)
+                    .background(Color(white: 0.95))
+                    .cornerRadius(12)
+
+                if let coords = currentCoordinates {
+                    Text(String(format: "Vị trí hiện tại: %.6f, %.6f", coords.latitude, coords.longitude))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Chưa lấy được vị trí hiện tại")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    onSend()
+                } label: {
+                    Text("Gửi SOS")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmedMessage.isEmpty)
+            }
+            .padding()
+            .navigationTitle("Gửi SOS")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Hủy") {
+                        onCancel()
+                    }
+                }
+            }
+        }
     }
 }
 
