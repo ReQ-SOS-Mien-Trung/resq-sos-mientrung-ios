@@ -7,6 +7,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     static let shared = BridgefyNetworkManager()
 
     private var bridgefy: Bridgefy?
+    private var bridgefyStartCallTime: CFAbsoluteTime?
     private var outgoingMessageMap: [UUID: UUID] = [:] // Bridgefy messageId -> app messageId
     @Published var messages: [Message] = []
     @Published var connectedUsers: Set<UUID> = []
@@ -35,20 +36,35 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             return 
         }
         print("🚀 Starting Bridgefy...")
+        let totalStartTime = CFAbsoluteTimeGetCurrent()
         do {
+            let initStartTime = CFAbsoluteTimeGetCurrent()
             let bridgefy = try Bridgefy(withApiKey: "5a369f96-13d3-40df-8d41-805bf150cac0", delegate: self, verboseLogging: true)
+            let initElapsed = CFAbsoluteTimeGetCurrent() - initStartTime
+            print(String(format: "TIMING Bridgefy init: %.3fs", initElapsed))
             self.bridgefy = bridgefy
+            let startCallTime = CFAbsoluteTimeGetCurrent()
+            bridgefyStartCallTime = startCallTime
             bridgefy.start()
+            let startCallElapsed = CFAbsoluteTimeGetCurrent() - startCallTime
+            print(String(format: "TIMING Bridgefy.start() call: %.3fs", startCallElapsed))
             
             // Start location updates
+            let locationStartTime = CFAbsoluteTimeGetCurrent()
             locationManager.requestPermission()
             locationManager.startUpdating()
+            let locationElapsed = CFAbsoluteTimeGetCurrent() - locationStartTime
+            print(String(format: "TIMING Location start calls: %.3fs", locationElapsed))
             
             // Broadcast own profile after start
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 self.broadcastUserProfile()
             }
+            let totalElapsed = CFAbsoluteTimeGetCurrent() - totalStartTime
+            print(String(format: "TIMING Bridgefy start() total: %.3fs", totalElapsed))
         } catch {
+            let totalElapsed = CFAbsoluteTimeGetCurrent() - totalStartTime
+            print(String(format: "TIMING Bridgefy start() failed after: %.3fs", totalElapsed))
             print("❌ Bridgefy init/start failed: \(error.localizedDescription)")
         }
     }
@@ -269,10 +285,18 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
     func bridgefyDidStart(with userId: UUID) {
         print("✅ Bridgefy STARTED with userId: \(userId)")
+        if let startCallTime = bridgefyStartCallTime {
+            let elapsed = CFAbsoluteTimeGetCurrent() - startCallTime
+            print(String(format: "TIMING Bridgefy didStart callback: %.3fs", elapsed))
+        }
     }
 
     func bridgefyDidFailToStart(with error: BridgefyError) {
         print("❌ Bridgefy FAILED TO START: \(error)")
+        if let startCallTime = bridgefyStartCallTime {
+            let elapsed = CFAbsoluteTimeGetCurrent() - startCallTime
+            print(String(format: "TIMING Bridgefy didFailToStart callback: %.3fs", elapsed))
+        }
     }
 
     func bridgefyDidStop() {
