@@ -20,7 +20,8 @@ struct SOSFormView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                TelegramBackground()
+                Color.black.opacity(0.35).ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 20) {

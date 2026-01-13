@@ -205,7 +205,7 @@ struct NICameraAssistanceView: UIViewRepresentable {
                     sphereEntity.position = textEntity.position + [0, initialSize + 0.2, 0]
                     
                     // Text luôn quay về camera
-                    arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
+                    arView.scene.subscribe(to: SceneEvents.Update.self) { _ in
                         textEntity.look(at: arView.cameraTransform.translation, from: textEntity.position(relativeTo: nil), relativeTo: nil)
                         textEntity.transform.rotation *= simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 1, 0))
                     }.store(in: &self.subscriptions)

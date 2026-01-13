@@ -25,7 +25,7 @@ struct UsersListView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            TelegramBackground()
             
             VStack(spacing: 0) {
                 // Header

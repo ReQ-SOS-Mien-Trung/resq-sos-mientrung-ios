@@ -25,7 +25,8 @@ struct DirectChatView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            TelegramBackground()
+            Color.black.opacity(0.35).ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header
@@ -127,7 +128,7 @@ struct DirectChatView: View {
                     .disabled(messageText.isEmpty)
                 }
                 .padding()
-                .background(Color.black)
+                .background(Color.black.opacity(0.35))
             }
         }
     }

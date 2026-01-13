@@ -99,7 +99,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         
         do {
             let data = try JSONEncoder().encode(payload)
-            try bridgefy.send(data, using: .broadcast(senderId: sender))
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
             
             // Add to local messages immediately
             let message = Message(
@@ -146,7 +146,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         do {
             let data = try JSONEncoder().encode(payload)
             // Use P2P for direct messages
-            try bridgefy.send(data, using: .p2p(userId: recipient.id))
+            _ = try bridgefy.send(data, using: .p2p(userId: recipient.id))
             
             // Add to local messages immediately
             let message = Message(
@@ -203,7 +203,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         do {
             let data = try JSONEncoder().encode(payload)
-            try bridgefy.send(data, using: .broadcast(senderId: sender))
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
 
             let message = Message(
                 id: messageId,
@@ -302,7 +302,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         do {
             let data = try JSONEncoder().encode(meshPayload)
-            try bridgefy.send(data, using: .broadcast(senderId: sender))
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
 
             // Add to local messages
             let locParts = sosPacket.loc.split(separator: ",")
@@ -365,7 +365,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
                 let meshPayload = MeshPayload(sosPacket: relayedPacket)
                 do {
                     let data = try JSONEncoder().encode(meshPayload)
-                    try bridgefy.send(data, using: .broadcast(senderId: myId))
+                    _ = try bridgefy.send(data, using: .broadcast(senderId: myId))
                     print("📤 Forwarded SOS packet, hop count: \(relayedPacket.hopCount)")
                 } catch {
                     print("❌ Failed to forward SOS: \(error.localizedDescription)")
@@ -595,10 +595,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         do {
             if let peerId = peerId, let peerUUID = UUID(uuidString: peerId) {
-                try bridgefy.send(data, using: .p2p(userId: peerUUID))
+                _ = try bridgefy.send(data, using: .p2p(userId: peerUUID))
                 print("[Mesh] Sent mesh packet to \(peerId).")
             } else {
-                try bridgefy.send(data, using: .broadcast(senderId: sender))
+                _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
                 print("[Mesh] Broadcast mesh packet.")
             }
         } catch {

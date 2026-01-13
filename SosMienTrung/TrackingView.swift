@@ -16,7 +16,7 @@ struct ARKitCameraView: UIViewRepresentable {
         let view = ARSCNView(frame: .zero)
         view.automaticallyUpdatesLighting = true
         view.preferredFramesPerSecond = 60
-        view.contentScaleFactor = UIScreen.main.scale
+        view.contentScaleFactor = context.environment.displayScale
         view.backgroundColor = .black
 
         // Chạy ARKit để hỗ trợ Camera Assistance (trên thiết bị)

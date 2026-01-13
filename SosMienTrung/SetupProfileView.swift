@@ -17,75 +17,87 @@ struct SetupProfileView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            // Background pattern
+            TelegramBackground()
             
             VStack(spacing: 30) {
                 Spacer()
                 
-                // Header
-                VStack(spacing: 12) {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.blue)
-                    
-                    Text("Thiết Lập Thông Tin")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("Để người khác có thể nhận diện bạn trong mạng")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                
-                Spacer()
-                
-                // Form
+                // Main container with glass morphism background
                 VStack(spacing: 20) {
-                    // Name field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Tên của bạn")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.8))
+                    // Header
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(.blue)
                         
-                        HStack {
-                            Image(systemName: "person.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 20)
-                            
-                            TextField("Nhập tên...", text: $name)
-                                .textContentType(.name)
-                                .autocapitalization(.words)
-                                .foregroundColor(.white)
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
+                        Text("Thiết Lập Thông Tin")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        Text("Để người khác có thể nhận diện bạn trong mạng")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
+                    .frame(maxWidth: .infinity)
                     
-                    // Phone field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Số điện thoại")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.8))
-                        
-                        HStack {
-                            Image(systemName: "phone.fill")
-                                .foregroundColor(.green)
-                                .frame(width: 20)
+                    // Form
+                    VStack(spacing: 20) {
+                        // Name field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Tên của bạn")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.9))
                             
-                            TextField("Nhập số điện thoại...", text: $phoneNumber)
-                                .textContentType(.telephoneNumber)
-                                .keyboardType(.phonePad)
-                                .foregroundColor(.white)
+                            HStack {
+                                Image(systemName: "person.fill")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 20)
+                                
+                                TextField("Nhập tên...", text: $name)
+                                    .textContentType(.name)
+                                    .autocapitalization(.words)
+                                    .foregroundColor(.white)
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(12)
                         }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
+                        
+                        // Phone field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Số điện thoại")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.9))
+                            
+                            HStack {
+                                Image(systemName: "phone.fill")
+                                    .foregroundColor(.green)
+                                    .frame(width: 20)
+                                
+                                TextField("Nhập số điện thoại...", text: $phoneNumber)
+                                    .textContentType(.telephoneNumber)
+                                    .keyboardType(.phonePad)
+                                    .foregroundColor(.white)
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(12)
+                        }
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(24)
+                .background(
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color.black.opacity(0.3))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                )
+                .padding(.horizontal, 16)
                 
                 Spacer()
                 

@@ -4,6 +4,7 @@ import MapKit
 struct SOSMapView: View {
     @StateObject private var locationManager = LocationManager()
     @Binding var messages: [Message]
+    @State private var isMapReady = false
     
     @State private var cameraPosition = MapCameraPosition.region(
         MKCoordinateRegion(
@@ -14,42 +15,58 @@ struct SOSMapView: View {
     
     var body: some View {
         ZStack {
-            Map(position: $cameraPosition) {
-                ForEach(locationAnnotations) { annotation in
-                    Annotation(annotation.title ?? "SOS", coordinate: annotation.coordinate) {
-                        VStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title)
-                                .foregroundColor(.red)
-                            Text(annotation.title ?? "SOS")
-                                .font(.caption)
-                                .padding(4)
-                                .background(Color.white.opacity(0.8))
-                                .cornerRadius(4)
+            if isMapReady {
+                Map(position: $cameraPosition) {
+                    ForEach(locationAnnotations) { annotation in
+                        Annotation(annotation.title ?? "SOS", coordinate: annotation.coordinate) {
+                            VStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.title)
+                                    .foregroundColor(.red)
+                                Text(annotation.title ?? "SOS")
+                                    .font(.caption)
+                                    .padding(4)
+                                    .background(Color.white.opacity(0.8))
+                                    .cornerRadius(4)
+                            }
                         }
                     }
                 }
-            }
-            .ignoresSafeArea()
-            
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: centerOnCurrentLocation) {
-                        Image(systemName: "location.fill")
-                            .padding()
-                            .background(Color.white)
-                            .clipShape(Circle())
-                            .shadow(radius: 3)
+                .ignoresSafeArea()
+                
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: centerOnCurrentLocation) {
+                            Image(systemName: "location.fill")
+                                .padding()
+                                .background(Color.white)
+                                .clipShape(Circle())
+                                .shadow(radius: 3)
+                        }
+                        .padding()
                     }
-                    .padding()
+                    Spacer()
                 }
-                Spacer()
+            } else {
+                // Loading indicator
+                VStack {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading Map...")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .padding(.top, 8)
+                }
             }
         }
         .onAppear {
-            locationManager.requestPermission()
-            locationManager.startUpdating()
+            // Delay map initialization to avoid blocking
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isMapReady = true
+                locationManager.requestPermission()
+                locationManager.startUpdating()
+            }
         }
         .onChange(of: locationManager.currentLocation) { _, newLocation in
             if let location = newLocation {
