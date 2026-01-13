@@ -3,6 +3,7 @@ import MapKit
 
 struct ChatView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
+    @ObservedObject var appearanceManager = AppearanceManager.shared
     @State private var messageText = ""
     @State private var showSOSForm = false
     @FocusState private var isTextFieldFocused: Bool
@@ -16,35 +17,35 @@ struct ChatView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            TelegramBackground()
             
             VStack(spacing: 0) {
                 // Header
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Emergency Chat")
                         .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(appearanceManager.textColor)
                     
                     HStack(spacing: 6) {
-                        Circle()
-                            .fill(bridgefyManager.connectedUsers.isEmpty ? .gray : .green)
-                            .frame(width: 10, height: 10)
-                        Text("\(bridgefyManager.connectedUsers.count) rescuer\(bridgefyManager.connectedUsers.count == 1 ? "" : "s") connected")
-                            .foregroundStyle(.white.opacity(0.7))
-                            .font(.subheadline)
-                    }
-                    
-                    // Warning nếu không có kết nối
-                    if bridgefyManager.connectedUsers.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.yellow)
-                            Text("Broadcast mode: Messages sent to all nearby devices")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
+                            Circle()
+                                .fill(bridgefyManager.connectedUsers.isEmpty ? .gray : .green)
+                                .frame(width: 10, height: 10)
+                            Text("\(bridgefyManager.connectedUsers.count) rescuer\(bridgefyManager.connectedUsers.count == 1 ? "" : "s") connected")
+                                .foregroundStyle(appearanceManager.secondaryTextColor)
+                                .font(.subheadline)
                         }
-                        .padding(.top, 4)
-                    }
+                        
+                        // Warning nếu không có kết nối
+                        if bridgefyManager.connectedUsers.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.yellow)
+                                Text("Broadcast mode: Messages sent to all nearby devices")
+                                    .font(.caption)
+                                    .foregroundStyle(appearanceManager.tertiaryTextColor)
+                            }
+                            .padding(.top, 4)
+                        }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
@@ -55,7 +56,7 @@ struct ChatView: View {
                         LazyVStack(spacing: 12) {
                             if generalMessages.isEmpty {
                                 Text("No messages yet. Send a message to start the conversation!")
-                                    .foregroundStyle(.white.opacity(0.5))
+                                    .foregroundStyle(appearanceManager.tertiaryTextColor)
                                     .multilineTextAlignment(.center)
                                     .padding(.top, 60)
                             } else {
@@ -89,15 +90,15 @@ struct ChatView: View {
                             .font(.system(size: 24))
                             .foregroundColor(.red)
                             .padding(8)
-                            .background(Color.white.opacity(0.15))
+                            .background(appearanceManager.textColor.opacity(0.15))
                             .cornerRadius(20)
                     }
                     
                     TextField("Type message...", text: $messageText)
                         .focused($isTextFieldFocused)
                         .padding(12)
-                        .background(Color.white.opacity(0.15))
-                        .foregroundColor(.white)
+                        .background(appearanceManager.textColor.opacity(0.15))
+                        .foregroundColor(appearanceManager.textColor)
                         .cornerRadius(20)
                     
                     Button {
@@ -110,7 +111,6 @@ struct ChatView: View {
                     .disabled(messageText.isEmpty)
                 }
                 .padding()
-                .background(Color(white: 0.1))
             }
         }
         .fullScreenCover(isPresented: $showSOSForm) {

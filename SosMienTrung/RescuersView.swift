@@ -4,13 +4,14 @@ import MultipeerConnectivity
 struct RescuersView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
+    @ObservedObject var appearanceManager = AppearanceManager.shared
     @StateObject private var headingManager = HeadingManager()
     @Binding var selectedPeer: MCPeerID?
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-
+            TelegramBackground()
+            
             VStack(alignment: .leading, spacing: 10) {
                 header
                 peerList
@@ -23,7 +24,7 @@ struct RescuersView: View {
                     )
                 } else {
                     Text("Waiting for nearby rescuers...")
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(appearanceManager.secondaryTextColor)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 40)
                 }
@@ -38,12 +39,12 @@ struct RescuersView: View {
         HStack {
             Text("RescueFinder")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(appearanceManager.textColor)
             Spacer()
             if selectedPeer == nil {
                 Text(nearbyManager.statusMessage)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(appearanceManager.tertiaryTextColor)
                     .lineLimit(1)
             }
         }
@@ -53,14 +54,14 @@ struct RescuersView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Connected Rescuers")
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(appearanceManager.secondaryTextColor)
             
             if multipeerSession.connectedPeers.isEmpty {
                 Text("Scanning with MultipeerConnectivity...")
                     .foregroundStyle(.yellow)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.08))
+                    .background(appearanceManager.textColor.opacity(0.08))
                     .cornerRadius(12)
             } else {
                 ForEach(multipeerSession.connectedPeers, id: \.self) { peer in
@@ -73,7 +74,7 @@ struct RescuersView: View {
                                 .fill(selectedPeer == peer ? Color.green : Color.blue)
                                 .frame(width: 14, height: 14)
                             Text(peer.displayName)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(appearanceManager.textColor)
                                 .fontWeight(.semibold)
                             Spacer()
                             if selectedPeer == peer {
@@ -84,7 +85,7 @@ struct RescuersView: View {
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(selectedPeer == peer ? 0.16 : 0.1))
+                        .background(appearanceManager.textColor.opacity(selectedPeer == peer ? 0.16 : 0.1))
                         .cornerRadius(12)
                     }
                 }
