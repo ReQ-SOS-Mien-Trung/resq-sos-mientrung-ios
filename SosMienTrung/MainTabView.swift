@@ -20,48 +20,78 @@ struct MainTabView: View {
     }
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            RescuersView(
-                nearbyManager: nearbyManager,
-                multipeerSession: multipeerSession,
-                selectedPeer: $selectedPeer
-            )
-            .tabItem {
-                Label("Rescuers", systemImage: "location.fill")
-            }
-            .tag(0)
-            
-            UsersListView(bridgefyManager: bridgefyManager)
-                .tabItem {
-                    Label("Users", systemImage: "person.3.fill")
-                }
-                .apply { view in
-                    if bridgefyManager.connectedUsersList.count > 0 {
-                        view.badge(bridgefyManager.connectedUsersList.count)
-                    } else {
-                        view
+        ZStack {
+            // Background pattern (fallback cho toàn bộ TabView)
+            TelegramBackground()
+
+            TabView(selection: $selectedTab) {
+                HomeView(bridgefyManager: bridgefyManager)
+                    .tabItem {
+                        Label("Trang chủ", systemImage: "house.fill")
                     }
+                    .tag(0)
+                
+                RescuersView(
+                    nearbyManager: nearbyManager,
+                    multipeerSession: multipeerSession,
+                    selectedPeer: $selectedPeer
+                )
+                .tabItem {
+                    Label("Cứu hộ", systemImage: "location.fill")
                 }
                 .tag(1)
-            
-            ChatView(bridgefyManager: bridgefyManager)
-                .tabItem {
-                    Label("Chat", systemImage: "message.fill")
-                }
-                .apply { view in
-                    if unreadMessagesCount > 0 {
-                        view.badge(unreadMessagesCount)
-                    } else {
-                        view
+
+                ChatRoomsView(bridgefyManager: bridgefyManager)
+                    .tabItem {
+                        Label("Tin Nhắn", systemImage: "message.fill")
                     }
-                }
-                .tag(2)
-            
-            SOSMapView(messages: $bridgefyManager.messages)
-                .tabItem {
-                    Label("Map", systemImage: "map.fill")
-                }
-                .tag(3)
+                    .apply { view in
+                        let totalUnread = unreadMessagesCount + bridgefyManager.connectedUsersList.count
+                        if totalUnread > 0 {
+                            view.badge(totalUnread)
+                        } else {
+                            view
+                        }
+                    }
+                    .tag(2)
+
+                // MARK: - Map tab tạm ẩn để tối ưu launch time
+                // SOSMapView(messages: $bridgefyManager.messages)
+                //     .tabItem {
+                //         Label("Bản đồ", systemImage: "map.fill")
+                //     }
+                //     .tag(3)
+
+                ChatBotView()
+                    .tabItem {
+                        Label("AI Trợ lý", systemImage: "brain.head.profile")
+                    }
+                    .tag(3)
+                
+                SettingsView()
+                    .tabItem {
+                        Label("Cài đặt", systemImage: "gearshape.fill")
+                    }
+                    .tag(4)
+            }
+            .onAppear {
+                // Làm trong suốt TabBar để nhìn thấy nền phía sau
+                let tabBarAppearance = UITabBarAppearance()
+                tabBarAppearance.configureWithTransparentBackground()
+                tabBarAppearance.backgroundColor = .clear
+                tabBarAppearance.backgroundEffect = nil
+                UITabBar.appearance().standardAppearance = tabBarAppearance
+                UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+                
+                UITabBar.appearance().backgroundImage = UIImage()
+                UITabBar.appearance().shadowImage = UIImage()
+                UITabBar.appearance().isTranslucent = true
+                UITabBar.appearance().barTintColor = .clear
+                
+                UIView.appearance(whenContainedInInstancesOf: [UITabBar.self]).backgroundColor = .clear
+                UIView.appearance(whenContainedInInstancesOf: [UITabBarController.self]).backgroundColor = .clear
+            }
+            .background(Color.clear)
         }
         .onChange(of: multipeerSession.connectedPeers) { oldValue, newValue in
             if newValue.count == 1, selectedPeer == nil {
