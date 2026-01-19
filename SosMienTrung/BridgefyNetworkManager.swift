@@ -10,19 +10,36 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     @Published var messages: [Message] = []
     @Published var connectedUsers: Set<UUID> = []
     @Published var connectedUsersList: [User] = []  // List of known users with profiles
+    @Published private(set) var isIdentityDisabled: Bool = false  // True if identity was transferred
 
     let locationManager = LocationManager()
     private var userProfiles: [UUID: User] = [:]  // Cache user profiles
+    
+    // Identity mapping: userId (application layer) -> peerId (Bridgefy transport layer)
+    private var identityToPeerMapping: [String: UUID] = [:]
+    private let identityMappingKey = "bridgefy_identity_mapping"
 
     private let networkMonitor = NetworkMonitor.shared
     private let sosRelayService = SOSRelayService.shared
     private var processedSOSPacketIds: Set<String> = []  // Avoid reprocessing
+    
+    /// Get current Bridgefy user ID
+    var currentUserId: UUID? {
+        bridgefy?.currentUserId
+    }
 
     func start() {
         #if targetEnvironment(simulator)
         print("ℹ️ Bridgefy is not supported on the Simulator. Skipping start().")
         return
         #endif
+        
+        // Check if identity was transferred - don't start if so
+        if IdentityStore.shared.isTransferred {
+            print("⚠️ Identity was transferred to another device. Bridgefy disabled.")
+            isIdentityDisabled = true
+            return
+        }
         
         guard bridgefy == nil else { 
             print("⚠️ Bridgefy already started, skipping")
@@ -38,6 +55,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             locationManager.requestPermission()
             locationManager.startUpdating()
             
+            // Load identity mapping
+            loadIdentityMapping()
+            
             // Broadcast own profile after start
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 self.broadcastUserProfile()
@@ -45,6 +65,14 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         } catch {
             print("❌ Bridgefy init/start failed: \(error.localizedDescription)")
         }
+    }
+    
+    /// Stop Bridgefy (used when identity is transferred)
+    func stop() {
+        bridgefy?.stop()
+        bridgefy = nil
+        isIdentityDisabled = true
+        print("🛑 Bridgefy stopped")
     }
     
     // Broadcast own user profile to network
@@ -444,6 +472,12 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func bridgefyDidReceiveData(_ data: Data, with messageId: UUID, using transmissionMode: TransmissionMode) {
+        // Try identity takeover broadcast first
+        if let payload = try? JSONDecoder().decode(IdentityTakeoverPayload.self, from: data) {
+            handleIdentityTakeoverBroadcast(payload.broadcast)
+            return
+        }
+        
         if let envelope = try? JSONDecoder().decode(MeshEnvelope.self, from: data) {
             handleMeshEnvelope(envelope)
             return
@@ -662,5 +696,103 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         let longString = parts[1].trimmingCharacters(in: .whitespaces)
         guard let lat = Double(latString), let long = Double(longString) else { return nil }
         return (lat, long)
+    }
+    
+    // MARK: - Identity Mapping
+    
+    /// Load persisted identity-to-peer mapping
+    private func loadIdentityMapping() {
+        if let data = UserDefaults.standard.data(forKey: identityMappingKey),
+           let mapping = try? JSONDecoder().decode([String: String].self, from: data) {
+            identityToPeerMapping = mapping.compactMapValues { UUID(uuidString: $0) }
+            print("📋 Loaded \(identityToPeerMapping.count) identity mappings")
+        }
+    }
+    
+    /// Persist identity-to-peer mapping
+    private func saveIdentityMapping() {
+        let stringMapping = identityToPeerMapping.mapValues { $0.uuidString }
+        if let data = try? JSONEncoder().encode(stringMapping) {
+            UserDefaults.standard.set(data, forKey: identityMappingKey)
+        }
+    }
+    
+    /// Update mapping when identity is taken over
+    func updateIdentityMapping(userId: String, newPeerId: UUID) {
+        identityToPeerMapping[userId] = newPeerId
+        saveIdentityMapping()
+        print("🔄 Updated identity mapping: \(userId) → \(newPeerId)")
+    }
+    
+    /// Get peer ID for a user identity
+    func getPeerIdForIdentity(_ userId: String) -> UUID? {
+        return identityToPeerMapping[userId]
+    }
+    
+    // MARK: - Identity Takeover Broadcast
+    
+    /// Broadcast identity takeover announcement to mesh network
+    func broadcastIdentityTakeover(_ broadcast: IdentityTakeoverBroadcast) {
+        guard let bridgefy, let sender = bridgefy.currentUserId else {
+            print("⚠️ Cannot broadcast identity takeover - Bridgefy not active")
+            return
+        }
+        
+        let payload = IdentityTakeoverPayload(broadcast: broadcast)
+        
+        do {
+            let data = try JSONEncoder().encode(payload)
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+            print("📢 Broadcasted identity takeover: \(broadcast.userId) → \(broadcast.newPeerId)")
+            
+            // Update local mapping
+            if let newPeerUUID = UUID(uuidString: broadcast.newPeerId) {
+                updateIdentityMapping(userId: broadcast.userId, newPeerId: newPeerUUID)
+            }
+        } catch {
+            print("❌ Failed to broadcast identity takeover: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Handle received identity takeover broadcast
+    private func handleIdentityTakeoverBroadcast(_ broadcast: IdentityTakeoverBroadcast) {
+        print("📨 Received identity takeover: \(broadcast.userId) → \(broadcast.newPeerId)")
+        
+        // Verify signature (optional - requires knowing the user's public key)
+        // For now, we trust the broadcast and update mapping
+        
+        if let newPeerUUID = UUID(uuidString: broadcast.newPeerId) {
+            // Update mapping
+            updateIdentityMapping(userId: broadcast.userId, newPeerId: newPeerUUID)
+            
+            // If we had cached profile for old peer, update it
+            if let oldPeerId = broadcast.oldPeerId,
+               let oldPeerUUID = UUID(uuidString: oldPeerId),
+               let profile = userProfiles[oldPeerUUID] {
+                // Move profile to new peer ID
+                userProfiles[newPeerUUID] = profile
+                userProfiles.removeValue(forKey: oldPeerUUID)
+                updateConnectedUsersList()
+                print("👤 Migrated profile for \(profile.name) to new peer ID")
+            }
+        }
+    }
+}
+
+// MARK: - Identity Takeover Payload
+struct IdentityTakeoverPayload: Codable {
+    let type: String = "identity_takeover"
+    let broadcast: IdentityTakeoverBroadcast
+}
+
+// MARK: - Extended Data Handling
+extension BridgefyNetworkManager {
+    /// Extended data receiver that handles identity takeover broadcasts
+    func handleExtendedData(_ data: Data, messageId: UUID, transmissionMode: TransmissionMode) {
+        // Try to decode as identity takeover
+        if let payload = try? JSONDecoder().decode(IdentityTakeoverPayload.self, from: data) {
+            handleIdentityTakeoverBroadcast(payload.broadcast)
+            return
+        }
     }
 }

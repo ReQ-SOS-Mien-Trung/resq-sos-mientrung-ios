@@ -17,7 +17,7 @@ struct ContentView: View {
     
     var body: some View {
         Group {
-            if !userProfile.isSetupComplete || !isSetupComplete {
+            if !userProfile.isSetupComplete {
                 SetupProfileView(isSetupComplete: $isSetupComplete)
             } else {
                 MainTabView(
@@ -35,6 +35,12 @@ struct ContentView: View {
             // Khởi động Bridgefy khi app mở
             if userProfile.isSetupComplete {
                 bridgefyManager.start()
+            }
+        }
+        .onChange(of: userProfile.currentUser) { _, newUser in
+            // When user is cleared (after handover), show setup screen
+            if newUser == nil {
+                isSetupComplete = false
             }
         }
         .onChange(of: isSetupComplete) { _, newValue in
