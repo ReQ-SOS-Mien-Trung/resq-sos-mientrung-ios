@@ -7,6 +7,56 @@
 
 import SwiftUI
 import Combine
+import UIKit
+
+// MARK: - Pure Gaussian Blur View (no tint)
+struct GaussianBlurView: UIViewRepresentable {
+    var blurRadius: CGFloat
+    
+    init(radius: CGFloat = 12) {
+        self.blurRadius = radius
+    }
+    
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let blurView = UIVisualEffectView()
+        blurView.backgroundColor = .clear
+        
+        // Use animator to control blur intensity
+        let blurEffect = UIBlurEffect(style: .extraLight)
+        
+        let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) {
+            blurView.effect = blurEffect
+        }
+        
+        // Set blur intensity (0.0 - 1.0)
+        // Lower value = less blur, more visible background
+        let intensity = min(max(blurRadius / 30.0, 0.0), 1.0)
+        animator.fractionComplete = intensity
+        animator.pausesOnCompletion = true
+        
+        // Store animator to prevent deallocation
+        context.coordinator.animator = animator
+        
+        return blurView
+    }
+    
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        let intensity = min(max(blurRadius / 30.0, 0.0), 1.0)
+        context.coordinator.animator?.fractionComplete = intensity
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator {
+        var animator: UIViewPropertyAnimator?
+        
+        deinit {
+            animator?.stopAnimation(true)
+        }
+    }
+}
 
 // MARK: - App Theme Enum
 enum AppTheme: String, CaseIterable {
@@ -60,12 +110,27 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    @Published var batterySavingMode: Bool {
+        didSet {
+            UserDefaults.standard.set(batterySavingMode, forKey: "batterySavingMode")
+            // Sync với AppearanceManager để áp dụng cho toàn app
+            AppearanceManager.shared.batterySavingMode = batterySavingMode
+        }
+    }
+    
     init() {
         let themeRaw = UserDefaults.standard.string(forKey: "appTheme") ?? AppTheme.system.rawValue
         self.selectedTheme = AppTheme(rawValue: themeRaw) ?? .system
         
         let langRaw = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.vietnamese.rawValue
         self.selectedLanguage = AppLanguage(rawValue: langRaw) ?? .vietnamese
+        
+        let savedBatterySaving = UserDefaults.standard.bool(forKey: "batterySavingMode")
+        self.batterySavingMode = savedBatterySaving
+        // Sync với AppearanceManager khi khởi tạo - defer to avoid publishing during view update
+        DispatchQueue.main.async {
+            AppearanceManager.shared.batterySavingMode = savedBatterySaving
+        }
     }
 }
 
@@ -74,23 +139,32 @@ struct SettingsView: View {
     @ObservedObject var userProfile = UserProfile.shared
     @ObservedObject var appearanceManager = AppearanceManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
+    @StateObject private var keyManager = IdentityKeyManager.shared
+    @StateObject private var identityStore = IdentityStore.shared
     
     @State private var showEditProfile = false
     @State private var showThemePicker = false
     @State private var showLanguagePicker = false
     @State private var showAbout = false
     @State private var showAppearanceCustomization = false
+    @State private var showIdentityHandover = false
+    @State private var showIdentityInfo = false
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
+                // Background - TelegramBackground đã tự động xử lý chế độ tiết kiệm pin
                 TelegramBackground()
                 
                 ScrollView {
                     VStack(spacing: 24) {
                         // Profile Header
                         profileHeader
+                        
+                        // Identity Status Banner (if transferred)
+                        if identityStore.isTransferred {
+                            identityTransferredBanner
+                        }
                         
                         // Account Section
                         settingsSection(title: "Tài khoản") {
@@ -102,10 +176,41 @@ struct SettingsView: View {
                             ) {
                                 showEditProfile = true
                             }
+                            
+                            Divider()
+                                .padding(.leading, 56)
+                            
+                            SettingsRow(
+                                icon: "arrow.left.arrow.right",
+                                iconColor: .orange,
+                                title: "Chuyển tài khoản",
+                                subtitle: identityStore.isTransferred ? "Đã chuyển sang thiết bị khác" : "Chuyển sang thiết bị mới"
+                            ) {
+                                showIdentityHandover = true
+                            }
+                            
+                            Divider()
+                                .padding(.leading, 56)
+                            
+                            SettingsRow(
+                                icon: "key.fill",
+                                iconColor: .green,
+                                title: "Danh tính số",
+                                subtitle: identityStatusText
+                            ) {
+                                showIdentityInfo = true
+                            }
                         }
                         
                         // Appearance Section
                         settingsSection(title: "Giao diện") {
+                            BatterySavingToggleRow(
+                                isOn: $settingsManager.batterySavingMode
+                            )
+                            
+                            Divider()
+                                .padding(.leading, 56)
+                            
                             SettingsRow(
                                 icon: "paintbrush.fill",
                                 iconColor: .purple,
@@ -114,6 +219,8 @@ struct SettingsView: View {
                             ) {
                                 showAppearanceCustomization = true
                             }
+                            .opacity(appearanceManager.batterySavingMode ? 0.5 : 1.0)
+                            .disabled(appearanceManager.batterySavingMode)
                             
                             Divider()
                                 .padding(.leading, 56)
@@ -126,6 +233,8 @@ struct SettingsView: View {
                             ) {
                                 showThemePicker = true
                             }
+                            .opacity(appearanceManager.batterySavingMode ? 0.5 : 1.0)
+                            .disabled(appearanceManager.batterySavingMode)
                             
                             Divider()
                                 .padding(.leading, 56)
@@ -177,6 +286,12 @@ struct SettingsView: View {
         .fullScreenCover(isPresented: $showAppearanceCustomization) {
             AppearanceCustomizationView()
         }
+        .fullScreenCover(isPresented: $showIdentityHandover) {
+            IdentityHandoverView()
+        }
+        .sheet(isPresented: $showIdentityInfo) {
+            IdentityInfoView()
+        }
         .sheet(isPresented: $showThemePicker) {
             ThemePickerView(selectedTheme: $settingsManager.selectedTheme)
                 .presentationDetents([.height(300)])
@@ -190,6 +305,41 @@ struct SettingsView: View {
         } message: {
             Text("SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động offline qua mạng mesh.\n\n© 2026 Capstone Project")
         }
+    }
+    
+    // MARK: - Identity Status Text
+    private var identityStatusText: String {
+        switch keyManager.identityStatus {
+        case .notInitialized:
+            return "Chưa khởi tạo"
+        case .active:
+            return "Đang hoạt động"
+        case .transferred:
+            return "Đã chuyển"
+        case .revoked:
+            return "Đã thu hồi"
+        }
+    }
+    
+    // MARK: - Identity Transferred Banner
+    private var identityTransferredBanner: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tài khoản đã chuyển")
+                    .font(.headline)
+                    .foregroundColor(appearanceManager.textColor)
+                
+                Text("Tài khoản đã được chuyển sang thiết bị khác. Một số tính năng bị giới hạn.")
+                    .font(.caption)
+                    .foregroundColor(appearanceManager.secondaryTextColor)
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.15))
+        .cornerRadius(12)
     }
     
     // MARK: - Profile Header
@@ -236,7 +386,17 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(appearanceManager.textColor.opacity(0.15))
+            .background(
+                Group {
+                    if appearanceManager.batterySavingMode {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(appearanceManager.sectionBackgroundColor)
+                    } else {
+                        GaussianBlurView(radius: 5)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            )
             .cornerRadius(12)
         }
     }
@@ -257,7 +417,7 @@ struct SettingsRow: View {
                 // Icon
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(iconColor)
+                        .fill(appearanceManager.batterySavingMode ? Color.gray : iconColor)
                         .frame(width: 32, height: 32)
                     
                     Image(systemName: icon)
@@ -287,6 +447,46 @@ struct SettingsRow: View {
             }
             .padding()
         }
+    }
+}
+
+// MARK: - Battery Saving Toggle Row
+struct BatterySavingToggleRow: View {
+    @ObservedObject var appearanceManager = AppearanceManager.shared
+    @Binding var isOn: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.yellow)
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: "battery.100.bolt")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+            }
+            
+            // Title & Subtitle
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tiết kiệm pin")
+                    .font(.body)
+                    .foregroundColor(appearanceManager.textColor)
+                
+                Text(isOn ? "Đang bật" : "Đang tắt")
+                    .font(.caption)
+                    .foregroundColor(appearanceManager.tertiaryTextColor)
+            }
+            
+            Spacer()
+            
+            // Toggle
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(.yellow)
+        }
+        .padding()
     }
 }
 
@@ -480,6 +680,193 @@ struct LanguagePickerView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Identity Info View
+struct IdentityInfoView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var appearanceManager = AppearanceManager.shared
+    @StateObject private var keyManager = IdentityKeyManager.shared
+    @StateObject private var identityStore = IdentityStore.shared
+    
+    @State private var showResetConfirmation = false
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                // Identity Status Section
+                Section {
+                    HStack {
+                        Text("Trạng thái")
+                        Spacer()
+                        Text(statusText)
+                            .foregroundColor(statusColor)
+                    }
+                    
+                    if let identity = identityStore.currentIdentity {
+                        HStack {
+                            Text("ID")
+                            Spacer()
+                            Text(String(identity.id.prefix(12)) + "...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        HStack {
+                            Text("Vai trò")
+                            Spacer()
+                            Text(identity.role.displayName)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        HStack {
+                            Text("Tạo lúc")
+                            Spacer()
+                            Text(identity.createdAt, style: .date)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Danh tính số")
+                } footer: {
+                    Text("Danh tính số được bảo vệ bằng mã hóa và lưu trữ an toàn trên thiết bị.")
+                }
+                
+                // Public Key Section
+                Section {
+                    if let publicKeyBase64 = try? keyManager.getPublicKeyBase64() {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Khóa công khai")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text(String(publicKeyBase64.prefix(32)) + "...")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("Thông tin mã hóa")
+                } footer: {
+                    Text("Khóa riêng được lưu trong Secure Enclave và không bao giờ rời khỏi thiết bị.")
+                }
+                
+                // Audit Logs Section
+                Section {
+                    let logs = IdentityHandoverManager.shared.getAuditLogs().suffix(5)
+                    if logs.isEmpty {
+                        Text("Chưa có hoạt động nào")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(Array(logs), id: \.id) { log in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: log.success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(log.success ? .green : .red)
+                                        .font(.caption)
+                                    
+                                    Text(eventTypeText(log.eventType))
+                                        .font(.subheadline)
+                                }
+                                
+                                Text(log.timestamp, style: .relative)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                } header: {
+                    Text("Lịch sử hoạt động")
+                }
+                
+                // Reset Section
+                if keyManager.identityStatus == .active {
+                    Section {
+                        Button(role: .destructive) {
+                            showResetConfirmation = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash.fill")
+                                Text("Đặt lại danh tính")
+                            }
+                        }
+                    } footer: {
+                        Text("Cảnh báo: Thao tác này sẽ xóa danh tính số và không thể hoàn tác.")
+                    }
+                }
+            }
+            .navigationTitle("Danh tính số")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Xong") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Xác nhận đặt lại", isPresented: $showResetConfirmation) {
+                Button("Hủy", role: .cancel) { }
+                Button("Đặt lại", role: .destructive) {
+                    keyManager.fullReset()
+                    identityStore.clearIdentity()
+                    dismiss()
+                }
+            } message: {
+                Text("Bạn có chắc muốn đặt lại danh tính số? Thao tác này không thể hoàn tác.")
+            }
+        }
+    }
+    
+    private var statusText: String {
+        switch keyManager.identityStatus {
+        case .notInitialized:
+            return "Chưa khởi tạo"
+        case .active:
+            return "Hoạt động"
+        case .transferred:
+            return "Đã chuyển"
+        case .revoked:
+            return "Đã thu hồi"
+        }
+    }
+    
+    private var statusColor: Color {
+        switch keyManager.identityStatus {
+        case .notInitialized:
+            return .gray
+        case .active:
+            return .green
+        case .transferred, .revoked:
+            return .orange
+        }
+    }
+    
+    private func eventTypeText(_ type: HandoverAuditLog.EventType) -> String {
+        switch type {
+        case .handoverInitiated:
+            return "Bắt đầu chuyển tài khoản"
+        case .tokenCreated:
+            return "Tạo mã xác nhận"
+        case .tokenTransferred:
+            return "Gửi mã xác nhận"
+        case .tokenVerified:
+            return "Xác minh thành công"
+        case .identityActivated:
+            return "Kích hoạt tài khoản"
+        case .identityRevoked:
+            return "Thu hồi tài khoản"
+        case .handoverCompleted:
+            return "Hoàn tất chuyển tài khoản"
+        case .handoverFailed:
+            return "Chuyển tài khoản thất bại"
+        case .replayAttempt:
+            return "Phát hiện tấn công replay"
+        case .expiredTokenRejected:
+            return "Từ chối mã hết hạn"
         }
     }
 }
