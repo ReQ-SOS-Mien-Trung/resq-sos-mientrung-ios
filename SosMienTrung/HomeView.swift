@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showNotifications = false
     @State private var showMapDisabledAlert = false
+    @State private var showWaterEject = false
     
     // Weather mock data (có thể kết nối API thực sau)
     @State private var weatherInfo = "TP Hồ Chí Minh - Có Mây"
@@ -68,6 +69,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showChatBot) {
             ChatBotView()
+        }
+        .sheet(isPresented: $showWaterEject) {
+            WaterEjectView()
         }
     }
     
@@ -200,14 +204,14 @@ struct HomeView: View {
                 // Action tin tức
             }
             
-            // Tin tức thiên tai
+            // Đẩy nước khỏi loa
             HomeGridButton(
-                icon: "tv.fill",
-                title: "Tin tức\nthiên tai",
-                iconColor: Color(hex: "FFB74D"),
-                backgroundColor: Color(hex: "FFF3E0")
+                icon: "speaker.wave.3.fill",
+                title: "Đẩy nước\nkhỏi loa",
+                iconColor: Color(hex: "42A5F5"),
+                backgroundColor: Color(hex: "E3F2FD")
             ) {
-                // Action tin tức thiên tai
+                showWaterEject = true
             }
             
             // Cài đặt / AI Assistant
@@ -225,16 +229,23 @@ struct HomeView: View {
 
 // MARK: - Home Grid Button Component
 struct HomeGridButton: View {
+    @ObservedObject var appearanceManager = AppearanceManager.shared
+    
     let icon: String
     let title: String
     let iconColor: Color
     let backgroundColor: Color
     let action: () -> Void
     
+    // Màu nền khi bật chế độ tiết kiệm pin
+    private var batterySavingBackgroundColor: Color {
+        Color.white.opacity(0.1)
+    }
+    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
-                // Icon circle
+                // Icon circle - giữ nguyên màu icon
                 ZStack {
                     Circle()
                         .fill(iconColor.opacity(0.2))
@@ -248,16 +259,16 @@ struct HomeGridButton: View {
                 // Title
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.black.opacity(0.8))
+                    .foregroundColor(appearanceManager.batterySavingMode ? .white.opacity(0.8) : .black.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .frame(height: 32)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 110)
-            .background(backgroundColor)
+            .background(appearanceManager.batterySavingMode ? batterySavingBackgroundColor : backgroundColor)
             .cornerRadius(14)
-            .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+            .shadow(color: appearanceManager.batterySavingMode ? .clear : .black.opacity(0.08), radius: 4, x: 0, y: 2)
         }
     }
 }
