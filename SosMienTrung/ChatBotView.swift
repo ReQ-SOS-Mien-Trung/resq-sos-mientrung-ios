@@ -216,7 +216,7 @@ struct BotMessageBubble: View {
     // Parse markdown to AttributedString
     private var formattedText: AttributedString {
         do {
-            var attributedString = try AttributedString(markdown: message.text, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+            let attributedString = try AttributedString(markdown: message.text, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
             return attributedString
         } catch {
             return AttributedString(message.text)
