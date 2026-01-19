@@ -7,11 +7,13 @@
 		<string>remote-notification</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>RescueFinder uses the local network to discover and connect to nearby rescuers.</string>
+	<string>SosMienTrung sử dụng mạng cục bộ để kết nối với thiết bị gần đó, tìm kiếm cứu hộ và chuyển tài khoản offline.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_rescuefinder._udp</string>
 		<string>_rescuefinder._tcp</string>
+		<string>_sos-handover._tcp</string>
+		<string>_sos-handover._udp</string>
 	</array>
 	<key>NSNearbyInteractionUsageDescription</key>
 	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>

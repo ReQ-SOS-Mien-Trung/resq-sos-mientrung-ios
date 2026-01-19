@@ -36,14 +36,37 @@ final class MultipeerSession: NSObject, ObservableObject {
         browser.delegate = self
         nearbyManager.register(multipeerSession: self)
 
-        advertiser.startAdvertisingPeer()
-        browser.startBrowsingForPeers()
+        // Don't auto-start - let RescuersView control this
+        // advertiser.startAdvertisingPeer()
+        // browser.startBrowsingForPeers()
     }
 
     deinit {
         advertiser.stopAdvertisingPeer()
         browser.stopBrowsingForPeers()
         session.disconnect()
+    }
+    
+    // MARK: - Public Control Methods
+    
+    func startAdvertising() {
+        advertiser.startAdvertisingPeer()
+        logger.info("Started advertising")
+    }
+    
+    func stopAdvertising() {
+        advertiser.stopAdvertisingPeer()
+        logger.info("Stopped advertising")
+    }
+    
+    func startBrowsing() {
+        browser.startBrowsingForPeers()
+        logger.info("Started browsing for peers")
+    }
+    
+    func stopBrowsing() {
+        browser.stopBrowsingForPeers()
+        logger.info("Stopped browsing for peers")
     }
 
     func broadcastDiscoveryTokenToConnectedPeers() {
