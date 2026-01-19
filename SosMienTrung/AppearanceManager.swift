@@ -54,6 +54,13 @@ let presetColors: [PresetColor] = [
 class AppearanceManager: ObservableObject {
     static let shared = AppearanceManager()
     
+    // Battery saving mode - synced with SettingsManager
+    @Published var batterySavingMode: Bool {
+        didSet {
+            UserDefaults.standard.set(batterySavingMode, forKey: "batterySavingMode")
+        }
+    }
+    
     // Pattern settings
     @Published var selectedPattern: BackgroundPattern {
         didSet {
@@ -93,30 +100,61 @@ class AppearanceManager: ObservableObject {
     }
     
     var backgroundColor: Color {
-        Color(hex: backgroundColorHex)
+        if batterySavingMode {
+            return .black
+        }
+        return Color(hex: backgroundColorHex)
     }
     
     var gradientEndColor: Color {
-        Color(hex: gradientEndColorHex)
+        if batterySavingMode {
+            return .black
+        }
+        return Color(hex: gradientEndColorHex)
     }
     
     // MARK: - Adaptive Text Color
     /// Màu chữ thông minh dựa trên độ sáng của nền
     var textColor: Color {
+        if batterySavingMode {
+            return .white
+        }
         let luminance = calculateLuminance(hex: backgroundColorHex)
         return luminance > 0.5 ? .black : .white
     }
     
     /// Màu chữ phụ (opacity thấp hơn)
     var secondaryTextColor: Color {
+        if batterySavingMode {
+            return Color.white.opacity(0.7)
+        }
         let luminance = calculateLuminance(hex: backgroundColorHex)
         return luminance > 0.5 ? Color.black.opacity(0.7) : Color.white.opacity(0.7)
     }
     
     /// Màu chữ mờ
     var tertiaryTextColor: Color {
+        if batterySavingMode {
+            return Color.white.opacity(0.5)
+        }
         let luminance = calculateLuminance(hex: backgroundColorHex)
         return luminance > 0.5 ? Color.black.opacity(0.5) : Color.white.opacity(0.5)
+    }
+    
+    /// Màu nền cho section/card trong chế độ tiết kiệm pin
+    var sectionBackgroundColor: Color {
+        if batterySavingMode {
+            return Color.white.opacity(0.1)
+        }
+        return Color.clear
+    }
+    
+    /// Màu icon trong chế độ tiết kiệm pin
+    var iconTintColor: Color {
+        if batterySavingMode {
+            return .gray
+        }
+        return .primary
     }
     
     /// Tính độ sáng (luminance) của màu theo công thức WCAG
@@ -139,6 +177,8 @@ class AppearanceManager: ObservableObject {
     
     private init() {
         // Load saved settings
+        self.batterySavingMode = UserDefaults.standard.bool(forKey: "batterySavingMode")
+        
         let patternRaw = UserDefaults.standard.string(forKey: "backgroundPattern") ?? BackgroundPattern.pattern1.rawValue
         self.selectedPattern = BackgroundPattern(rawValue: patternRaw) ?? .pattern1
         
@@ -157,5 +197,10 @@ class AppearanceManager: ObservableObject {
         backgroundColorHex = "1B5E20"
         useGradient = false
         gradientEndColorHex = "004D40"
+    }
+    
+    /// Toggle chế độ tiết kiệm pin
+    func toggleBatterySavingMode() {
+        batterySavingMode.toggle()
     }
 }

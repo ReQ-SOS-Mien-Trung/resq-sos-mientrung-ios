@@ -5,27 +5,32 @@ struct TelegramBackground: View {
     
     var body: some View {
         ZStack {
-            // Background color/gradient
-            if appearanceManager.useGradient {
-                LinearGradient(
-                    colors: [appearanceManager.backgroundColor, appearanceManager.gradientEndColor],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+            // Battery saving mode - pure black background
+            if appearanceManager.batterySavingMode {
+                Color.black
             } else {
-                appearanceManager.backgroundColor
-            }
-            
-            // Pattern overlay using ImagePaint
-            if appearanceManager.selectedPattern != .none {
-                Rectangle()
-                    .fill(
-                        ImagePaint(
-                            image: Image(appearanceManager.selectedPattern.rawValue),
-                            scale: appearanceManager.patternScale
-                        )
+                // Background color/gradient
+                if appearanceManager.useGradient {
+                    LinearGradient(
+                        colors: [appearanceManager.backgroundColor, appearanceManager.gradientEndColor],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                    .opacity(appearanceManager.patternOpacity)
+                } else {
+                    appearanceManager.backgroundColor
+                }
+                
+                // Pattern overlay using ImagePaint
+                if appearanceManager.selectedPattern != .none {
+                    Rectangle()
+                        .fill(
+                            ImagePaint(
+                                image: Image(appearanceManager.selectedPattern.rawValue),
+                                scale: appearanceManager.patternScale
+                            )
+                        )
+                        .opacity(appearanceManager.patternOpacity)
+                }
             }
         }
         .ignoresSafeArea()
