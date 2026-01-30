@@ -1,2 +1,0 @@
-// Disable User Script Sandboxing to fix CocoaPods rsync permission issues
-ENABLE_USER_SCRIPT_SANDBOXING = NO
