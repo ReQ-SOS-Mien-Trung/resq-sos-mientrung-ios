@@ -36,24 +36,21 @@
 		E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SosMienTrung.release.xcconfig"; path = "Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3BE85A6C2EE35F20007BF228 /* Exceptions for "SosMienTrung" folder in "SosMienTrung" target */ = {
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		3BE85A482EE35F1F007BF228 /* SosMienTrung */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3BE85A482EE35F1F007BF229 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			path = SosMienTrung;
+			sourceTree = "<group>";
+		};
+		3BE85A482EE35F1F007BF229 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = 3BE85A452EE35F1F007BF228 /* SosMienTrung */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		3BE85A482EE35F1F007BF228 /* SosMienTrung */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				3BE85A6C2EE35F20007BF228 /* Exceptions for "SosMienTrung" folder in "SosMienTrung" target */,
-			);
-			path = SosMienTrung;
-			sourceTree = "<group>";
 		};
 		3BE85A5D2EE35F20007BF228 /* SosMienTrungTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -357,17 +354,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SosMienTrung/SosMienTrung.entitlements;
+				CODE_SIGN_ENTITLEMENTS = SosMienTrung/Resources/SosMienTrung.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SosMienTrung/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -393,17 +390,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SosMienTrung/SosMienTrung.entitlements;
+				CODE_SIGN_ENTITLEMENTS = SosMienTrung/Resources/SosMienTrung.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = YC47RP25CW;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SosMienTrung/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
