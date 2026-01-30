@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>OPENWEATHER_API_KEY</key>
+	<string>b81e9805325ec74d1fade6b37467f39b</string>
+	<key>BRIDGEFY_API_KEY</key>
+	<string>5a369f96-13d3-40df-8d41-805bf150cac0</string>
+</dict>
+</plist>
