@@ -1,2 +1,4 @@
 SosMienTrung/APIKeys.swift
 SosMienTrung/Keys.plist
+**/xcuserdata/
+**/*.xcscheme
