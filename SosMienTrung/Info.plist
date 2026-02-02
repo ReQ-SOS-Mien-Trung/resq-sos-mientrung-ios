@@ -58,6 +58,8 @@
 		<string>_rescuefinder._tcp</string>
 		<string>_sos-handover._tcp</string>
 		<string>_sos-handover._udp</string>
+		<string>_sos-wifi-direct._tcp</string>
+		<string>_sos-wifi-direct._udp</string>
 	</array>
 	<key>NSNearbyInteractionUsageDescription</key>
 	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>

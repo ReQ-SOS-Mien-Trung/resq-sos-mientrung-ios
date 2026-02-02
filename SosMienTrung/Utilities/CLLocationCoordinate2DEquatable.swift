@@ -1,10 +1,15 @@
 import CoreLocation
 
-// Make CLLocationCoordinate2D Equatable so it can be used with SwiftUI's onChange(_:perform:)
-// Note: This extension adds Equatable conformance for local use only.
-// If _LocationEssentials introduces this conformance, this may cause issues.
-extension CLLocationCoordinate2D: Equatable {
-    nonisolated public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
-        return lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
+struct EquatableCoordinate: Equatable {
+    let latitude: Double
+    let longitude: Double
+
+    init(_ coordinate: CLLocationCoordinate2D) {
+        self.latitude = coordinate.latitude
+        self.longitude = coordinate.longitude
     }
+}
+
+func coordinatesEqual(_ lhs: CLLocationCoordinate2D, _ rhs: CLLocationCoordinate2D) -> Bool {
+    lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
 }
