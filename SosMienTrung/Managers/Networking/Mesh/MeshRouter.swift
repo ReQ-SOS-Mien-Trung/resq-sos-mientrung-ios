@@ -17,11 +17,13 @@ final class MeshRouter {
         let payload = HeartbeatPayload(senderId: senderId, level: senderLevel, battery: battery)
         meshManager.processHeartbeat(payload: payload, rssi: rssi)
         retryOfflineQueueIfPossible()
+        ServerRequestGateway.shared.triggerRetry(reason: .meshHeartbeat)
     }
 
     func processHeartbeat(_ payload: HeartbeatPayload, rssi: Int) {
         meshManager.processHeartbeat(payload: payload, rssi: rssi)
         retryOfflineQueueIfPossible()
+        ServerRequestGateway.shared.triggerRetry(reason: .meshHeartbeat)
     }
 
     func handleSOSPacket(_ packet: SOSPacket) {
@@ -54,7 +56,7 @@ final class MeshRouter {
 
         if currentLevel == 0 {
             print("[Mesh] Gateway upload: packetId=\(packet.packetId).")
-            APIService.shared.uploadSOS(packet: packet) { _ in }
+            ServerRequestGateway.shared.handleIncomingRequest(ServerRequestEnvelope.basicSOS(packet), transport: .bridgefyMesh)
             return
         }
 

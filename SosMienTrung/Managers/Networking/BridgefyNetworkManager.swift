@@ -56,9 +56,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             self.bridgefy = bridgefy
             bridgefy.start()
             
-            // Start location updates
-            locationManager.requestPermission()
-            locationManager.startUpdating()
+            // Location will be requested on-demand (SOS / map)
             
             // Load identity mapping
             loadIdentityMapping()
@@ -212,63 +210,65 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             return
         }
 
-        guard let coords = locationManager.coordinates else {
-            print("Location not available")
-            // Fallback: gửi tin nhắn không có vị trí
-            sendBroadcastMessage(text)
-            return
-        }
+        locationManager.requestLocation { location in
+            guard let location else {
+                print("Location not available")
+                // Fallback: gửi tin nhắn không có vị trí
+                self.sendBroadcastMessage(text)
+                return
+            }
 
-        let messageId = UUID()
-        let timestamp = Date()
+            let messageId = UUID()
+            let timestamp = Date()
 
-        let payload = MessagePayload(
-            type: .sosLocation,
-            text: text,
-            messageId: messageId,
-            timestamp: timestamp,
-            senderId: sender,
-            senderName: currentUser.name,
-            senderPhone: currentUser.phoneNumber,
-            latitude: coords.latitude,
-            longitude: coords.longitude
-        )
-
-        do {
-            let data = try JSONEncoder().encode(payload)
-            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
-
-            let message = Message(
-                id: messageId,
+            let payload = MessagePayload(
                 type: .sosLocation,
                 text: text,
-                senderId: sender,
-                isFromMe: true,
+                messageId: messageId,
                 timestamp: timestamp,
+                senderId: sender,
                 senderName: currentUser.name,
                 senderPhone: currentUser.phoneNumber,
-                latitude: coords.latitude,
-                longitude: coords.longitude
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
             )
-            self.messages.append(message)
-            self.objectWillChange.send()
 
-            print("📤 SOS sent with location: \(coords.latitude), \(coords.longitude)")
-        } catch {
-            print("❌ Bridgefy send failed: \(error.localizedDescription)")
+            do {
+                let data = try JSONEncoder().encode(payload)
+                _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+
+                let message = Message(
+                    id: messageId,
+                    type: .sosLocation,
+                    text: text,
+                    senderId: sender,
+                    isFromMe: true,
+                    timestamp: timestamp,
+                    senderName: currentUser.name,
+                    senderPhone: currentUser.phoneNumber,
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude
+                )
+                self.messages.append(message)
+                self.objectWillChange.send()
+
+                print("📤 SOS sent with location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+            } catch {
+                print("❌ Bridgefy send failed: \(error.localizedDescription)")
+            }
+
+            let packet = SOSPacket(
+                packetId: messageId.uuidString,
+                originId: sender.uuidString,
+                timestamp: timestamp,
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                message: text,
+                hopCount: 0,
+                path: []
+            )
+            MeshRouter.shared.sendOrRelaySOS(packet)
         }
-
-        let packet = SOSPacket(
-            packetId: messageId.uuidString,
-            originId: sender.uuidString,
-            timestamp: timestamp,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            message: text,
-            hopCount: 0,
-            path: []
-        )
-        MeshRouter.shared.sendOrRelaySOS(packet)
     }
 
     /// Gửi SOS với khả năng upload lên server (nếu có mạng) hoặc relay qua mesh
@@ -306,16 +306,8 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             path: [sender.uuidString]
         )
 
-        // Nếu có mạng, gửi trực tiếp lên server
-        if networkMonitor.isConnected {
-            print("🌐 Has network - uploading SOS directly to server")
-            let success = await sosRelayService.uploadSOS(sosPacket)
-            if success {
-                print("✅ SOS uploaded directly to server")
-            }
-        } else {
-            print("📴 No network - will relay via mesh")
-        }
+        // Gửi qua ServerRequestGateway (tự upload hoặc relay)
+        ServerRequestGateway.shared.submitSOSBasic(sosPacket)
 
         // Luôn broadcast qua mesh network (để các device khác có thể relay)
         await MainActor.run {
@@ -366,20 +358,8 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             )
         }
 
-        // Nếu có mạng, gửi trực tiếp lên server (với full structured data)
-        if networkMonitor.isConnected {
-            print("🌐 Has network - uploading structured SOS directly to server")
-            let success = await uploadEnhancedSOS(enhancedPacket)
-            if success {
-                print("✅ Structured SOS uploaded directly to server")
-                // Update status
-                await MainActor.run {
-                    SOSStorageManager.shared.updateStatus(id: sosPacket.packetId, status: .delivered)
-                }
-            }
-        } else {
-            print("📴 No network - will relay via mesh")
-        }
+        // Gửi qua ServerRequestGateway (tự upload hoặc relay)
+        ServerRequestGateway.shared.submitSOSEnhanced(enhancedPacket)
 
         // Broadcast qua mesh network (dùng basic packet để compatibility)
         await MainActor.run {
@@ -478,7 +458,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
     /// Xử lý SOS packet nhận được từ mesh - relay lên server nếu có mạng
     private func handleReceivedSOSPacket(_ sosPacket: SOSPacket) {
-        guard let bridgefy, let myId = bridgefy.currentUserId else { return }
+        guard bridgefy?.currentUserId != nil else { return }
 
         // Tránh xử lý trùng lặp
         guard !processedSOSPacketIds.contains(sosPacket.packetId) else {
@@ -490,36 +470,8 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         print("📨 Received SOS packet: \(sosPacket.packetId) from \(sosPacket.originId)")
         print("   Hop count: \(sosPacket.hopCount), Path: \(sosPacket.path)")
 
-        // Nếu có mạng, upload lên server
-        if networkMonitor.isConnected {
-            print("🌐 Has network - relaying SOS to server")
-            let relayedPacket = sosPacket.relayed(by: myId.uuidString)
-
-            Task {
-                let success = await sosRelayService.uploadSOS(relayedPacket)
-                if success {
-                    print("✅ SOS relayed to server successfully")
-                }
-            }
-        } else {
-            // Không có mạng - tiếp tục relay qua mesh
-            print("📴 No network - forwarding SOS via mesh")
-            let relayedPacket = sosPacket.relayed(by: myId.uuidString)
-
-            // Chỉ relay nếu hop count chưa quá cao (tránh loop)
-            if relayedPacket.hopCount < 10 {
-                let meshPayload = MeshPayload(sosPacket: relayedPacket)
-                do {
-                    let data = try JSONEncoder().encode(meshPayload)
-                    _ = try bridgefy.send(data, using: .broadcast(senderId: myId))
-                    print("📤 Forwarded SOS packet, hop count: \(relayedPacket.hopCount)")
-                } catch {
-                    print("❌ Failed to forward SOS: \(error.localizedDescription)")
-                }
-            } else {
-                print("⚠️ SOS packet hop count too high, not forwarding")
-            }
-        }
+        // Relay/upload qua ServerRequestGateway
+        ServerRequestGateway.shared.handleIncomingRequest(ServerRequestEnvelope.basicSOS(sosPacket), transport: .bridgefyMesh)
     }
 
     // MARK: - BridgefyDelegate
@@ -561,6 +513,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
                 self.broadcastUserProfile()
             }
         }
+        ServerRequestGateway.shared.triggerRetry(reason: .peerUpdate)
     }
 
     func bridgefyDidDisconnect(from userId: UUID) {
@@ -571,6 +524,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             self.updateConnectedUsersList()
             print("📊 Total connected users: \(self.connectedUsers.count)")
         }
+        ServerRequestGateway.shared.triggerRetry(reason: .peerUpdate)
     }
 
     func bridgefyDidEstablishSecureConnection(with userId: UUID) {
@@ -624,6 +578,16 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
                 // Cũng hiển thị như message trong chat
                 displaySOSPacketAsMessage(sosPacket)
+            }
+
+        case .serverRequest:
+            if let request = meshPayload.serverRequest {
+                ServerRequestGateway.shared.handleIncomingRequest(request, transport: .bridgefyMesh)
+            }
+
+        case .serverAck:
+            if let ack = meshPayload.serverAck {
+                ServerRequestGateway.shared.handleIncomingAck(ack, transport: .bridgefyMesh)
             }
 
         case .chat, .sosLocation, .userInfo:
@@ -755,6 +719,38 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             }
         } catch {
             print("[Mesh] Failed to send mesh packet: \(error.localizedDescription)")
+        }
+    }
+
+    func sendServerRequest(_ request: ServerRequestEnvelope) {
+        guard let bridgefy, let sender = bridgefy.currentUserId else {
+            print("[ServerRequest] Bridgefy not started or missing userId.")
+            return
+        }
+
+        let payload = MeshPayload(serverRequest: request)
+        do {
+            let data = try JSONEncoder().encode(payload)
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+            print("[ServerRequest] Broadcast request: \(request.requestId)")
+        } catch {
+            print("[ServerRequest] Failed to send request: \(error.localizedDescription)")
+        }
+    }
+
+    func sendServerAck(_ ack: ServerRequestAck) {
+        guard let bridgefy, let sender = bridgefy.currentUserId else {
+            print("[ServerRequest] Bridgefy not started or missing userId.")
+            return
+        }
+
+        let payload = MeshPayload(serverAck: ack)
+        do {
+            let data = try JSONEncoder().encode(payload)
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+            print("[ServerRequest] Broadcast ack: \(ack.requestId)")
+        } catch {
+            print("[ServerRequest] Failed to send ack: \(error.localizedDescription)")
         }
     }
 
