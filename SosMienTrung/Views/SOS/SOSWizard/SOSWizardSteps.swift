@@ -62,6 +62,15 @@ struct Step0AutoInfoView: View {
                                 value: String(format: "± %.0f mét", accuracy)
                             )
                         }
+                    } else if bridgefyManager.locationManager.authorizationStatus == .denied ||
+                                bridgefyManager.locationManager.authorizationStatus == .restricted {
+                        InfoCard(
+                            icon: "location.slash",
+                            iconColor: .red,
+                            title: "Vị trí GPS",
+                            value: "Không có quyền truy cập vị trí",
+                            isLoading: false
+                        )
                     } else {
                         InfoCard(
                             icon: "location.slash",
@@ -152,6 +161,10 @@ struct Step1SelectTypeView: View {
                     Text("Bạn đang cần gì?")
                         .font(.title2.bold())
                         .foregroundColor(.white)
+                    
+                    Text("Có thể chọn 1 hoặc cả 2")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
                 }
                 .padding(.top, 20)
                 
@@ -173,30 +186,150 @@ struct Step1SelectTypeView: View {
                 }
                 .padding(.horizontal)
                 
-                // Main selection cards
+                // Main selection cards - now checkboxes
                 VStack(spacing: 16) {
-                    SOSTypeCard(
+                    SOSTypeCheckbox(
                         type: .rescue,
-                        isSelected: formData.sosType == .rescue
+                        isSelected: formData.selectedTypes.contains(.rescue)
                     ) {
                         withAnimation {
-                            formData.sosType = .rescue
+                            if formData.selectedTypes.contains(.rescue) {
+                                formData.selectedTypes.remove(.rescue)
+                            } else {
+                                formData.selectedTypes.insert(.rescue)
+                            }
                         }
                     }
                     
-                    SOSTypeCard(
+                    SOSTypeCheckbox(
                         type: .relief,
-                        isSelected: formData.sosType == .relief
+                        isSelected: formData.selectedTypes.contains(.relief)
                     ) {
                         withAnimation {
-                            formData.sosType = .relief
+                            if formData.selectedTypes.contains(.relief) {
+                                formData.selectedTypes.remove(.relief)
+                            } else {
+                                formData.selectedTypes.insert(.relief)
+                            }
                         }
                     }
                 }
                 .padding(.horizontal)
                 
+                // People count section - hiển thị ngay khi chọn loại SOS
+                if !formData.selectedTypes.isEmpty {
+                    Divider()
+                        .background(Color.white.opacity(0.3))
+                        .padding(.horizontal)
+                    
+                    SharedPeopleCountSection(peopleCount: $formData.sharedPeopleCount)
+                        .padding(.horizontal)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                
                 Spacer(minLength: 100)
             }
+        }
+    }
+}
+
+// MARK: - Shared People Count Section (hiển thị ở Step 1)
+
+struct SharedPeopleCountSection: View {
+    @Binding var peopleCount: PeopleCount
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("👥")
+                    .font(.title2)
+                Text("Số người cần hỗ trợ")
+                    .font(.headline)
+                    .foregroundColor(.white)
+            }
+            
+            Text("Xác định ngay số người để ưu tiên xử lý")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.6))
+            
+            VStack(spacing: 12) {
+                PeopleCountRowNew(
+                    icon: "🧑",
+                    title: "Người lớn (15-60 tuổi)",
+                    count: $peopleCount.adults,
+                    minValue: 1
+                )
+                PeopleCountRowNew(
+                    icon: "👶",
+                    title: "Trẻ em (< 15 tuổi)",
+                    count: $peopleCount.children,
+                    minValue: 0
+                )
+                PeopleCountRowNew(
+                    icon: "👴",
+                    title: "Người già (> 60 tuổi)",
+                    count: $peopleCount.elderly,
+                    minValue: 0
+                )
+            }
+            
+            // Tổng kết
+            HStack {
+                Text("Tổng: \(peopleCount.total) người")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+                Spacer()
+                Text("💡 Trẻ em & người già được ưu tiên")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .padding(.top, 4)
+        }
+    }
+}
+
+// MARK: - SOSTypeCheckbox (thay thế SOSTypeCard để có thể chọn nhiều)
+
+struct SOSTypeCheckbox: View {
+    let type: SOSType
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                // Checkbox
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.title2)
+                    .foregroundColor(isSelected ? (type == .rescue ? .red : .yellow) : .white.opacity(0.6))
+                
+                // Icon
+                Text(type.icon)
+                    .font(.system(size: 32))
+                
+                // Text
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(type.title)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text(type.subtitle)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(2)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.3) : Color.yellow.opacity(0.3)) : Color.white.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : Color.clear, lineWidth: 2)
+                    )
+            )
         }
     }
 }
@@ -217,6 +350,11 @@ struct Step2AReliefView: View {
                     Text("Chi tiết cứu trợ")
                         .font(.title2.bold())
                         .foregroundColor(.white)
+                    
+                    // Show people count summary
+                    Text("Hỗ trợ cho \(formData.sharedPeopleCount.total) người")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
                 }
                 .padding(.top, 20)
                 
@@ -253,14 +391,6 @@ struct Step2AReliefView: View {
                 }
                 .padding(.horizontal)
                 
-                Divider()
-                    .background(Color.white.opacity(0.3))
-                    .padding(.horizontal)
-                
-                // People count
-                PeopleCountSection(peopleCount: $formData.reliefData.peopleCount)
-                    .padding(.horizontal)
-                
                 Spacer(minLength: 100)
             }
         }
@@ -284,55 +414,47 @@ struct Step2BRescueView: View {
                     Text("Chi tiết cứu hộ")
                         .font(.title2.bold())
                         .foregroundColor(.white)
+                    
+                    // Show injured count (số người được chọn bị thương)
+                    let injuredCount = formData.rescueData.injuredPersonIds.count
+                    if injuredCount > 0 {
+                        Text("Cứu hộ cho \(injuredCount) người bị thương")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    } else {
+                        Text("Chọn người cần cứu hộ bên dưới")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 .padding(.top, 20)
                 
-                // Section 1: Tình trạng hiện tại
-                SituationSection(formData: formData)
-                
-                Divider()
-                    .background(Color.white.opacity(0.3))
-                    .padding(.horizontal)
-                
-                // Section 2: Số người cần hỗ trợ (HỎI TRƯỚC)
-                PeopleCountSectionNew(
-                    peopleCount: Binding(
-                        get: { formData.rescueData.peopleCount },
-                        set: { newValue in
-                            formData.rescueData.peopleCount = newValue
-                            formData.rescueData.generatePeople()
-                        }
-                    )
-                )
-                .padding(.horizontal)
-                
-                Divider()
-                    .background(Color.white.opacity(0.3))
-                    .padding(.horizontal)
-                
-                // Section 3: Có người bị thương không?
-                InjuredQuestionSection(formData: formData)
-                
-                // Section 4: Nếu có → Chọn ai bị thương
-                if formData.rescueData.hasInjured && !formData.rescueData.people.isEmpty {
-                    Divider()
-                        .background(Color.white.opacity(0.3))
-                        .padding(.horizontal)
-                    
+                // Section 1: Ai bị thương? (hiển thị sẵn)
+                if !formData.rescueData.people.isEmpty {
                     InjuredPersonSelectionSection(
                         formData: formData,
                         selectedPersonForMedical: $selectedPersonForMedical
                     )
                 }
                 
+                Divider()
+                    .background(Color.white.opacity(0.3))
+                    .padding(.horizontal)
+                
+                // Section 2: Tình trạng hiện tại
+                SituationSection(formData: formData)
+                
                 Spacer(minLength: 100)
             }
         }
         .onAppear {
-            // Tạo danh sách người khi view appear nếu chưa có
+            // Sync shared people count và generate people list khi view appear
+            formData.rescueData.peopleCount = formData.sharedPeopleCount
             if formData.rescueData.people.isEmpty {
                 formData.rescueData.generatePeople()
             }
+            // Mặc định set hasInjured = true để hiển thị danh sách người
+            formData.rescueData.hasInjured = true
         }
         .sheet(item: $selectedPersonForMedical) { person in
             PersonMedicalFormSheet(
@@ -924,6 +1046,7 @@ struct FlowLayout: Layout {
 
 struct Step3AdditionalInfoView: View {
     @Bindable var formData: SOSFormData
+    @FocusState private var isTextEditorFocused: Bool
     
     var body: some View {
         ScrollView {
@@ -952,6 +1075,7 @@ struct Step3AdditionalInfoView: View {
                         .foregroundColor(.white)
                         .frame(minHeight: 150)
                         .cornerRadius(12)
+                        .focused($isTextEditorFocused)
                         .overlay(
                             Group {
                                 if formData.additionalDescription.isEmpty {
@@ -972,6 +1096,9 @@ struct Step3AdditionalInfoView: View {
                 
                 Spacer(minLength: 100)
             }
+        }
+        .onTapGesture {
+            isTextEditorFocused = false
         }
     }
 }
@@ -1003,33 +1130,42 @@ struct Step4ReviewView: View {
                         ReviewRow(icon: "📍", title: "Vị trí", value: String(format: "%.4f, %.4f", lat, long))
                     }
                     
-                    // SOS Type
-                    if let type = formData.sosType {
-                        ReviewRow(icon: type.icon, title: "Loại SOS", value: type.title)
+                    // SOS Types - hiển thị tất cả loại đã chọn
+                    if !formData.selectedTypes.isEmpty {
+                        let typesText = formData.selectedTypes.map { $0.title }.joined(separator: " + ")
+                        let icon = formData.needsBothSteps ? "🆘" : (formData.sosType?.icon ?? "🆘")
+                        ReviewRow(icon: icon, title: "Loại SOS", value: typesText)
                     }
                     
-                    // Type-specific info
-                    if formData.sosType == .rescue {
+                    // Số người (shared)
+                    ReviewRow(icon: "👥", title: "Tổng số người", value: "\(formData.sharedPeopleCount.total)")
+                    
+                    if formData.sharedPeopleCount.children > 0 {
+                        ReviewRow(icon: "👶", title: "Trẻ em", value: "\(formData.sharedPeopleCount.children)")
+                    }
+                    if formData.sharedPeopleCount.elderly > 0 {
+                        ReviewRow(icon: "👴", title: "Người già", value: "\(formData.sharedPeopleCount.elderly)")
+                    }
+                    
+                    // RESCUE info
+                    if formData.needsRescueStep {
+                        Divider()
+                            .background(Color.white.opacity(0.3))
+                        
+                        Text("🚨 Thông tin cứu hộ")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.red)
+                        
                         if let situation = formData.rescueData.situation {
                             ReviewRow(icon: situation.icon, title: "Tình trạng", value: situation.title)
-                        }
-                        
-                        // Số người
-                        ReviewRow(icon: "👥", title: "Số người", value: "\(formData.rescueData.peopleCount.total)")
-                        
-                        if formData.rescueData.peopleCount.children > 0 {
-                            ReviewRow(icon: "👶", title: "Trẻ em", value: "\(formData.rescueData.peopleCount.children)")
-                        }
-                        if formData.rescueData.peopleCount.elderly > 0 {
-                            ReviewRow(icon: "👴", title: "Người già", value: "\(formData.rescueData.peopleCount.elderly)")
                         }
                         
                         // Thông tin y tế từng người bị thương
                         if formData.rescueData.hasInjured && !formData.rescueData.injuredPersonIds.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("🚑 Người bị thương:")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.white)
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white.opacity(0.8))
                                 
                                 ForEach(formData.rescueData.people.filter { 
                                     formData.rescueData.injuredPersonIds.contains($0.id) 
@@ -1040,17 +1176,31 @@ struct Step4ReviewView: View {
                                 }
                             }
                         }
-                    } else if formData.sosType == .relief {
+                    }
+                    
+                    // RELIEF info
+                    if formData.needsReliefStep {
+                        Divider()
+                            .background(Color.white.opacity(0.3))
+                        
+                        Text("🎒 Thông tin cứu trợ")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.yellow)
+                        
                         if !formData.reliefData.supplies.isEmpty {
                             let supplies = formData.reliefData.supplies.map { $0.title }.joined(separator: ", ")
-                            ReviewRow(icon: "🎒", title: "Cần", value: supplies)
+                            ReviewRow(icon: "📦", title: "Cần", value: supplies)
                         }
                         
-                        ReviewRow(icon: "👥", title: "Số người", value: "\(formData.reliefData.peopleCount.total)")
+                        if !formData.reliefData.otherSupplyDescription.isEmpty {
+                            ReviewRow(icon: "📝", title: "Khác", value: formData.reliefData.otherSupplyDescription)
+                        }
                     }
                     
                     // Additional description
                     if !formData.additionalDescription.isEmpty {
+                        Divider()
+                            .background(Color.white.opacity(0.3))
                         ReviewRow(icon: "📝", title: "Ghi chú", value: formData.additionalDescription)
                     }
                     

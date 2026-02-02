@@ -53,9 +53,14 @@ struct SOSHistoryView: View {
                     }
                 }
             }
-            .navigationTitle("Quản lý SOS")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Quản lý SOS")
+                        .font(.headline)
+                        .foregroundColor(appearanceManager.textColor)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showSOSForm = true
@@ -116,11 +121,11 @@ struct SOSHistoryView: View {
             
             Text("Chưa có SOS nào")
                 .font(.title2.bold())
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text("Bạn chưa gửi hoặc nhận bất kỳ tín hiệu SOS nào.\nNhấn nút + để gửi SOS mới.")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(appearanceManager.secondaryTextColor)
                 .multilineTextAlignment(.center)
             
             Spacer()
@@ -302,6 +307,7 @@ struct SavedSOSCard: View {
 
 // MARK: - Stat Card
 struct StatCard: View {
+    @ObservedObject var appearanceManager = AppearanceManager.shared
     let icon: String
     let value: String
     let label: String
@@ -315,11 +321,11 @@ struct StatCard: View {
             
             Text(value)
                 .font(.headline.bold())
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text(label)
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(appearanceManager.secondaryTextColor)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

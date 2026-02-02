@@ -158,21 +158,37 @@ struct SOSWizardView: View {
     }
     
     private func setupAutoInfo() {
-        let coords = bridgefyManager.locationManager.coordinates
-        let accuracy = bridgefyManager.locationManager.accuracy
-        
-        formData.autoInfo = AutoCollectedInfo(
+        let baseInfo = AutoCollectedInfo(
             deviceId: bridgefyManager.currentUserId?.uuidString ?? UUID().uuidString,
             userId: UserProfile.shared.currentUser?.id.uuidString,
             userName: UserProfile.shared.currentUser?.name,
             userPhone: UserProfile.shared.currentUser?.phoneNumber,
             timestamp: Date(),
-            latitude: coords?.latitude,
-            longitude: coords?.longitude,
-            accuracy: accuracy,
+            latitude: nil,
+            longitude: nil,
+            accuracy: nil,
             isOnline: networkMonitor.isConnected,
             batteryLevel: getBatteryLevel()
         )
+        formData.autoInfo = baseInfo
+
+        bridgefyManager.locationManager.requestLocation { location in
+            DispatchQueue.main.async {
+                let accuracy = location?.horizontalAccuracy
+                self.formData.autoInfo = AutoCollectedInfo(
+                    deviceId: baseInfo.deviceId,
+                    userId: baseInfo.userId,
+                    userName: baseInfo.userName,
+                    userPhone: baseInfo.userPhone,
+                    timestamp: Date(),
+                    latitude: location?.coordinate.latitude,
+                    longitude: location?.coordinate.longitude,
+                    accuracy: accuracy,
+                    isOnline: self.networkMonitor.isConnected,
+                    batteryLevel: self.getBatteryLevel()
+                )
+            }
+        }
     }
     
     private func getBatteryLevel() -> Int? {

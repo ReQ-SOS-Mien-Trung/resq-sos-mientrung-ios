@@ -120,6 +120,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
     case breathingDifficulty = "BREATHING_DIFFICULTY"
     case chronicDisease = "CHRONIC_DISEASE"
     case burns = "BURNS"
+    case pregnant = "PREGNANT"
     case other = "OTHER"
     
     var id: String { rawValue }
@@ -132,6 +133,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .breathingDifficulty: return "Khó thở"
         case .chronicDisease: return "Bệnh nền"
         case .burns: return "Bỏng"
+        case .pregnant: return "Có bầu"
         case .other: return "Khác"
         }
     }
@@ -144,6 +146,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .breathingDifficulty: return "😮‍💨"
         case .chronicDisease: return "💉"
         case .burns: return "🔥"
+        case .pregnant: return "🤰"
         case .other: return "🏥"
         }
     }
@@ -155,6 +158,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .breathingDifficulty: return 5
         case .bleeding: return 4
         case .burns: return 4
+        case .pregnant: return 4
         case .fracture: return 3
         case .chronicDisease: return 2
         case .other: return 1
@@ -385,8 +389,19 @@ class SOSFormData {
     // Auto-collected (Step 0)
     var autoInfo: AutoCollectedInfo?
     
-    // Step 1: Loại SOS
-    var sosType: SOSType?
+    // Step 1: Loại SOS - có thể chọn 1 hoặc cả 2
+    var selectedTypes: Set<SOSType> = []
+    
+    // Computed property cho backward compatibility
+    var sosType: SOSType? {
+        // Ưu tiên rescue nếu chọn cả 2
+        if selectedTypes.contains(.rescue) { return .rescue }
+        if selectedTypes.contains(.relief) { return .relief }
+        return nil
+    }
+    
+    // Số người cần hỗ trợ (shared giữa rescue và relief)
+    var sharedPeopleCount: PeopleCount = PeopleCount()
     
     // Step 2A: Cứu trợ
     var reliefData: ReliefData = ReliefData()
@@ -412,7 +427,7 @@ class SOSFormData {
         case .autoInfo:
             return autoInfo != nil
         case .selectType:
-            return sosType != nil
+            return !selectedTypes.isEmpty && sharedPeopleCount.total > 0
         case .relief:
             return !reliefData.supplies.isEmpty || !reliefData.otherSupplyDescription.isEmpty
         case .rescue:
@@ -425,7 +440,20 @@ class SOSFormData {
     }
     
     var isComplete: Bool {
-        sosType != nil
+        !selectedTypes.isEmpty
+    }
+    
+    // Check nếu chọn cả 2 loại
+    var needsBothSteps: Bool {
+        selectedTypes.contains(.rescue) && selectedTypes.contains(.relief)
+    }
+    
+    var needsRescueStep: Bool {
+        selectedTypes.contains(.rescue)
+    }
+    
+    var needsReliefStep: Bool {
+        selectedTypes.contains(.relief)
     }
     
     /// Tính điểm ưu tiên tổng thể
@@ -468,7 +496,8 @@ class SOSFormData {
     func reset() {
         currentStep = .autoInfo
         completedSteps = []
-        sosType = nil
+        selectedTypes = []
+        sharedPeopleCount = PeopleCount()
         reliefData = ReliefData()
         rescueData = RescueData()
         additionalDescription = ""
@@ -482,12 +511,29 @@ class SOSFormData {
     func goToNextStep() {
         markStepCompleted(currentStep)
         
+        // Sync shared people count vào relief/rescue data
+        syncPeopleCount()
+        
         switch currentStep {
         case .autoInfo:
             currentStep = .selectType
         case .selectType:
-            currentStep = sosType == .rescue ? .rescue : .relief
-        case .relief, .rescue:
+            // Ưu tiên relief trước, sau đó mới rescue
+            if needsReliefStep {
+                currentStep = .relief
+            } else if needsRescueStep {
+                currentStep = .rescue
+            } else {
+                currentStep = .additionalInfo
+            }
+        case .relief:
+            // Sau relief, nếu cần rescue thì qua rescue, nếu không thì additionalInfo
+            if needsRescueStep {
+                currentStep = .rescue
+            } else {
+                currentStep = .additionalInfo
+            }
+        case .rescue:
             currentStep = .additionalInfo
         case .additionalInfo:
             currentStep = .review
@@ -502,19 +548,43 @@ class SOSFormData {
             break
         case .selectType:
             currentStep = .autoInfo
-        case .relief, .rescue:
+        case .relief:
             currentStep = .selectType
+        case .rescue:
+            // Nếu đã qua relief trước đó, quay lại relief
+            if needsReliefStep {
+                currentStep = .relief
+            } else {
+                currentStep = .selectType
+            }
         case .additionalInfo:
-            currentStep = sosType == .rescue ? .rescue : .relief
+            // Quay lại rescue nếu có, nếu không thì relief, nếu không thì selectType
+            if needsRescueStep {
+                currentStep = .rescue
+            } else if needsReliefStep {
+                currentStep = .relief
+            } else {
+                currentStep = .selectType
+            }
         case .review:
             currentStep = .additionalInfo
+        }
+    }
+    
+    /// Sync shared people count vào rescue và relief data
+    private func syncPeopleCount() {
+        rescueData.peopleCount = sharedPeopleCount
+        reliefData.peopleCount = sharedPeopleCount
+        // Generate people list cho rescue nếu cần
+        if needsRescueStep {
+            rescueData.generatePeople()
         }
     }
     
     /// Apply quick preset
     func applyPreset(_ preset: QuickPreset) {
         appliedPreset = preset
-        sosType = preset.sosType
+        selectedTypes.insert(preset.sosType)
         
         switch preset {
         case .needWaterFood:

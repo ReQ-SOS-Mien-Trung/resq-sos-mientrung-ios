@@ -537,12 +537,17 @@ struct SOSEditView: View {
             updated.status = .sent
             updated.lastUpdated = Date()
             
-            if formData.sosType == .relief {
+            // Lưu cả relief và rescue data nếu có
+            if formData.needsReliefStep {
                 updated.reliefData = formData.reliefData
-                updated.rescueData = nil
-            } else if formData.sosType == .rescue {
+            } else {
                 updated.reliefData = nil
+            }
+            
+            if formData.needsRescueStep {
                 updated.rescueData = SavedRescueData(from: formData.rescueData)
+            } else {
+                updated.rescueData = nil
             }
             
             SOSStorageManager.shared.updateSOS(updated)

@@ -42,14 +42,16 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.longitude = longitude
         self.message = formData.toSOSMessage()
         
-        if formData.sosType == .relief {
+        // Lưu cả relief và rescue data nếu có
+        if formData.needsReliefStep {
             self.reliefData = formData.reliefData
-            self.rescueData = nil
-        } else if formData.sosType == .rescue {
-            self.reliefData = nil
-            self.rescueData = SavedRescueData(from: formData.rescueData)
         } else {
             self.reliefData = nil
+        }
+        
+        if formData.needsRescueStep {
+            self.rescueData = SavedRescueData(from: formData.rescueData)
+        } else {
             self.rescueData = nil
         }
         
@@ -64,15 +66,29 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     /// Khôi phục lại SOSFormData để chỉnh sửa
     func toFormData() -> SOSFormData {
         let formData = SOSFormData()
-        formData.sosType = sosType
+        
+        // Khôi phục selectedTypes từ sosType và data có sẵn
+        if let type = sosType {
+            formData.selectedTypes.insert(type)
+        }
+        // Nếu có cả relief và rescue data, thêm cả 2 type
+        if reliefData != nil && !formData.selectedTypes.contains(.relief) {
+            formData.selectedTypes.insert(.relief)
+        }
+        if rescueData != nil && !formData.selectedTypes.contains(.rescue) {
+            formData.selectedTypes.insert(.rescue)
+        }
+        
         formData.additionalDescription = additionalDescription
         
         if let relief = reliefData {
             formData.reliefData = relief
+            formData.sharedPeopleCount = relief.peopleCount
         }
         
         if let rescue = rescueData {
             formData.rescueData = rescue.toRescueData()
+            formData.sharedPeopleCount = rescue.peopleCount
         }
         
         // Set auto info nếu có location

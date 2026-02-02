@@ -128,30 +128,29 @@ struct SOSPacketEnhanced: Codable {
         var othersAreStable: Bool? = nil
         var peopleCount: PeopleCountData? = nil
         
-        if formData.sosType == .relief {
+        // Sử dụng shared people count
+        peopleCount = PeopleCountData(
+            total: formData.sharedPeopleCount.total,
+            adults: formData.sharedPeopleCount.adults,
+            children: formData.sharedPeopleCount.children,
+            elderly: formData.sharedPeopleCount.elderly,
+            injured: formData.needsRescueStep ? formData.rescueData.injuredPersonIds.count : 0
+        )
+        
+        // Relief data - nếu có chọn relief
+        if formData.needsReliefStep {
             supplies = formData.reliefData.supplies.map { $0.rawValue }
             otherSupplyDescription = formData.reliefData.otherSupplyDescription.isEmpty ? nil : formData.reliefData.otherSupplyDescription
-            peopleCount = PeopleCountData(
-                total: formData.reliefData.peopleCount.total,
-                adults: formData.reliefData.peopleCount.adults,
-                children: formData.reliefData.peopleCount.children,
-                elderly: formData.reliefData.peopleCount.elderly,
-                injured: 0
-            )
-        } else if formData.sosType == .rescue {
+        }
+        
+        // Rescue data - nếu có chọn rescue
+        if formData.needsRescueStep {
             situation = formData.rescueData.situation?.rawValue
             otherSituationDescription = formData.rescueData.otherSituationDescription.isEmpty ? nil : formData.rescueData.otherSituationDescription
             hasInjured = formData.rescueData.hasInjured
             medicalIssues = formData.rescueData.medicalIssues.isEmpty ? nil : formData.rescueData.medicalIssues.map { $0.rawValue }
             otherMedicalDescription = formData.rescueData.otherMedicalDescription.isEmpty ? nil : formData.rescueData.otherMedicalDescription
             othersAreStable = formData.rescueData.othersAreStable
-            peopleCount = PeopleCountData(
-                total: formData.rescueData.peopleCount.total,
-                adults: formData.rescueData.peopleCount.adults,
-                children: formData.rescueData.peopleCount.children,
-                elderly: formData.rescueData.peopleCount.elderly,
-                injured: formData.rescueData.injuredPersonIds.count
-            )
         }
         
         self.structuredData = StructuredData(
