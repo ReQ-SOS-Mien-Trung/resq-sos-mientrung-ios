@@ -131,6 +131,9 @@ struct DirectChatView: View {
                 .background(Color.black.opacity(0.35))
             }
         }
+        .onTapGesture {
+            isTextFieldFocused = false
+        }
     }
     
     private func sendMessage() {

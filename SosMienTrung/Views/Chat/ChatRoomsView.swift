@@ -13,6 +13,7 @@ struct ChatRoomsView: View {
     @State private var searchText = ""
     @State private var selectedChatRoom: ChatRoom?
     @State private var showDirectChat = false
+    @FocusState private var isSearchFocused: Bool
     
     // Chat room model
     struct ChatRoom: Identifiable {
@@ -124,6 +125,7 @@ struct ChatRoomsView: View {
                     
                     TextField("Tìm kiếm phòng chat...", text: $searchText)
                         .foregroundColor(appearanceManager.textColor)
+                        .focused($isSearchFocused)
                 }
                 .padding(12)
                 .background(.ultraThinMaterial)
@@ -183,6 +185,9 @@ struct ChatRoomsView: View {
                     recipient: user
                 )
             }
+        }
+        .onTapGesture {
+            isSearchFocused = false
         }
     }
 }

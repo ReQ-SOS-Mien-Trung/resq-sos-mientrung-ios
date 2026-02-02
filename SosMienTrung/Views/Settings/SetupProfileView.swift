@@ -16,6 +16,11 @@ struct SetupProfileView: View {
     @State private var errorMessage = ""
     @State private var showIdentityHandover = false
     @Binding var isSetupComplete: Bool
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case name, phone
+    }
     
     var body: some View {
         ZStack {
@@ -62,6 +67,7 @@ struct SetupProfileView: View {
                                     .textContentType(.name)
                                     .autocapitalization(.words)
                                     .foregroundColor(.white)
+                                    .focused($focusedField, equals: .name)
                             }
                             .padding()
                             .background(Color.white.opacity(0.08))
@@ -83,6 +89,7 @@ struct SetupProfileView: View {
                                     .textContentType(.telephoneNumber)
                                     .keyboardType(.phonePad)
                                     .foregroundColor(.white)
+                                    .focused($focusedField, equals: .phone)
                             }
                             .padding()
                             .background(Color.white.opacity(0.08))
@@ -171,6 +178,9 @@ struct SetupProfileView: View {
         }
         .fullScreenCover(isPresented: $showIdentityHandover) {
             SetupIdentityHandoverView(isSetupComplete: $isSetupComplete)
+        }
+        .onTapGesture {
+            focusedField = nil
         }
     }
     

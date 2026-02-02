@@ -104,6 +104,9 @@ struct ChatBotView: View {
                     messages.append(welcome)
                 }
             }
+            .onTapGesture {
+                isFocused = false
+            }
         }
     }
     

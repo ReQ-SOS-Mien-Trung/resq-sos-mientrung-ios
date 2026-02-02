@@ -228,8 +228,15 @@ struct SettingsView: View {
                     .padding()
                 }
             }
-            .navigationTitle("Cài đặt")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Cài đặt")
+                        .font(.title3.bold())
+                        .foregroundColor(appearanceManager.textColor)
+                }
+            }
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileView()

@@ -12,6 +12,7 @@ struct UsersListView: View {
     @State private var searchText = ""
     @State private var selectedUser: User?
     @State private var showDirectChat = false
+    @FocusState private var isSearchFocused: Bool
     
     var filteredUsers: [User] {
         if searchText.isEmpty {
@@ -53,6 +54,7 @@ struct UsersListView: View {
                     
                     TextField("Tìm kiếm theo tên hoặc số điện thoại...", text: $searchText)
                         .foregroundColor(.white)
+                        .focused($isSearchFocused)
                 }
                 .padding(12)
                 .background(Color.white.opacity(0.15))
@@ -109,6 +111,9 @@ struct UsersListView: View {
                 bridgefyManager: bridgefyManager,
                 recipient: user
             )
+        }
+        .onTapGesture {
+            isSearchFocused = false
         }
     }
 }

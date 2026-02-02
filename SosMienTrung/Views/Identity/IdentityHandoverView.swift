@@ -736,6 +736,7 @@ struct QRScannerView: View {
     
     @State private var scannedCode: String = ""
     @State private var isScanning = true
+    @FocusState private var isCodeFieldFocused: Bool
     
     var body: some View {
         NavigationStack {
@@ -767,6 +768,7 @@ struct QRScannerView: View {
                         HStack {
                             TextField("Mã chuyển tài khoản", text: $scannedCode)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .focused($isCodeFieldFocused)
                             
                             Button("Xác nhận") {
                                 if !scannedCode.isEmpty {
@@ -794,6 +796,9 @@ struct QRScannerView: View {
                     }
                     .foregroundColor(.white)
                 }
+            }
+            .onTapGesture {
+                isCodeFieldFocused = false
             }
         }
     }
