@@ -4,6 +4,7 @@ import Combine
 
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
+    private var pendingRequestCompletion: ((CLLocation?) -> Void)?
     
     @Published var currentLocation: CLLocation?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
@@ -19,6 +20,21 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     
     func requestPermission() {
         manager.requestWhenInUseAuthorization()
+    }
+
+    func requestLocation(completion: @escaping (CLLocation?) -> Void) {
+        let status = manager.authorizationStatus
+
+        switch status {
+        case .notDetermined:
+            pendingRequestCompletion = completion
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            pendingRequestCompletion = completion
+            manager.requestLocation()
+        default:
+            completion(nil)
+        }
     }
     
     func startUpdating() {
@@ -36,12 +52,14 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     // MARK: - CLLocationManagerDelegate
     
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         DispatchQueue.main.async {
-            self.authorizationStatus = manager.authorizationStatus
-            
-            if self.authorizationStatus == .authorizedWhenInUse || self.authorizationStatus == .authorizedAlways {
-                self.startUpdating()
-            }
+            self.authorizationStatus = status
+        }
+
+        if status == .authorizedWhenInUse || status == .authorizedAlways,
+           pendingRequestCompletion != nil {
+            manager.requestLocation()
         }
     }
     
@@ -49,6 +67,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard let location = locations.last else { return }
         DispatchQueue.main.async {
             self.currentLocation = location
+            if let completion = self.pendingRequestCompletion {
+                self.pendingRequestCompletion = nil
+                completion(location)
+                return
+            }
         }
     }
     
@@ -56,6 +79,10 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         DispatchQueue.main.async {
             self.locationError = error
             print("Location error: \(error.localizedDescription)")
+            if let completion = self.pendingRequestCompletion {
+                self.pendingRequestCompletion = nil
+                completion(nil)
+            }
         }
     }
     

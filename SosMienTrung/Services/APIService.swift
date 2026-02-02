@@ -1,5 +1,15 @@
 import Foundation
 
+// Note: SOSPacket.swift contains the canonical data structures:
+// - PeopleCountData
+// - MedicalIssueInfo
+// - InjuredPersonInfo
+// - RescueSituationInfo
+// - RescueDataInfo
+// - ReliefDataInfo
+// - AutoCollectedInfoData
+
+// MARK: - Legacy SOS Upload Payload (for backward compatibility)
 struct SOSUploadPayload: Codable {
     let packetId: String
     let originId: String
@@ -28,6 +38,56 @@ final class APIService {
 
     private init() {}
 
+    // MARK: - Upload SOS Packet with Full Form Details
+    func uploadDetailedSOS(packet: SOSPacket, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: baseURL) else {
+            print("[API] Invalid URL: \(baseURL)")
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(packet)
+            request.httpBody = jsonData
+
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                print("[API] Uploading Detailed SOS packet:")
+                print(jsonString)
+            }
+
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("[API] Upload failed: \(error.localizedDescription)")
+                    completion(false)
+                    return
+                }
+
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if statusCode == 201 || statusCode == 200 {
+                    print("[API] Upload succeeded.")
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("[API] Server response: \(responseString)")
+                    }
+                    completion(true)
+                } else {
+                    print("[API] Upload returned status code \(statusCode).")
+                    completion(false)
+                }
+            }
+            task.resume()
+        } catch {
+            print("[API] Failed to encode SOS packet: \(error)")
+            completion(false)
+        }
+    }
+
+    // MARK: - Upload Legacy SOS
     func uploadSOS(payload: SOSUploadPayload, completion: @escaping (Bool) -> Void) {
         guard let url = URL(string: baseURL) else {
             print("[API] Invalid URL: \(baseURL)")
