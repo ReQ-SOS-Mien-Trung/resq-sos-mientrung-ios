@@ -36,21 +36,25 @@
 		E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SosMienTrung.release.xcconfig"; path = "Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3BE85A482EE35F1F007BF229 /* Exceptions for "SosMienTrung" folder in "SosMienTrung" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				Resources/DisableSandboxing.xcconfig,
+			);
+			target = 3BE85A452EE35F1F007BF228 /* SosMienTrung */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3BE85A482EE35F1F007BF228 /* SosMienTrung */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				3BE85A482EE35F1F007BF229 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				3BE85A482EE35F1F007BF229 /* Exceptions for "SosMienTrung" folder in "SosMienTrung" target */,
 			);
 			path = SosMienTrung;
 			sourceTree = "<group>";
-		};
-		3BE85A482EE35F1F007BF229 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 3BE85A452EE35F1F007BF228 /* SosMienTrung */;
 		};
 		3BE85A5D2EE35F20007BF228 /* SosMienTrungTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -479,6 +483,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -536,6 +541,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
