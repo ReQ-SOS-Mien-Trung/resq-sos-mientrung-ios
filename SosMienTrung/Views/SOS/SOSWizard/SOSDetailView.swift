@@ -152,7 +152,7 @@ struct SOSDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.1))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
     }
     
@@ -198,7 +198,7 @@ struct SOSDetailView: View {
             }
         }
         .padding()
-        .background(Color.white.opacity(0.1))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
     }
     
@@ -223,7 +223,7 @@ struct SOSDetailView: View {
         }
         .padding()
         .background(
-            type == .rescue ? Color.red.opacity(0.3) : Color.yellow.opacity(0.3)
+            type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)
         )
         .cornerRadius(16)
     }
@@ -302,7 +302,7 @@ struct SOSDetailView: View {
             }
         }
         .padding()
-        .background(Color.white.opacity(0.1))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
     }
     
@@ -356,7 +356,7 @@ struct SOSDetailView: View {
             }
         }
         .padding()
-        .background(Color.white.opacity(0.1))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
     }
     
@@ -378,12 +378,11 @@ struct SOSDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding()
-        .background(Color.white.opacity(0.1))
+        .background(.ultraThinMaterial)
         .cornerRadius(16)
     }
     
     // MARK: - Action Buttons
-    
     private var actionButtons: some View {
         VStack(spacing: 12) {
             // Edit button

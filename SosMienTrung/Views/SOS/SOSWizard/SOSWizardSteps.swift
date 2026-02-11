@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 // MARK: - Step 0: Auto Info (Read-only)
 
@@ -324,10 +325,14 @@ struct SOSTypeCheckbox: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.3) : Color.yellow.opacity(0.3)) : Color.white.opacity(0.1))
+                    .fill(.ultraThinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : Color.clear, lineWidth: 2)
+                            .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
                     )
             )
         }
@@ -727,8 +732,16 @@ struct PersonInjuredRow: View {
                     }
                 }
                 .padding(12)
-                .background(isInjured ? Color.red.opacity(0.2) : Color.white.opacity(0.1))
-                .cornerRadius(isInjured && hasMedicalInfo ? 10 : 10)
+                .background(.ultraThinMaterial)
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isInjured ? Color.red.opacity(0.2) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isInjured ? Color.red : Color.white.opacity(0.2), lineWidth: isInjured ? 2 : 1)
+                )
             }
             
             // Medical info summary (if injured and has info)
@@ -761,8 +774,16 @@ struct PersonInjuredRow: View {
                         }
                     }
                     .padding(12)
-                    .background(Color.red.opacity(0.1))
+                    .background(.ultraThinMaterial)
                     .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.red.opacity(0.15))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.red.opacity(0.6), lineWidth: 1)
+                    )
                 }
             } else if isInjured && !hasMedicalInfo {
                 // Prompt to add medical info
@@ -779,8 +800,16 @@ struct PersonInjuredRow: View {
                             .foregroundColor(.orange.opacity(0.6))
                     }
                     .padding(12)
-                    .background(Color.orange.opacity(0.1))
+                    .background(.ultraThinMaterial)
                     .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(0.15))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.orange.opacity(0.6), lineWidth: 1)
+                    )
                 }
             }
         }
@@ -950,8 +979,16 @@ struct MedicalIssueCheckboxLight: View {
                 Spacer()
             }
             .padding(12)
-            .background(isSelected ? Color.red.opacity(0.1) : Color.gray.opacity(0.1))
+            .background(.ultraThinMaterial)
             .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.red.opacity(0.15) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.red : Color.gray.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }
@@ -987,8 +1024,16 @@ struct SeverityRadio: View {
                     .frame(width: 12, height: 12)
             }
             .padding(12)
-            .background(isSelected ? color.opacity(0.1) : Color.gray.opacity(0.1))
+            .background(.ultraThinMaterial)
             .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? color.opacity(0.15) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? color : Color.gray.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }
@@ -1409,8 +1454,16 @@ struct QuickPresetButton: View {
             .foregroundColor(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isSelected ? Color.red.opacity(0.6) : Color.white.opacity(0.15))
+            .background(.ultraThinMaterial)
             .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isSelected ? Color.red.opacity(0.25) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(isSelected ? Color.red : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }
@@ -1439,10 +1492,14 @@ struct SOSTypeCard: View {
             .padding(.vertical, 24)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.3) : Color.yellow.opacity(0.3)) : Color.white.opacity(0.1))
+                    .fill(.ultraThinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : Color.clear, lineWidth: 2)
+                            .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
                     )
             )
         }
@@ -1468,8 +1525,16 @@ struct SupplyCheckbox: View {
                 Spacer()
             }
             .padding(12)
-            .background(isSelected ? Color.green.opacity(0.2) : Color.white.opacity(0.1))
+            .background(.ultraThinMaterial)
             .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.green.opacity(0.2) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.green : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }
@@ -1493,8 +1558,16 @@ struct SituationRadio: View {
                 Spacer()
             }
             .padding(12)
-            .background(isSelected ? Color.red.opacity(0.2) : Color.white.opacity(0.1))
+            .background(.ultraThinMaterial)
             .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.red.opacity(0.2) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.red : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }
@@ -1511,11 +1584,15 @@ struct InjuredOptionButton: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(isSelected ? Color.red.opacity(0.5) : Color.white.opacity(0.1))
+                .background(.ultraThinMaterial)
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(isSelected ? Color.red : Color.clear, lineWidth: 2)
+                        .fill(isSelected ? Color.red.opacity(0.25) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? Color.red : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
                 )
         }
     }
@@ -1542,8 +1619,16 @@ struct MedicalIssueCheckbox: View {
                 Spacer()
             }
             .padding(10)
-            .background(isSelected ? Color.red.opacity(0.2) : Color.white.opacity(0.1))
+            .background(.ultraThinMaterial)
             .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.red.opacity(0.2) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.red : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
         }
     }
 }

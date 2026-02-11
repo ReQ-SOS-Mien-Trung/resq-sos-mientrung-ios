@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 struct SOSWizardView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
