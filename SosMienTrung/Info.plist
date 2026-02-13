@@ -73,5 +73,10 @@
 	<string>SosMienTrung cần truy cập vị trí để gửi tọa độ cứu hộ cho người xung quanh.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

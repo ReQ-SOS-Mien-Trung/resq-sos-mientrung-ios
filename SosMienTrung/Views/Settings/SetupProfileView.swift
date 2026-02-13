@@ -10,8 +10,13 @@ import MultipeerConnectivity
 
 struct SetupProfileView: View {
     @ObservedObject var userProfile = UserProfile.shared
+    @ObservedObject var appearanceManager = AppearanceManager.shared
     @State private var name = ""
     @State private var phoneNumber = ""
+    @State private var password = ""
+    @State private var showPassword = false
+    @State private var authMode: AuthMode = .register
+    @State private var isLoading = false
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showIdentityHandover = false
@@ -19,7 +24,14 @@ struct SetupProfileView: View {
     @FocusState private var focusedField: Field?
     
     enum Field {
-        case name, phone
+        case name, phone, password
+    }
+
+    enum AuthMode: String, CaseIterable, Identifiable {
+        case register = "Đăng ký"
+        case login = "Đăng nhập"
+
+        var id: String { rawValue }
     }
     
     var body: some View {
@@ -27,147 +39,185 @@ struct SetupProfileView: View {
             // Background pattern
             TelegramBackground()
             
-            VStack(spacing: 30) {
-                Spacer()
-                
-                // Main container with glass morphism background
-                VStack(spacing: 20) {
-                    // Header
-                    VStack(spacing: 12) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 80))
-                            .foregroundColor(.blue)
-                        
-                        Text("Thiết Lập Thông Tin")
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        Text("Để người khác có thể nhận diện bạn trong mạng")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .frame(maxWidth: .infinity)
+            ScrollView {
+                VStack(spacing: 24) {
                     
-                    // Form
+                    // Main container with glass morphism background
                     VStack(spacing: 20) {
-                        // Name field
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Tên của bạn")
-                                .font(.headline)
-                                .foregroundColor(.white.opacity(0.9))
+                        // Header
+                        VStack(spacing: 12) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.blue)
                             
-                            HStack {
-                                Image(systemName: "person.fill")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 20)
-                                
-                                TextField("Nhập tên...", text: $name)
-                                    .textContentType(.name)
-                                    .autocapitalization(.words)
-                                    .foregroundColor(.white)
-                                    .focused($focusedField, equals: .name)
+                            Text("Thiết Lập Thông Tin")
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(appearanceManager.textColor)
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        // Auth mode selector
+                        Picker("", selection: $authMode) {
+                            ForEach(AuthMode.allCases) { mode in
+                                Text(mode.rawValue).tag(mode)
                             }
-                            .padding()
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(12)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 4)
+                        
+                        // Form
+                        VStack(spacing: 20) {
+                            // Phone field
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Số điện thoại")
+                                    .font(.headline)
+                                    .foregroundColor(appearanceManager.secondaryTextColor)
+                                
+                                HStack {
+                                    Image(systemName: "phone.fill")
+                                        .foregroundColor(.green)
+                                        .frame(width: 20)
+                                    
+                                    TextField("Nhập số điện thoại...", text: $phoneNumber)
+                                        .textContentType(.telephoneNumber)
+                                        .keyboardType(.phonePad)
+                                        .foregroundColor(appearanceManager.textColor)
+                                        .focused($focusedField, equals: .phone)
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .cornerRadius(12)
+                            }
+
+                            // Password field (PIN 6 digits)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Mã PIN (6 chữ số)")
+                                    .font(.headline)
+                                    .foregroundColor(appearanceManager.secondaryTextColor)
+
+                                HStack {
+                                    Image(systemName: "lock.fill")
+                                        .foregroundColor(.purple)
+                                        .frame(width: 20)
+
+                                    Group {
+                                        if showPassword {
+                                            TextField("Nhập 6 chữ số...", text: $password)
+                                        } else {
+                                            SecureField("Nhập 6 chữ số...", text: $password)
+                                        }
+                                    }
+                                    .keyboardType(.numberPad)
+                                    .textContentType(.oneTimeCode)
+                                    .foregroundColor(appearanceManager.textColor)
+                                    .focused($focusedField, equals: .password)
+                                    .onChange(of: password) { _, newValue in
+                                        // Only allow digits and max 6 characters
+                                        let filtered = newValue.filter { $0.isNumber }
+                                        if filtered.count > 6 {
+                                            password = String(filtered.prefix(6))
+                                        } else if filtered != newValue {
+                                            password = filtered
+                                        }
+                                    }
+
+                                    Button {
+                                        showPassword.toggle()
+                                    } label: {
+                                        Image(systemName: showPassword ? "eye.slash" : "eye")
+                                            .foregroundColor(appearanceManager.secondaryTextColor)
+                                    }
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .cornerRadius(12)
+                            }
                         }
                         
-                        // Phone field
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Số điện thoại")
-                                .font(.headline)
-                                .foregroundColor(.white.opacity(0.9))
-                            
-                            HStack {
-                                Image(systemName: "phone.fill")
-                                    .foregroundColor(.green)
-                                    .frame(width: 20)
-                                
-                                TextField("Nhập số điện thoại...", text: $phoneNumber)
-                                    .textContentType(.telephoneNumber)
-                                    .keyboardType(.phonePad)
-                                    .foregroundColor(.white)
-                                    .focused($focusedField, equals: .phone)
+                        // Save button - Đăng ký / Đăng nhập (inside card)
+                        Button {
+                            submit()
+                        } label: {
+                            HStack(spacing: 8) {
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                                Text(authMode == .register ? "Tạo Tài Khoản Mới" : "Đăng Nhập")
+                                    .font(.headline)
                             }
-                            .padding()
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(12)
-                        }
-                    }
-                }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.black.opacity(0.3))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
-                )
-                .padding(.horizontal, 16)
-                
-                Spacer()
-                
-                // Buttons
-                VStack(spacing: 12) {
-                    // Save button - Tạo tài khoản mới
-                    Button {
-                        saveProfile()
-                    } label: {
-                        Text("Tạo Tài Khoản Mới")
-                            .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(
-                                isFormValid ? Color.blue : Color.gray
+                                isFormValid && !isLoading ? Color.blue : Color.gray
                             )
                             .cornerRadius(12)
-                    }
-                    .disabled(!isFormValid)
-                    
-                    // Divider
-                    HStack {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.3))
-                            .frame(height: 1)
-                        
-                        Text("hoặc")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                            .padding(.horizontal, 8)
-                        
-                        Rectangle()
-                            .fill(Color.white.opacity(0.3))
-                            .frame(height: 1)
-                    }
-                    
-                    // Import from old device button
-                    Button {
-                        showIdentityHandover = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text("Nhập từ thiết bị cũ")
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.orange)
-                        .cornerRadius(12)
+                        .disabled(!isFormValid || isLoading)
                     }
+                    .padding(24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(.ultraThinMaterial)
+                            .allowsHitTesting(false)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                            .allowsHitTesting(false)
+                    )
+                    .padding(.horizontal, 16)
                     
-                    // Help text
-                    Text("Nếu bạn đã có tài khoản trên thiết bị khác, hãy chuyển tài khoản qua P2P hoặc quét mã QR")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    // Additional buttons (outside card)
+                    if authMode == .register {
+                        VStack(spacing: 12) {
+                            // Divider
+                            HStack {
+                                Rectangle()
+                                    .fill(appearanceManager.tertiaryTextColor)
+                                    .frame(height: 1)
+                                
+                                Text("hoặc")
+                                    .font(.caption)
+                                    .foregroundColor(appearanceManager.tertiaryTextColor)
+                                    .padding(.horizontal, 8)
+                                
+                                Rectangle()
+                                    .fill(appearanceManager.tertiaryTextColor)
+                                    .frame(height: 1)
+                            }
+                            
+                            // Import from old device button
+                            Button {
+                                showIdentityHandover = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.down.circle.fill")
+                                    Text("Nhập từ thiết bị cũ")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.orange)
+                                .cornerRadius(12)
+                            }
+
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 0)
+                    }
                 }
-                .padding(.horizontal, 24)
+                .padding(.top, 16)
                 .padding(.bottom, 40)
             }
         }
@@ -179,35 +229,85 @@ struct SetupProfileView: View {
         .fullScreenCover(isPresented: $showIdentityHandover) {
             SetupIdentityHandoverView(isSetupComplete: $isSetupComplete)
         }
-        .onTapGesture {
-            focusedField = nil
-        }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                focusedField = nil
+            }
+        )
     }
     
     private var isFormValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty &&
-        phoneNumber.count >= 9
-    }
-    
-    private func saveProfile() {
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
-        
-        guard !trimmedName.isEmpty else {
-            errorMessage = "Vui lòng nhập tên"
-            showError = true
-            return
-        }
-        
+        let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
+
+        // Phone >= 9 digits, PIN must be exactly 6 digits
+        return !trimmedPhone.isEmpty && trimmedPhone.count >= 9 && trimmedPassword.count == 6
+    }
+
+    private func submit() {
+        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
+        let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
+
         guard trimmedPhone.count >= 9 else {
             errorMessage = "Số điện thoại không hợp lệ"
             showError = true
             return
         }
-        
-        userProfile.saveUser(name: trimmedName, phoneNumber: trimmedPhone)
-        isSetupComplete = true
+
+        guard trimmedPassword.count == 6 else {
+            errorMessage = "Mã PIN phải đúng 6 chữ số"
+            showError = true
+            return
+        }
+
+        if authMode == .register {
+            isLoading = true
+            AuthService.shared.register(phone: trimmedPhone, password: trimmedPassword) { result in
+                isLoading = false
+                switch result {
+                case .success:
+                    // Save with phone as display name for now (can update profile later)
+                    userProfile.saveUser(name: trimmedPhone, phoneNumber: trimmedPhone)
+                    isSetupComplete = true
+                case .failure(let error):
+                    handleError(error)
+                }
+            }
+        } else {
+            isLoading = true
+            AuthService.shared.login(phone: trimmedPhone, password: trimmedPassword) { result in
+                isLoading = false
+                switch result {
+                case .success(let response):
+                    AuthSessionStore.shared.save(from: response)
+                    let displayName = response.fullName ?? response.username ?? trimmedPhone
+                    userProfile.saveUser(name: displayName, phoneNumber: trimmedPhone)
+                    isSetupComplete = true
+                case .failure(let error):
+                    handleError(error)
+                }
+            }
+        }
+    }
+
+    private func handleError(_ error: Error) {
+        if let authError = error as? AuthService.AuthServiceError {
+            switch authError {
+            case .invalidURL:
+                errorMessage = "URL không hợp lệ"
+            case .requestFailed(let err):
+                errorMessage = err.localizedDescription
+            case .httpStatus(let code):
+                errorMessage = "Máy chủ trả về lỗi (HTTP \(code))"
+            case .missingData:
+                errorMessage = "Không nhận được dữ liệu từ máy chủ"
+            case .decodingFailed:
+                errorMessage = "Không thể đọc dữ liệu phản hồi"
+            }
+        } else {
+            errorMessage = error.localizedDescription
+        }
+        showError = true
     }
 }
 
@@ -217,6 +317,7 @@ struct SetupIdentityHandoverView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var handoverManager = IdentityHandoverManager.shared
     @StateObject private var keyManager = IdentityKeyManager.shared
+    @StateObject private var appearanceManager = AppearanceManager.shared
     @Binding var isSetupComplete: Bool
     
     @State private var showQRScanner = false
@@ -229,30 +330,40 @@ struct SetupIdentityHandoverView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // Header
-                        VStack(spacing: 12) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.orange)
+                        // Main Card with ultraThinMaterial
+                        VStack(spacing: 20) {
+                            // Header
+                            VStack(spacing: 12) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.orange)
+                                
+                                Text("Nhập Tài Khoản")
+                                    .font(.title.bold())
+                                    .foregroundColor(appearanceManager.textColor)
+                                
+                                Text("Chuyển tài khoản từ thiết bị cũ sang thiết bị này")
+                                    .font(.subheadline)
+                                    .foregroundColor(appearanceManager.secondaryTextColor)
+                                    .multilineTextAlignment(.center)
+                            }
                             
-                            Text("Nhập Tài Khoản")
-                                .font(.title.bold())
-                                .foregroundColor(.white)
-                            
-                            Text("Chuyển tài khoản từ thiết bị cũ sang thiết bị này")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
+                            // Content based on state
+                            contentView
                         }
-                        .padding(.top, 20)
-                        
-                        // Content based on state
-                        contentView
+                        .padding(24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 24)
+                                .fill(.ultraThinMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                        )
                     }
                     .padding()
                 }
             }
-            .navigationTitle("Nhập tài khoản")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -260,7 +371,7 @@ struct SetupIdentityHandoverView: View {
                         handoverManager.stopHandover()
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(appearanceManager.textColor)
                 }
             }
         }
@@ -347,22 +458,22 @@ struct SetupIdentityHandoverView: View {
                 VStack(spacing: 16) {
                     ProgressView()
                         .scaleEffect(1.5)
-                        .tint(.white)
+                        .tint(appearanceManager.textColor)
                     
                     Text("Đang tìm thiết bị cũ...")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(appearanceManager.textColor)
                     
                     Text("Đảm bảo thiết bị cũ đang ở chế độ 'Chuyển tài khoản'")
                         .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(appearanceManager.secondaryTextColor)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.vertical, 40)
             } else {
                 Text("Chọn thiết bị")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(appearanceManager.textColor)
                 
                 ForEach(handoverManager.discoveredPeers, id: \.displayName) { peer in
                     Button {
@@ -376,20 +487,20 @@ struct SetupIdentityHandoverView: View {
                             VStack(alignment: .leading) {
                                 Text(peer.displayName)
                                     .font(.headline)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(appearanceManager.textColor)
                                 
                                 Text("Nhấn để kết nối")
                                     .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(appearanceManager.secondaryTextColor)
                             }
                             
                             Spacer()
                             
                             Image(systemName: "chevron.right")
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(appearanceManager.tertiaryTextColor)
                         }
                         .padding()
-                        .background(Color.white.opacity(0.1))
+                        .background(.ultraThinMaterial)
                         .cornerRadius(12)
                     }
                 }
@@ -404,11 +515,11 @@ struct SetupIdentityHandoverView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
-                .tint(.white)
+                .tint(appearanceManager.textColor)
             
             Text("Đang kết nối...")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
         }
         .padding(.vertical, 40)
     }
@@ -422,11 +533,11 @@ struct SetupIdentityHandoverView: View {
             
             Text("Đang chờ xác nhận")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text("Vui lòng xác nhận yêu cầu trên thiết bị cũ")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(appearanceManager.secondaryTextColor)
                 .multilineTextAlignment(.center)
             
             cancelButton
@@ -443,11 +554,11 @@ struct SetupIdentityHandoverView: View {
             
             Text(handoverManager.statusMessage)
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text("Vui lòng không tắt ứng dụng")
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(appearanceManager.secondaryTextColor)
         }
         .padding(.vertical, 40)
     }
@@ -461,11 +572,11 @@ struct SetupIdentityHandoverView: View {
             
             Text("Thành công!")
                 .font(.title2.bold())
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text("Tài khoản đã được nhập thành công")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(appearanceManager.secondaryTextColor)
         }
         .padding(.vertical, 40)
     }
@@ -479,11 +590,11 @@ struct SetupIdentityHandoverView: View {
             
             Text("Không thành công")
                 .font(.title2.bold())
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
             
             Text(error.localizedDescription)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(appearanceManager.secondaryTextColor)
                 .multilineTextAlignment(.center)
             
             Button {
@@ -513,7 +624,7 @@ struct SetupIdentityHandoverView: View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(iconColor.opacity(0.2))
+                        .fill(iconColor.opacity(0.15))
                         .frame(width: 50, height: 50)
                     
                     Image(systemName: icon)
@@ -524,22 +635,23 @@ struct SetupIdentityHandoverView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     
                     Text(description)
                         .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.leading)
                 }
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(.secondary)
             }
             .padding()
-            .background(Color.white.opacity(0.1))
+            .background(Color(.systemBackground))
             .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
         }
     }
     
@@ -550,7 +662,7 @@ struct SetupIdentityHandoverView: View {
                     .foregroundColor(.blue)
                 Text("Hướng dẫn")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -561,7 +673,7 @@ struct SetupIdentityHandoverView: View {
             }
         }
         .padding()
-        .background(Color.blue.opacity(0.1))
+        .background(Color.blue.opacity(0.08))
         .cornerRadius(16)
     }
     
@@ -571,12 +683,12 @@ struct SetupIdentityHandoverView: View {
                 .font(.caption.bold())
                 .foregroundColor(.blue)
                 .frame(width: 20, height: 20)
-                .background(Color.blue.opacity(0.2))
+                .background(Color.blue.opacity(0.15))
                 .cornerRadius(10)
             
             Text(text)
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.secondary)
         }
     }
     
@@ -586,10 +698,14 @@ struct SetupIdentityHandoverView: View {
         } label: {
             Text("Huỷ")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(appearanceManager.textColor)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.gray.opacity(0.3))
+                .background(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
                 .cornerRadius(12)
         }
     }

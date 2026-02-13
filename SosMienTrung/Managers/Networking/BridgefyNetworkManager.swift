@@ -32,7 +32,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         #if targetEnvironment(simulator)
         print("ℹ️ Bridgefy is not supported on the Simulator. Skipping start().")
         return
-        #endif
+        #else
         
         // Check if identity was transferred - don't start if so
         if IdentityStore.shared.isTransferred {
@@ -68,6 +68,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         } catch {
             print("❌ Bridgefy init/start failed: \(error.localizedDescription)")
         }
+        #endif
     }
     
     /// Stop Bridgefy (used when identity is transferred)
