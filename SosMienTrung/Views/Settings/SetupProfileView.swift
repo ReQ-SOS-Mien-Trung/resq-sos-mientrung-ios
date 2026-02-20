@@ -19,6 +19,8 @@ struct SetupProfileView: View {
     @State private var isLoading = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showSuccess = false
+    @State private var successMessage = ""
     @State private var showIdentityHandover = false
     @Binding var isSetupComplete: Bool
     @FocusState private var focusedField: Field?
@@ -226,6 +228,13 @@ struct SetupProfileView: View {
         } message: {
             Text(errorMessage)
         }
+        .alert("Thành công", isPresented: $showSuccess) {
+            Button("Đăng nhập ngay", role: .cancel) {
+                authMode = .login
+            }
+        } message: {
+            Text(successMessage)
+        }
         .fullScreenCover(isPresented: $showIdentityHandover) {
             SetupIdentityHandoverView(isSetupComplete: $isSetupComplete)
         }
@@ -266,9 +275,9 @@ struct SetupProfileView: View {
                 isLoading = false
                 switch result {
                 case .success:
-                    // Save with phone as display name for now (can update profile later)
-                    userProfile.saveUser(name: trimmedPhone, phoneNumber: trimmedPhone)
-                    isSetupComplete = true
+                    // Registration successful - prompt user to login
+                    successMessage = "Đăng ký thành công! Vui lòng đăng nhập để tiếp tục."
+                    showSuccess = true
                 case .failure(let error):
                     handleError(error)
                 }
@@ -292,18 +301,7 @@ struct SetupProfileView: View {
 
     private func handleError(_ error: Error) {
         if let authError = error as? AuthService.AuthServiceError {
-            switch authError {
-            case .invalidURL:
-                errorMessage = "URL không hợp lệ"
-            case .requestFailed(let err):
-                errorMessage = err.localizedDescription
-            case .httpStatus(let code):
-                errorMessage = "Máy chủ trả về lỗi (HTTP \(code))"
-            case .missingData:
-                errorMessage = "Không nhận được dữ liệu từ máy chủ"
-            case .decodingFailed:
-                errorMessage = "Không thể đọc dữ liệu phản hồi"
-            }
+            errorMessage = authError.localizedDescription
         } else {
             errorMessage = error.localizedDescription
         }

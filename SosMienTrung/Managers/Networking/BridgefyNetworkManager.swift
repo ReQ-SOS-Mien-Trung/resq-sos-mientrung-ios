@@ -370,51 +370,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     
     /// Upload enhanced SOS packet to server
     private func uploadEnhancedSOS(_ packet: SOSPacketEnhanced) async -> Bool {
-        guard networkMonitor.isConnected else {
-            print("📴 No network - cannot upload enhanced SOS directly")
-            return false
-        }
-
-        guard let url = URL(string: "https://690cc857a6d92d83e84f5f9e.mockapi.io/api/ResQ/SOS") else {
-            print("❌ Invalid server URL")
-            return false
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(packet)
-
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print("📤 Uploading Enhanced SOS to server:")
-                print(jsonString)
-            }
-
-            request.httpBody = jsonData
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
-                    print("✅ Enhanced SOS uploaded successfully to server")
-                    if let responseString = String(data: data, encoding: .utf8) {
-                        print("📥 Server response: \(responseString)")
-                    }
-                    return true
-                } else {
-                    print("❌ Server returned status: \(httpResponse.statusCode)")
-                    return false
-                }
-            }
-        } catch {
-            print("❌ Failed to upload enhanced SOS: \(error.localizedDescription)")
-        }
-
-        return false
+        // Convert to unified SOSPacket and upload
+        let unifiedPacket = packet.toBasicPacket()
+        return await APIService.shared.uploadSOS(packet: unifiedPacket)
     }
 
     /// Broadcast SOS packet qua mesh network

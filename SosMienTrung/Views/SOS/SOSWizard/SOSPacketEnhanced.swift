@@ -211,13 +211,53 @@ struct SOSPacketEnhanced: Codable {
     
     /// Convert to basic SOSPacket for mesh relay compatibility
     func toBasicPacket() -> SOSPacket {
+        // Convert StructuredData to SOSStructuredData
+        let sosStructuredData: SOSStructuredData?
+        if let sd = structuredData {
+            sosStructuredData = SOSStructuredData(
+                situation: sd.situation,
+                otherSituationDescription: sd.otherSituationDescription,
+                hasInjured: sd.hasInjured,
+                medicalIssues: sd.medicalIssues,
+                otherMedicalDescription: sd.otherMedicalDescription,
+                othersAreStable: sd.othersAreStable,
+                canMove: nil,
+                needMedical: sd.hasInjured,
+                supplies: sd.supplies,
+                otherSupplyDescription: sd.otherSupplyDescription,
+                peopleCount: sd.peopleCount.map { SOSPeopleCount(adult: $0.adults, child: $0.children, elderly: $0.elderly) },
+                additionalDescription: sd.additionalDescription
+            )
+        } else {
+            sosStructuredData = nil
+        }
+        
+        // Convert SenderInfo to SOSSenderInfo
+        let sosSenderInfo: SOSSenderInfo?
+        if let si = senderInfo {
+            sosSenderInfo = SOSSenderInfo(
+                deviceId: nil,
+                userId: nil,
+                userName: si.userName,
+                userPhone: si.userPhone,
+                batteryLevel: si.batteryLevel,
+                isOnline: si.isOnline
+            )
+        } else {
+            sosSenderInfo = nil
+        }
+        
         return SOSPacket(
             packetId: packetId,
             originId: originId,
             timestamp: Date(timeIntervalSince1970: TimeInterval(ts)),
             latitude: parseLatitude(),
             longitude: parseLongitude(),
+            accuracy: senderInfo?.gpsAccuracy,
+            sosType: sosType ?? "UNKNOWN",
             message: msg,
+            structuredData: sosStructuredData,
+            senderInfo: sosSenderInfo,
             hopCount: hopCount,
             path: path
         )

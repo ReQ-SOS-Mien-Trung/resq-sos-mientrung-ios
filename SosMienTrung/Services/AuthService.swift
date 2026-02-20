@@ -11,12 +11,15 @@ struct RegisterResponse: Codable {
     let phone: String?
     let roleId: Int
     let createdAt: Date
+}
 
-    enum CodingKeys: String, CodingKey {
-        case userId = "UserId"
-        case phone = "Phone"
-        case roleId = "RoleId"
-        case createdAt = "CreatedAt"
+/// Error response from server
+struct APIErrorResponse: Codable, Sendable {
+    let message: String
+    
+    /// Safe decoding that can be called from any context
+    static func decode(from data: Data) -> APIErrorResponse? {
+        try? JSONDecoder().decode(APIErrorResponse.self, from: data)
     }
 }
 
@@ -35,17 +38,6 @@ struct LoginResponse: Codable {
     let username: String?
     let fullName: String?
     let roleId: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "AccessToken"
-        case refreshToken = "RefreshToken"
-        case expiresIn = "ExpiresIn"
-        case tokenType = "TokenType"
-        case userId = "UserId"
-        case username = "Username"
-        case fullName = "FullName"
-        case roleId = "RoleId"
-    }
 }
 
 // MARK: - Auth Service
@@ -61,12 +53,27 @@ final class AuthService {
         self.session = session
     }
 
-    enum AuthServiceError: Error {
+    enum AuthServiceError: Error, LocalizedError {
         case invalidURL
         case requestFailed(Error)
-        case httpStatus(Int)
+        case httpStatus(Int, String?)
         case missingData
         case decodingFailed(Error)
+        
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "URL không hợp lệ"
+            case .requestFailed(let error):
+                return error.localizedDescription
+            case .httpStatus(let code, let message):
+                return message ?? "Máy chủ trả về lỗi (HTTP \(code))"
+            case .missingData:
+                return "Không nhận được dữ liệu từ máy chủ"
+            case .decodingFailed(let error):
+                return "Không thể đọc dữ liệu: \(error.localizedDescription)"
+            }
+        }
     }
 
     func register(phone: String?, password: String?, completion: @escaping (Result<RegisterResponse, Error>) -> Void) {
@@ -107,8 +114,13 @@ final class AuthService {
             }
 
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            guard statusCode == 200 else {
-                DispatchQueue.main.async { completion(.failure(AuthServiceError.httpStatus(statusCode))) }
+            guard (200...299).contains(statusCode) else {
+                // Try to parse error message from response
+                var errorMessage: String? = nil
+                if let data = data, !data.isEmpty {
+                    errorMessage = APIErrorResponse.decode(from: data)?.message
+                }
+                DispatchQueue.main.async { completion(.failure(AuthServiceError.httpStatus(statusCode, errorMessage))) }
                 return
             }
 

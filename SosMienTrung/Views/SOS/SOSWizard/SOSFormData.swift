@@ -760,3 +760,93 @@ struct SOSStructuredPayload: Codable {
         case autoInfo = "auto_info"
     }
 }
+
+// MARK: - SOSFormData Extension for SOSPacket conversion
+
+extension SOSFormData {
+    /// Convert to unified SOSPacket for server upload
+    func toSOSPacket() -> SOSPacket {
+        let latitude = autoInfo?.latitude ?? 0
+        let longitude = autoInfo?.longitude ?? 0
+        let accuracy = autoInfo?.accuracy
+        
+        // Determine SOS type string
+        let sosTypeString: String
+        if needsBothSteps {
+            sosTypeString = "BOTH"
+        } else if needsRescueStep {
+            sosTypeString = "RESCUE"
+        } else if needsReliefStep {
+            sosTypeString = "RELIEF"
+        } else {
+            sosTypeString = "UNKNOWN"
+        }
+        
+        // Build unified structured data
+        let structuredData = SOSStructuredData(
+            // Rescue fields
+            situation: needsRescueStep ? rescueData.situation?.rawValue : nil,
+            otherSituationDescription: needsRescueStep && !rescueData.otherSituationDescription.isEmpty 
+                ? rescueData.otherSituationDescription 
+                : nil,
+            hasInjured: needsRescueStep ? rescueData.hasInjured : nil,
+            medicalIssues: needsRescueStep && !rescueData.medicalIssues.isEmpty 
+                ? rescueData.medicalIssues.map { $0.rawValue } 
+                : nil,
+            otherMedicalDescription: needsRescueStep && !rescueData.otherMedicalDescription.isEmpty 
+                ? rescueData.otherMedicalDescription 
+                : nil,
+            othersAreStable: needsRescueStep ? rescueData.othersAreStable : nil,
+            canMove: needsRescueStep ? (rescueData.situation != .cannotMove) : nil,
+            needMedical: needsRescueStep ? rescueData.hasInjured : nil,
+            
+            // Relief fields
+            supplies: needsReliefStep && !reliefData.supplies.isEmpty 
+                ? reliefData.supplies.map { $0.rawValue } 
+                : nil,
+            otherSupplyDescription: needsReliefStep && !reliefData.otherSupplyDescription.isEmpty 
+                ? reliefData.otherSupplyDescription 
+                : nil,
+            
+            // Common fields
+            peopleCount: SOSPeopleCount(
+                adult: sharedPeopleCount.adults,
+                child: sharedPeopleCount.children,
+                elderly: sharedPeopleCount.elderly
+            ),
+            additionalDescription: additionalDescription.isEmpty ? nil : additionalDescription
+        )
+        
+        // Build sender info from auto collected data
+        let senderInfo: SOSSenderInfo?
+        if let info = autoInfo {
+            senderInfo = SOSSenderInfo(
+                deviceId: info.deviceId,
+                userId: info.userId,
+                userName: info.userName,
+                userPhone: info.userPhone,
+                batteryLevel: info.batteryLevel,
+                isOnline: info.isOnline
+            )
+        } else {
+            senderInfo = nil
+        }
+        
+        // Use deviceId as originId for mesh routing
+        let originId = autoInfo?.deviceId ?? UUID().uuidString
+        
+        return SOSPacket(
+            originId: originId,
+            timestamp: Date(),
+            latitude: latitude,
+            longitude: longitude,
+            accuracy: accuracy,
+            sosType: sosTypeString,
+            message: toSOSMessage(),
+            structuredData: structuredData,
+            senderInfo: senderInfo,
+            hopCount: 0,
+            path: []
+        )
+    }
+}

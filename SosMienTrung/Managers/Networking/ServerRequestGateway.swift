@@ -181,42 +181,9 @@ final class ServerRequestGateway {
     }
 
     private func uploadEnhancedSOS(_ packet: SOSPacketEnhanced) async -> Bool {
-        guard networkMonitor.isConnected else {
-            print("📴 No network - cannot upload enhanced SOS directly")
-            return false
-        }
-
-        guard let url = URL(string: "https://690cc857a6d92d83e84f5f9e.mockapi.io/api/ResQ/SOS") else {
-            print("❌ Invalid server URL")
-            return false
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(packet)
-            request.httpBody = jsonData
-
-            let (_, response) = try await URLSession.shared.data(for: request)
-
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
-                    print("✅ Enhanced SOS uploaded successfully to server")
-                    return true
-                } else {
-                    print("❌ Server returned status: \(httpResponse.statusCode)")
-                    return false
-                }
-            }
-        } catch {
-            print("❌ Failed to upload enhanced SOS: \(error.localizedDescription)")
-        }
-
-        return false
+        // Convert to unified SOSPacket and upload
+        let unifiedPacket = packet.toBasicPacket()
+        return await APIService.shared.uploadSOS(packet: unifiedPacket)
     }
 
     private func relayIfNeeded(_ envelope: ServerRequestEnvelope, excluding transport: TransportSource?) {
