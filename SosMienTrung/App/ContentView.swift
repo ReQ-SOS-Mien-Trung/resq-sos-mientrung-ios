@@ -13,6 +13,7 @@ struct ContentView: View {
     @StateObject private var multipeerSession: MultipeerSession
     @StateObject private var bridgefyManager = BridgefyNetworkManager.shared
     @StateObject private var userProfile = UserProfile.shared
+    @StateObject private var authSession = AuthSessionStore.shared
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
     
@@ -22,62 +23,64 @@ struct ContentView: View {
         _multipeerSession = StateObject(wrappedValue: MultipeerSession(nearbyManager: manager))
     }
     
-    var body: some View {
-        Group {
-            if !userProfile.isSetupComplete {
-                SetupProfileView(isSetupComplete: $isSetupComplete)
-            } else {
-                MainTabView(
-                    nearbyManager: nearbyManager,
-                    multipeerSession: multipeerSession,
-                    bridgefyManager: bridgefyManager,
-                    selectedPeer: $selectedPeer
-                )
-            }
-        }
-        .onTapGesture {
-            hideKeyboard()
-        }
-        .onAppear {
-            // Check if setup is complete
-            isSetupComplete = userProfile.isSetupComplete
-            
-            // Khởi động Bridgefy khi app mở
-            if userProfile.isSetupComplete {
-                bridgefyManager.start()
-                ServerRequestGateway.shared.start()
-            }
-        }
-        .onChange(of: userProfile.currentUser) { _, newUser in
-            // When user is cleared (after handover), show setup screen
-            if newUser == nil {
-                isSetupComplete = false
-            }
-        }
-        .onChange(of: isSetupComplete) { _, newValue in
-            if newValue {
-                // Start Bridgefy after setup complete
-                bridgefyManager.start()
-                ServerRequestGateway.shared.start()
-            }
-        }
-        .onChange(of: multipeerSession.connectedPeers) { _, peers in
-            if peers.count == 1, selectedPeer == nil {
-                selectedPeer = peers.first
-                nearbyManager.setActivePeer(peers.first)
-            } 
-            // Commented out to prevent UWB disconnection when Multipeer drops.
-            // UWB operates independently once tokens are exchanged and often has better range/stability.
-            /*
-            else if let selected = selectedPeer, !peers.contains(selected) {
-                selectedPeer = nil
-                nearbyManager.setActivePeer(nil)
-            }
-            */
+    /// Cho vào app khi có user profile VÀ có session hợp lệ
+    private var isFullyAuthenticated: Bool {
+        userProfile.isSetupComplete && authSession.isValid
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        if isFullyAuthenticated {
+            MainTabView(
+                nearbyManager: nearbyManager,
+                multipeerSession: multipeerSession,
+                bridgefyManager: bridgefyManager,
+                selectedPeer: $selectedPeer
+            )
+        } else {
+            SetupProfileView(isSetupComplete: $isSetupComplete)
         }
     }
-}
 
-#Preview {
-    ContentView()
+    @ViewBuilder
+    private var configuredView: some View {
+        rootView
+            .onTapGesture {
+                hideKeyboard()
+            }
+            .onAppear {
+                isSetupComplete = isFullyAuthenticated
+                if isFullyAuthenticated {
+                    bridgefyManager.start()
+                    ServerRequestGateway.shared.start()
+                }
+            }
+            .onChange(of: userProfile.currentUser) { _, newUser in
+                if newUser == nil {
+                    isSetupComplete = false
+                }
+            }
+            .onChange(of: authSession.session) { _, newSession in
+                // Session bị xóa (logout hoặc hết hạn) → về màn hình đăng nhập
+                if newSession == nil {
+                    isSetupComplete = false
+                }
+            }
+    }
+
+    var body: some View {
+        configuredView
+            .onChange(of: isSetupComplete) { _, newValue in
+                if newValue {
+                    bridgefyManager.start()
+                    ServerRequestGateway.shared.start()
+                }
+            }
+            .onChange(of: multipeerSession.connectedPeers) { _, peers in
+                if peers.count == 1, selectedPeer == nil {
+                    selectedPeer = peers.first
+                    nearbyManager.setActivePeer(peers.first)
+                }
+            }
+    }
 }
