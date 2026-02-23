@@ -445,7 +445,7 @@ struct SOSDetailView: View {
         let formData = savedSOS.toFormData()
         
         Task {
-            await bridgefyManager.sendStructuredSOS(formData)
+            _ = await bridgefyManager.sendStructuredSOS(formData)
             await MainActor.run {
                 isSending = false
                 dismiss()
@@ -529,7 +529,7 @@ struct SOSEditView: View {
         
         Task {
             // Send as new SOS
-            await bridgefyManager.sendStructuredSOS(formData)
+            _ = await bridgefyManager.sendStructuredSOS(formData)
             
             // Update stored SOS
             var updated = savedSOS

@@ -16,6 +16,7 @@ struct SOSWizardView: View {
     @State private var formData = SOSFormData()
     @State private var isSending = false
     @State private var showSuccess = false
+    @State private var sentToServer = false
     
     var body: some View {
         NavigationStack {
@@ -67,7 +68,7 @@ struct SOSWizardView: View {
                     .foregroundColor(.white)
                 }
             }
-            .alert("Đã gửi SOS!", isPresented: $showSuccess) {
+            .alert(sentToServer ? "✅ Đã gửi lên Server" : "📡 Đã gửi qua Mesh Network", isPresented: $showSuccess) {
                 Button("OK") {
                     dismiss()
                 }
@@ -151,10 +152,10 @@ struct SOSWizardView: View {
     // MARK: - Helpers
     
     private var successMessage: String {
-        if networkMonitor.isConnected {
-            return "Tin hiệu SOS đã được gửi trực tiếp lên server và broadcast đến các thiết bị gần đó."
+        if sentToServer {
+            return "✅ Tin hiệu SOS đã được gửi trực tiếp lên server thành công."
         } else {
-            return "Tin hiệu SOS đã được gửi qua mạng Mesh. Khi có thiết bị có kết nối mạng nhận được, họ sẽ relay lên server giúp bạn."
+            return "📡 Không có kết nối mạng. SOS đã được broadcast qua Mesh Network – khi có thiết bị liên mạng nhận được sẽ relay lên server giúp bạn."
         }
     }
     
@@ -211,18 +212,22 @@ struct SOSWizardView: View {
         guard formData.canSendMinimalSOS else { return }
         isSending = true
         
+        print("📡 [sendSOS] isConnected=\(networkMonitor.isConnected), bridgefyRunning=\(bridgefyManager.currentUserId != nil)")
+        print("🔑 [sendSOS] authSession=\(AuthSessionStore.shared.session != nil ? "exists (valid=\(AuthSessionStore.shared.isValid))" : "NIL – will get 401!")")
+        
         Task {
-            // Use structured SOS if form has been filled
+            var serverReached = false
             if formData.sosType != nil {
-                await bridgefyManager.sendStructuredSOS(formData)
+                serverReached = await bridgefyManager.sendStructuredSOS(formData)
             } else {
-                // Fallback to simple message
                 let message = formData.toSOSMessage()
                 await bridgefyManager.sendSOSWithUpload(message)
+                serverReached = networkMonitor.isConnected
             }
             
             await MainActor.run {
                 isSending = false
+                sentToServer = serverReached
                 showSuccess = true
             }
         }

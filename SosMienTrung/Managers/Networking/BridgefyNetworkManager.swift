@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import BridgefySDK
 import CoreLocation
+import UIKit
 
 final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate {
     static let shared = BridgefyNetworkManager()
@@ -317,55 +318,69 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
     
     /// Gửi SOS với structured data từ Wizard form
-    func sendStructuredSOS(_ formData: SOSFormData) async {
-        guard let bridgefy, let sender = bridgefy.currentUserId else {
-            print("Bridgefy not started or missing userId")
-            return
-        }
-
+    /// - Returns: `true` nếu gửi thành công lên server, `false` nếu chỉ relay qua mesh
+    func sendStructuredSOS(_ formData: SOSFormData) async -> Bool {
         guard UserProfile.shared.currentUser != nil else {
-            print("User profile not set")
-            return
+            print("⚠️ [SOS] User profile not set")
+            return false
         }
 
-        guard let coords = locationManager.coordinates else {
-            print("Location not available")
-            await MainActor.run {
-                sendBroadcastMessage(formData.toSOSMessage())
-            }
-            return
-        }
+        // Dùng Bridgefy userId nếu có, fallback sang device UUID
+        let sender = bridgefy?.currentUserId?.uuidString
+            ?? UIDevice.current.identifierForVendor?.uuidString
+            ?? UUID().uuidString
+
+        // Lấy toạ độ nếu có, fallback về (0,0) để không block gửi API
+        let coords = locationManager.coordinates
+        let latitude  = coords?.latitude  ?? 0.0
+        let longitude = coords?.longitude ?? 0.0
 
         let timestamp = Date()
-        
-        // Tạo Enhanced SOS Packet với structured data
+
+        // Tạo Enhanced SOS Packet
         let enhancedPacket = SOSPacketEnhanced(
             from: formData,
-            originId: sender.uuidString,
-            latitude: coords.latitude,
-            longitude: coords.longitude
+            originId: sender,
+            latitude: latitude,
+            longitude: longitude
         )
-        
+
         // Convert to basic packet for mesh relay compatibility
         let sosPacket = enhancedPacket.toBasicPacket()
-        
-        // 📦 Lưu SOS vào storage để xem lại và chỉnh sửa
+
+        // 📦 Lưu SOS vào storage
         await MainActor.run {
             SOSStorageManager.shared.saveSOS(
                 formData,
                 packetId: sosPacket.packetId,
-                latitude: coords.latitude,
-                longitude: coords.longitude
+                latitude: latitude,
+                longitude: longitude
             )
         }
 
-        // Gửi qua ServerRequestGateway (tự upload hoặc relay)
-        ServerRequestGateway.shared.submitSOSEnhanced(enhancedPacket)
-
-        // Broadcast qua mesh network (dùng basic packet để compatibility)
-        await MainActor.run {
-            broadcastSOSPacket(sosPacket, originalMessage: formData.toSOSMessage(), timestamp: timestamp)
+        // Thử gửi thẳng lên server nếu có mạng
+        var serverReached = false
+        if NetworkMonitor.shared.isConnected {
+            print("🌐 [SOS] Network available – uploading to server...")
+            serverReached = await APIService.shared.uploadSOS(enhanced: enhancedPacket)
+            print(serverReached ? "✅ [SOS] Server upload success" : "⚠️ [SOS] Server upload failed, falling back to mesh")
+        } else {
+            print("📴 [SOS] No network – sending via mesh only")
         }
+
+        if !serverReached {
+            // Không gửi được lên server → relay qua mesh / retry gateway
+            ServerRequestGateway.shared.submitSOSEnhanced(enhancedPacket)
+        }
+
+        // Broadcast qua mesh nếu Bridgefy đang chạy
+        if bridgefy != nil {
+            await MainActor.run {
+                broadcastSOSPacket(sosPacket, originalMessage: formData.toSOSMessage(), timestamp: timestamp)
+            }
+        }
+
+        return serverReached
     }
     
     /// Upload enhanced SOS packet to server

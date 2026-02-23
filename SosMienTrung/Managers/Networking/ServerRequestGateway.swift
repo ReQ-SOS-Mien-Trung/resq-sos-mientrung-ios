@@ -181,9 +181,7 @@ final class ServerRequestGateway {
     }
 
     private func uploadEnhancedSOS(_ packet: SOSPacketEnhanced) async -> Bool {
-        // Convert to unified SOSPacket and upload
-        let unifiedPacket = packet.toBasicPacket()
-        return await APIService.shared.uploadSOS(packet: unifiedPacket)
+        return await APIService.shared.uploadSOS(enhanced: packet)
     }
 
     private func relayIfNeeded(_ envelope: ServerRequestEnvelope, excluding transport: TransportSource?) {
