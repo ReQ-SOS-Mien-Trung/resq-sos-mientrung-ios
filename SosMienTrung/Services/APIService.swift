@@ -1,78 +1,88 @@
 import Foundation
 
-// Note: SOSPacket.swift contains the unified data structures:
-// - SOSLocation
-// - SOSPeopleCount
-// - SOSStructuredData
-// - SOSNetworkMetadata
-// - SOSPacket
+// Note: SOSPacket.swift contains the unified data structures used for the API:
+// - SOSLocation, SOSPeopleCount, SOSStructuredData, SOSNetworkMetadata, SOSSenderInfo
+// - SOSPacket  →  POST /emergency/sos-requests
 
 final class APIService {
     static let shared = APIService()
 
-    // MockAPI URL (set to the value you provided)
-    private let baseURL = "https://690cc857a6d92d83e84f5f9e.mockapi.io/api/ResQ/SOS"
+    private let baseURL: String
+    private let session: URLSession
 
-    private init() {}
+    private init() {
+        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://localhost:8080"
+        #if targetEnvironment(simulator)
+        if let url = URL(string: configured),
+           let host = url.host,
+           host != "localhost" && host != "127.0.0.1" {
+            self.baseURL = configured.replacingOccurrences(of: host, with: "localhost")
+        } else {
+            self.baseURL = configured
+        }
+        #else
+        self.baseURL = configured
+        #endif
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        self.session = URLSession(configuration: config)
+    }
 
-    // MARK: - Upload SOS Packet (unified structure)
-    func uploadSOS(packet: SOSPacket, completion: @escaping (Bool) -> Void) {
-        guard let url = URL(string: baseURL) else {
-            print("[API] Invalid URL: \(baseURL)")
-            completion(false)
-            return
+    // MARK: - POST /emergency/sos-requests
+    func uploadSOS(packet: SOSPacket) async -> Bool {
+        guard let url = URL(string: "\(baseURL)/emergency/sos-requests") else {
+            print("[API] ✗ Invalid URL: \(baseURL)/emergency/sos-requests")
+            return false
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Debug token
+        let token = AuthSessionStore.shared.session?.accessToken
+        let sessionValid = AuthSessionStore.shared.isValid
+        print("[API] 🔑 session=\(AuthSessionStore.shared.session != nil ? "exists" : "NIL"), valid=\(sessionValid), token=\(token != nil ? "✅ present" : "❌ NIL")")
+
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            print("[API] ⚠️ No access token – request will be rejected with 401")
+        }
+
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(packet)
+            let jsonData = try JSONEncoder().encode(packet)
             request.httpBody = jsonData
+            print("[API] ➜ POST \(url.absoluteString)")
 
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print("[API] Uploading SOS packet:")
-                print(jsonString)
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            if (200...299).contains(statusCode) {
+                print("[API] ✅ SOS uploaded (HTTP \(statusCode))")
+                return true
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                print("[API] ✗ HTTP \(statusCode): \(body)")
+                return false
             }
-
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    print("[API] Upload failed: \(error.localizedDescription)")
-                    DispatchQueue.main.async { completion(false) }
-                    return
-                }
-
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                if (200...299).contains(statusCode) {
-                    print("[API] Upload succeeded with status \(statusCode).")
-                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                        print("[API] Server response: \(responseString)")
-                    }
-                    DispatchQueue.main.async { completion(true) }
-                } else {
-                    print("[API] Upload returned status code \(statusCode).")
-                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                        print("[API] Error response: \(responseString)")
-                    }
-                    DispatchQueue.main.async { completion(false) }
-                }
-            }
-            task.resume()
         } catch {
-            print("[API] Failed to encode SOS packet: \(error)")
-            completion(false)
+            print("[API] ✗ \(error.localizedDescription)")
+            return false
         }
     }
-    
-    // Async version
-    func uploadSOS(packet: SOSPacket) async -> Bool {
-        await withCheckedContinuation { continuation in
-            uploadSOS(packet: packet) { success in
-                continuation.resume(returning: success)
-            }
+
+    // MARK: - Convenience: upload từ SOSPacketEnhanced
+    func uploadSOS(enhanced packet: SOSPacketEnhanced) async -> Bool {
+        await uploadSOS(packet: packet.toBasicPacket())
+    }
+
+    // Completion-based version (legacy support)
+    func uploadSOS(packet: SOSPacket, completion: @escaping (Bool) -> Void) {
+        Task {
+            let result = await uploadSOS(packet: packet)
+            await MainActor.run { completion(result) }
         }
     }
 }
