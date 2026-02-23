@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-struct AuthSession: Codable {
+struct AuthSession: Codable, Equatable {
     let accessToken: String
     let refreshToken: String
     let tokenType: String

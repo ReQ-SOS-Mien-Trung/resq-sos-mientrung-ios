@@ -48,14 +48,38 @@ final class AuthService {
     private let baseURL: URL
     private let session: URLSession
 
-    private init(baseURL: URL = URL(string: "http://192.168.2.6:8080")!, session: URLSession = .shared) {
-        self.baseURL = baseURL
-        self.session = session
+    private init(session: URLSession? = nil) {
+        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://localhost:8080"
+        #if targetEnvironment(simulator)
+        // Simulator shares Mac loopback — replace any LAN/hotspot IP with localhost
+        let urlString: String
+        if let url = URL(string: configured),
+           let host = url.host,
+           host != "localhost" && host != "127.0.0.1" {
+            urlString = configured.replacingOccurrences(of: host, with: "localhost")
+        } else {
+            urlString = configured
+        }
+        #else
+        let urlString = configured
+        #endif
+        self.baseURL = URL(string: urlString)!
+        print("[AuthService] baseURL = \(urlString)")
+        
+        if let session = session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 15   // 15s cho mỗi request
+            config.timeoutIntervalForResource = 30  // 30s tổng
+            self.session = URLSession(configuration: config)
+        }
     }
 
     enum AuthServiceError: Error, LocalizedError {
         case invalidURL
         case requestFailed(Error)
+        case timeout
         case httpStatus(Int, String?)
         case missingData
         case decodingFailed(Error)
@@ -64,6 +88,8 @@ final class AuthService {
             switch self {
             case .invalidURL:
                 return "URL không hợp lệ"
+            case .timeout:
+                return "Hết thời gian chờ – kiểm tra lại IP máy chủ và kết nối mạng"
             case .requestFailed(let error):
                 return error.localizedDescription
             case .httpStatus(let code, let message):
@@ -85,6 +111,18 @@ final class AuthService {
         let payload = LoginRequest(username: username, phone: phone, password: password)
         request(path: "/identity/auth/login", body: payload, completion: completion)
     }
+    
+    /// Đăng xuất và xóa session
+    func logout(completion: ((Result<Void, Error>) -> Void)? = nil) {
+        // Xóa token
+        AuthSessionStore.shared.clear()
+        // Xóa thông tin user → ContentView sẽ tự quay về SetupProfileView
+        UserProfile.shared.clearUser()
+        
+        DispatchQueue.main.async {
+            completion?(.success(()))
+        }
+    }
 
     private func request<T: Codable, R: Codable>(
         path: String,
@@ -99,6 +137,8 @@ final class AuthService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        print("[AuthService] → \(request.httpMethod ?? "?") \(url.absoluteString)")
 
         do {
             request.httpBody = try JSONEncoder().encode(body)
@@ -109,16 +149,25 @@ final class AuthService {
 
         let task = session.dataTask(with: request) { data, response, error in
             if let error = error {
-                DispatchQueue.main.async { completion(.failure(AuthServiceError.requestFailed(error))) }
+                print("[AuthService] ✗ error: \(error.localizedDescription)")
+                let nsErr = error as NSError
+                if nsErr.code == NSURLErrorTimedOut || nsErr.code == NSURLErrorCannotConnectToHost || nsErr.code == NSURLErrorNetworkConnectionLost {
+                    DispatchQueue.main.async { completion(.failure(AuthServiceError.timeout)) }
+                } else {
+                    DispatchQueue.main.async { completion(.failure(AuthServiceError.requestFailed(error))) }
+                }
                 return
             }
+            print("[AuthService] ✓ status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
 
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200...299).contains(statusCode) else {
                 // Try to parse error message from response
                 var errorMessage: String? = nil
                 if let data = data, !data.isEmpty {
-                    errorMessage = APIErrorResponse.decode(from: data)?.message
+                    let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+                    print("[AuthService] ✗ HTTP \(statusCode) body: \(raw)")
+                    errorMessage = APIErrorResponse.decode(from: data)?.message ?? raw
                 }
                 DispatchQueue.main.async { completion(.failure(AuthServiceError.httpStatus(statusCode, errorMessage))) }
                 return
@@ -133,6 +182,9 @@ final class AuthService {
                 let decoded = try self.makeDecoder().decode(R.self, from: data)
                 DispatchQueue.main.async { completion(.success(decoded)) }
             } catch {
+                let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+                print("[AuthService] ✗ decode error: \(error)")
+                print("[AuthService] ✗ raw body: \(raw)")
                 DispatchQueue.main.async { completion(.failure(AuthServiceError.decodingFailed(error))) }
             }
         }
@@ -141,6 +193,7 @@ final class AuthService {
 
     private func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let value = try container.decode(String.self)

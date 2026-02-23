@@ -100,6 +100,9 @@ struct SettingsView: View {
     @State private var showAppearanceCustomization = false
     @State private var showIdentityHandover = false
     @State private var showIdentityInfo = false
+    @State private var showLogoutConfirmation = false
+    @State private var isLoggingOut = false
+    @StateObject private var authSession = AuthSessionStore.shared
     
     var body: some View {
         NavigationStack {
@@ -150,6 +153,21 @@ struct SettingsView: View {
                                 subtitle: identityStatusText
                             ) {
                                 showIdentityInfo = true
+                            }
+                            
+                            // Logout button - only show if logged in
+                            if userProfile.currentUser != nil {
+                                Divider()
+                                    .padding(.leading, 56)
+                                
+                                SettingsRow(
+                                    icon: "rectangle.portrait.and.arrow.right",
+                                    iconColor: .red,
+                                    title: "Đăng xuất",
+                                    subtitle: authSession.session?.username ?? authSession.session?.fullName ?? userProfile.currentUser?.name ?? "Tài khoản"
+                                ) {
+                                    showLogoutConfirmation = true
+                                }
                             }
                         }
                         
@@ -262,6 +280,22 @@ struct SettingsView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động offline qua mạng mesh.\n\n© 2026 Capstone Project")
+        }
+        .alert("Đăng xuất", isPresented: $showLogoutConfirmation) {
+            Button("Hủy", role: .cancel) { }
+            Button("Đăng xuất", role: .destructive) {
+                performLogout()
+            }
+        } message: {
+            Text("Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?")
+        }
+    }
+    
+    // MARK: - Logout Action
+    private func performLogout() {
+        isLoggingOut = true
+        AuthService.shared.logout { _ in
+            isLoggingOut = false
         }
     }
     
