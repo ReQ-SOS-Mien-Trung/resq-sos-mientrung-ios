@@ -21,7 +21,7 @@ struct SOSDetailView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                TelegramBackground()
+                DS.Colors.background.ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 20) {
@@ -63,7 +63,7 @@ struct SOSDetailView: View {
                     Button("Đóng") {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(DS.Colors.text)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -90,7 +90,7 @@ struct SOSDetailView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle.fill")
                             .font(.title2)
-                            .foregroundColor(.white)
+                            .foregroundColor(DS.Colors.text)
                     }
                 }
             }
@@ -129,31 +129,31 @@ struct SOSDetailView: View {
                 Image(systemName: savedSOS.status.icon)
                     .font(.title2)
                 Text(savedSOS.status.title)
-                    .font(.headline)
+                    .font(DS.Typography.headline)
             }
             .foregroundColor(savedSOS.status.color)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
             .background(savedSOS.status.color.opacity(0.2))
-            .cornerRadius(20)
+            
             
             // Timestamps
             VStack(spacing: 4) {
                 Text("Gửi lúc: \(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.subheadline)
+                    .font(DS.Typography.subheadline)
                     .foregroundColor(.white.opacity(0.8))
                 
                 if savedSOS.lastUpdated != savedSOS.timestamp {
                     Text("Cập nhật: \(savedSOS.lastUpdated.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption)
+                        .font(DS.Typography.caption)
                         .foregroundColor(.white.opacity(0.6))
                 }
             }
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
+        .background(DS.Colors.surface)
+        
     }
     
     // MARK: - Location Card
@@ -162,10 +162,10 @@ struct SOSDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "location.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(DS.Colors.accent)
                 Text("Vị trí")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
                 Spacer()
             }
             
@@ -176,13 +176,13 @@ struct SOSDetailView: View {
                         .tint(.red)
                 }
                 .frame(height: 150)
-                .cornerRadius(12)
+                
                 .disabled(true)
                 
                 // Coordinates
                 HStack {
                     Text(String(format: "%.6f, %.6f", lat, lon))
-                        .font(.caption)
+                        .font(DS.Typography.caption)
                         .foregroundColor(.white.opacity(0.7))
                     
                     Spacer()
@@ -192,14 +192,14 @@ struct SOSDetailView: View {
                     } label: {
                         Label("Mở bản đồ", systemImage: "map")
                             .font(.caption.bold())
-                            .foregroundColor(.blue)
+                            .foregroundColor(DS.Colors.accent)
                     }
                 }
             }
         }
         .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
+        .background(DS.Colors.surface)
+        
     }
     
     // MARK: - SOS Type Card
@@ -212,10 +212,10 @@ struct SOSDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(type.title)
                     .font(.title2.bold())
-                    .foregroundColor(.white)
+                    .foregroundColor(DS.Colors.text)
                 
                 Text(type.subtitle)
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundColor(.white.opacity(0.7))
             }
             
@@ -225,7 +225,7 @@ struct SOSDetailView: View {
         .background(
             type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)
         )
-        .cornerRadius(16)
+        
     }
     
     // MARK: - Rescue Details
@@ -233,8 +233,8 @@ struct SOSDetailView: View {
     private var rescueDetailsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("🚨 Thông tin cứu hộ")
-                .font(.headline)
-                .foregroundColor(.white)
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
             
             if let rescue = savedSOS.rescueData {
                 // Situation
@@ -259,11 +259,11 @@ struct SOSDetailView: View {
                 
                 // Injured info
                 if rescue.hasInjured {
-                    Divider().background(Color.white.opacity(0.3))
+                    Divider().background(DS.Colors.surface)
                     
                     Text("🩹 Người bị thương: \(rescue.injuredPersonIds.count)")
                         .font(.subheadline.bold())
-                        .foregroundColor(.red)
+                        .foregroundColor(DS.Colors.danger)
                     
                     // Medical issues
                     if !rescue.medicalIssues.isEmpty {
@@ -277,33 +277,33 @@ struct SOSDetailView: View {
                             HStack {
                                 Text("Người \(info.personId)")
                                     .font(.caption.bold())
-                                    .foregroundColor(.white)
+                                    .foregroundColor(DS.Colors.text)
                                 
                                 Text(info.severity.title)
                                     .font(.caption2.bold())
-                                    .foregroundColor(.white)
+                                    .foregroundColor(DS.Colors.text)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(severityColor(info.severity))
-                                    .cornerRadius(6)
+                                    
                             }
                             
                             if !info.medicalIssues.isEmpty {
                                 Text(info.medicalIssues.map { $0.title }.joined(separator: ", "))
-                                    .font(.caption)
+                                    .font(DS.Typography.caption)
                                     .foregroundColor(.white.opacity(0.7))
                             }
                         }
                         .padding(8)
                         .background(Color.red.opacity(0.2))
-                        .cornerRadius(8)
+                        
                     }
                 }
             }
         }
         .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
+        .background(DS.Colors.surface)
+        
     }
     
     // MARK: - Relief Details
@@ -311,15 +311,15 @@ struct SOSDetailView: View {
     private var reliefDetailsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("🎒 Thông tin cứu trợ")
-                .font(.headline)
-                .foregroundColor(.white)
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
             
             if let relief = savedSOS.reliefData {
                 // Supplies needed
                 if !relief.supplies.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Nhu yếu phẩm cần:")
-                            .font(.subheadline)
+                            .font(DS.Typography.subheadline)
                             .foregroundColor(.white.opacity(0.8))
                         
                         FlowLayout(spacing: 8) {
@@ -328,12 +328,12 @@ struct SOSDetailView: View {
                                     Text(supply.icon)
                                     Text(supply.title)
                                 }
-                                .font(.caption)
-                                .foregroundColor(.white)
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.text)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(Color.yellow.opacity(0.3))
-                                .cornerRadius(12)
+                                
                             }
                         }
                     }
@@ -356,8 +356,8 @@ struct SOSDetailView: View {
             }
         }
         .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
+        .background(DS.Colors.surface)
+        
     }
     
     // MARK: - Additional Description
@@ -368,18 +368,18 @@ struct SOSDetailView: View {
                 Image(systemName: "text.alignleft")
                     .foregroundColor(.white.opacity(0.7))
                 Text("Mô tả thêm")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
             }
             
             Text(savedSOS.additionalDescription)
-                .font(.subheadline)
+                .font(DS.Typography.subheadline)
                 .foregroundColor(.white.opacity(0.9))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
+        .background(DS.Colors.surface)
+        
     }
     
     // MARK: - Action Buttons
@@ -393,12 +393,12 @@ struct SOSDetailView: View {
                     Image(systemName: "pencil")
                     Text("Chỉnh sửa & Gửi lại")
                 }
-                .font(.headline)
-                .foregroundColor(.white)
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.blue)
-                .cornerRadius(12)
+                .background(DS.Colors.accent)
+                
             }
             
             // Mark as resolved
@@ -411,12 +411,12 @@ struct SOSDetailView: View {
                         Image(systemName: "checkmark.seal")
                         Text("Đánh dấu đã xử lý")
                     }
-                    .font(.headline)
-                    .foregroundColor(.green)
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.success)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.green.opacity(0.2))
-                    .cornerRadius(12)
+                    
                 }
             }
         }
@@ -468,12 +468,12 @@ struct DetailRow: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundColor(.white.opacity(0.6))
                 
                 Text(value)
-                    .font(.subheadline)
-                    .foregroundColor(.white)
+                    .font(DS.Typography.subheadline)
+                    .foregroundColor(DS.Colors.text)
             }
             
             Spacer()
@@ -513,7 +513,7 @@ struct SOSEditView: View {
                     Button("Hủy") {
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(DS.Colors.text)
                 }
             }
             .alert("Đã cập nhật SOS!", isPresented: $showSuccess) {
@@ -569,7 +569,7 @@ struct SOSWizardContent: View {
     
     var body: some View {
         ZStack {
-            TelegramBackground()
+            DS.Colors.background.ignoresSafeArea()
             Color.black.opacity(0.35).ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -609,10 +609,10 @@ struct SOSWizardContent: View {
                                 Image(systemName: "chevron.left")
                                 Text("Quay lại")
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(DS.Colors.text)
                             .padding()
-                            .background(Color.white.opacity(0.2))
-                            .cornerRadius(12)
+                            .background(DS.Colors.surface)
+                            
                         }
                     }
                     
@@ -631,10 +631,10 @@ struct SOSWizardContent: View {
                                     Text("GỬI SOS")
                                 }
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(DS.Colors.text)
                             .padding()
-                            .background(Color.red)
-                            .cornerRadius(12)
+                            .background(DS.Colors.danger)
+                            
                         }
                         .disabled(isSending)
                     } else if formData.canProceedToNextStep {
@@ -647,10 +647,10 @@ struct SOSWizardContent: View {
                                 Text("Tiếp theo")
                                 Image(systemName: "chevron.right")
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(DS.Colors.text)
                             .padding()
-                            .background(Color.blue)
-                            .cornerRadius(12)
+                            .background(DS.Colors.accent)
+                            
                         }
                     }
                 }

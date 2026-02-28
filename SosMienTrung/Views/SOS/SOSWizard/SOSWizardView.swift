@@ -20,19 +20,14 @@ struct SOSWizardView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background
-                TelegramBackground()
-                Color.black.opacity(0.35).ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Progress indicator
+                SOSProgressBar(currentStep: formData.currentStep)
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.top, DS.Spacing.sm)
                 
-                VStack(spacing: 0) {
-                    // Progress indicator
-                    SOSProgressBar(currentStep: formData.currentStep)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                    
-                    // Step content
-                    TabView(selection: $formData.currentStep) {
+                // Step content
+                TabView(selection: $formData.currentStep) {
                         Step0AutoInfoView(formData: formData, bridgefyManager: bridgefyManager, networkMonitor: networkMonitor)
                             .tag(SOSWizardStep.autoInfo)
                         
@@ -53,19 +48,20 @@ struct SOSWizardView: View {
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .animation(.easeInOut(duration: 0.3), value: formData.currentStep)
-                    
-                // Bottom navigation
-                    bottomNavigation
-                }
+                
+                bottomNavigation
             }
-            .navigationTitle("Gửi SOS")
+            .background(DS.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("GỬI SOS")
+                        .font(DS.Typography.headline).tracking(2)
+                        .foregroundColor(DS.Colors.text)
+                }
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Hủy") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
+                    Button("Huỷ") { dismiss() }
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
             }
             .alert(sentToServer ? "✅ Đã gửi lên Server" : "📡 Đã gửi qua Mesh Network", isPresented: $showSuccess) {
@@ -86,67 +82,59 @@ struct SOSWizardView: View {
     // MARK: - Bottom Navigation
     
     private var bottomNavigation: some View {
-        HStack(spacing: 16) {
-            // Back button
+        HStack(spacing: DS.Spacing.md) {
             if formData.currentStep != .autoInfo {
-                Button {
-                    formData.goToPreviousStep()
-                } label: {
+                Button { formData.goToPreviousStep() } label: {
                     HStack {
                         Image(systemName: "chevron.left")
                         Text("Quay lại")
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.2))
-                    .cornerRadius(12)
+                    .font(DS.Typography.subheadline)
+                    .foregroundColor(DS.Colors.text)
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(DS.Colors.surface)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                 }
             }
-            
             Spacer()
-            
-            // Next/Send button
             if formData.currentStep == .review {
-                Button {
-                    sendSOS()
-                } label: {
+                Button { sendSOS() } label: {
                     HStack {
                         if isSending {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            ProgressView().tint(.white)
                         } else {
                             Image(systemName: "paperplane.fill")
-                            Text("GỬI SOS")
-                                .fontWeight(.bold)
+                            Text("GỬI SOS").font(DS.Typography.headline).tracking(2)
                         }
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 12)
-                    .background(Color.red)
-                    .cornerRadius(12)
+                    .padding(.horizontal, DS.Spacing.xl)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(DS.Colors.danger)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                    .shadow(color: .black.opacity(0.25), radius: 0, x: 3, y: 3)
                 }
                 .disabled(isSending)
             } else {
-                Button {
-                    formData.goToNextStep()
-                } label: {
+                Button { formData.goToNextStep() } label: {
                     HStack {
                         Text("Tiếp tục")
                         Image(systemName: "chevron.right")
                     }
+                    .font(DS.Typography.headline)
                     .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(formData.canProceedToNextStep ? Color.blue : Color.gray)
-                    .cornerRadius(12)
+                    .padding(.horizontal, DS.Spacing.lg)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(formData.canProceedToNextStep ? DS.Colors.accent : DS.Colors.textTertiary)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
                 }
                 .disabled(!formData.canProceedToNextStep)
             }
         }
-        .padding()
-        .background(Color.black.opacity(0.3))
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
     }
     
     // MARK: - Helpers
@@ -242,20 +230,17 @@ struct SOSProgressBar: View {
     private let totalSteps = 5
     
     var body: some View {
-        VStack(spacing: 8) {
-            // Step indicator
-            HStack(spacing: 4) {
+        VStack(spacing: DS.Spacing.xs) {
+            HStack(spacing: 3) {
                 ForEach(0..<totalSteps, id: \.self) { index in
-                    Capsule()
-                        .fill(index <= currentStep.stepNumber ? Color.red : Color.white.opacity(0.3))
-                        .frame(height: 4)
+                    Rectangle()
+                        .fill(index <= currentStep.stepNumber ? DS.Colors.danger : DS.Colors.border)
+                        .frame(height: 3)
                 }
             }
-            
-            // Step title
             Text("Bước \(currentStep.stepNumber + 1): \(currentStep.title)")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.7))
+                .font(DS.Typography.caption).tracking(1)
+                .foregroundColor(DS.Colors.textSecondary)
         }
     }
 }

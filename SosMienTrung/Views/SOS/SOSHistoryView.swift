@@ -10,8 +10,7 @@ import SwiftUI
 struct SOSHistoryView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @ObservedObject var networkMonitor = NetworkMonitor.shared
-    @ObservedObject var appearanceManager = AppearanceManager.shared
-    
+
     @State private var showSOSForm = false
     @State private var selectedSOS: SavedSOS?
     
@@ -39,38 +38,29 @@ struct SOSHistoryView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                TelegramBackground()
-                
-                VStack(spacing: 0) {
-                    // Header stats
-                    statsHeader
-                    
-                    if savedSOSList.isEmpty && sosMessages.isEmpty {
-                        emptyState
-                    } else {
-                        sosListView
-                    }
+            VStack(spacing: 0) {
+                // Header
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    EyebrowLabel(text: "QUẢN LÝ")
+                    Text("SOS")
+                        .font(DS.Typography.largeTitle)
+                        .foregroundColor(DS.Colors.text)
+                    EditorialDivider(height: DS.Border.thick)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.top, DS.Spacing.md)
+
+                statsHeader
+
+                if savedSOSList.isEmpty && sosMessages.isEmpty {
+                    emptyState
+                } else {
+                    sosListView
                 }
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Quản lý SOS")
-                        .font(.headline)
-                        .foregroundColor(appearanceManager.textColor)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSOSForm = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.red)
-                    }
-                }
-            }
+            .background(DS.Colors.background)
+            .navigationBarHidden(true)
         }
         .fullScreenCover(isPresented: $showSOSForm) {
             SOSFormView(bridgefyManager: bridgefyManager)
@@ -82,68 +72,41 @@ struct SOSHistoryView: View {
     
     // MARK: - Stats Header
     private var statsHeader: some View {
-        HStack(spacing: 12) {
-            StatCard(
-                icon: "arrow.up.circle.fill",
-                value: "\(mySOS.count)",
-                label: "Đã gửi",
-                color: .red
-            )
-            
-            StatCard(
-                icon: "arrow.down.circle.fill",
-                value: "\(receivedSOS.count)",
-                label: "Đã nhận",
-                color: .blue
-            )
-            
-            StatCard(
-                icon: networkMonitor.isConnected ? "wifi" : "wifi.slash",
-                value: networkMonitor.isConnected ? "Online" : "Mesh",
-                label: "Trạng thái",
-                color: networkMonitor.isConnected ? .green : .orange
-            )
+        HStack(spacing: DS.Spacing.sm) {
+            StatCard(icon: "arrow.up.circle.fill", value: "\(mySOS.count)", label: "Đã gửi", color: DS.Colors.danger)
+            StatCard(icon: "arrow.down.circle.fill", value: "\(receivedSOS.count)", label: "Đã nhận", color: DS.Colors.info)
+            StatCard(icon: networkMonitor.isConnected ? "wifi" : "wifi.slash", value: networkMonitor.isConnected ? "Online" : "Mesh", label: "Trạng thái", color: networkMonitor.isConnected ? DS.Colors.success : DS.Colors.warning)
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
-        .padding(.horizontal)
+        .padding(.horizontal, DS.Spacing.md)
+        .padding(.vertical, DS.Spacing.sm)
     }
     
     // MARK: - Empty State
     private var emptyState: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.Spacing.md) {
             Spacer()
-            
             Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green.opacity(0.6))
-            
+                .font(.system(size: 48, weight: .bold))
+                .foregroundColor(DS.Colors.success.opacity(0.6))
             Text("Chưa có SOS nào")
-                .font(.title2.bold())
-                .foregroundColor(appearanceManager.textColor)
-            
+                .font(DS.Typography.title)
+                .foregroundColor(DS.Colors.text)
             Text("Bạn chưa gửi hoặc nhận bất kỳ tín hiệu SOS nào.\nNhấn nút + để gửi SOS mới.")
-                .font(.subheadline)
-                .foregroundColor(appearanceManager.secondaryTextColor)
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
-            
             Spacer()
-            
-            // Big SOS button
-            Button {
-                showSOSForm = true
-            } label: {
+            Button { showSOSForm = true } label: {
                 HStack {
                     Image(systemName: "sos.circle.fill")
-                    Text("GỬI SOS MỚI")
-                        .fontWeight(.bold)
+                    Text("Gửi SOS MỚI").font(DS.Typography.headline).tracking(2)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.red)
-                .cornerRadius(16)
+                .padding(.vertical, DS.Spacing.md)
+                .background(DS.Colors.danger)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                .shadow(color: .black.opacity(0.25), radius: 0, x: 4, y: 4)
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
@@ -185,16 +148,16 @@ struct SOSHistoryView: View {
             HStack {
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(appearanceManager.textColor)
+                    .foregroundColor(DS.Colors.text)
                 
                 Spacer()
                 
                 Text("\(count)")
                     .font(.caption.bold())
-                    .foregroundColor(appearanceManager.textColor)
+                    .foregroundColor(DS.Colors.text)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(appearanceManager.textColor.opacity(0.2))
+                    .background(DS.Colors.text.opacity(0.2))
                     .cornerRadius(10)
             }
             .padding(.horizontal, 4)
@@ -203,16 +166,16 @@ struct SOSHistoryView: View {
             VStack(spacing: 12) {
                 content()
             }
-            .padding(8)
-            .background(.ultraThinMaterial)
-            .cornerRadius(16)
+            .padding(DS.Spacing.xs)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
         }
     }
 }
 
 // MARK: - Saved SOS Card (có thể tap để xem chi tiết)
 struct SavedSOSCard: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
+    
     let savedSOS: SavedSOS
     let onTap: () -> Void
     
@@ -233,30 +196,22 @@ struct SavedSOSCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text(savedSOS.sosType?.title ?? "SOS")
-                                .font(.subheadline.bold())
-                                .foregroundColor(appearanceManager.textColor)
-                            
-                            // Status badge
-                            Text(savedSOS.status.title)
-                                .font(.caption2.bold())
-                                .foregroundColor(savedSOS.status.color)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(savedSOS.status.color.opacity(0.3))
-                                .cornerRadius(6)
+                                .font(DS.Typography.headline)
+                                .foregroundColor(DS.Colors.text)
+
+                            ResQBadge(text: savedSOS.status.title, color: savedSOS.status.color)
                         }
-                        
+
                         Text(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundColor(appearanceManager.secondaryTextColor)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
                     }
-                    
+
                     Spacer()
-                    
-                    // Chevron to indicate tappable
+
                     Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(DS.Colors.textTertiary)
                 }
                 
                 // Summary info
@@ -265,7 +220,7 @@ struct SavedSOSCard: View {
                     if let rescue = savedSOS.rescueData {
                         Label("\(rescue.peopleCount.total)", systemImage: "person.2")
                             .font(.caption)
-                            .foregroundColor(appearanceManager.secondaryTextColor)
+                            .foregroundColor(DS.Colors.textSecondary)
                         
                         if rescue.hasInjured {
                             Label("\(rescue.injuredPersonIds.count) thương", systemImage: "bandage")
@@ -275,7 +230,7 @@ struct SavedSOSCard: View {
                     } else if let relief = savedSOS.reliefData {
                         Label("\(relief.peopleCount.total)", systemImage: "person.2")
                             .font(.caption)
-                            .foregroundColor(appearanceManager.secondaryTextColor)
+                            .foregroundColor(DS.Colors.textSecondary)
                         
                         Label("\(relief.supplies.count) mặt hàng", systemImage: "shippingbox")
                             .font(.caption)
@@ -294,13 +249,13 @@ struct SavedSOSCard: View {
                         
                         Text(String(format: "%.4f, %.4f", lat, lon))
                             .font(.caption)
-                            .foregroundColor(appearanceManager.secondaryTextColor)
+                            .foregroundColor(DS.Colors.textSecondary)
                     }
                 }
             }
-            .padding()
-            .background(Color.white.opacity(0.08))
-            .cornerRadius(12)
+            .padding(DS.Spacing.sm)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
         }
         .buttonStyle(.plain)
     }
@@ -308,7 +263,7 @@ struct SavedSOSCard: View {
 
 // MARK: - Stat Card
 struct StatCard: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
+    
     let icon: String
     let value: String
     let label: String
@@ -317,27 +272,25 @@ struct StatCard: View {
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(color)
-            
             Text(value)
-                .font(.headline.bold())
-                .foregroundColor(appearanceManager.textColor)
-            
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
             Text(label)
-                .font(.caption)
-                .foregroundColor(appearanceManager.secondaryTextColor)
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.08))
-        .cornerRadius(12)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
     }
 }
 
 // MARK: - SOS History Card
 struct SOSHistoryCard: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
+    
     let message: Message
     let isMine: Bool
     
@@ -351,11 +304,11 @@ struct SOSHistoryCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isMine ? "Đã gửi" : "Nhận từ: \(message.senderName.isEmpty ? "Không rõ" : message.senderName)")
                         .font(.subheadline.bold())
-                        .foregroundColor(appearanceManager.textColor)
+                        .foregroundColor(DS.Colors.text)
                     
                     Text(message.timestamp.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption)
-                        .foregroundColor(appearanceManager.secondaryTextColor)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
                 
                 Spacer()
@@ -367,7 +320,7 @@ struct SOSHistoryCard: View {
             // Message content
             Text(message.text)
                 .font(.subheadline)
-                .foregroundColor(appearanceManager.textColor)
+                .foregroundColor(DS.Colors.text)
                 .lineLimit(3)
             
             // Location if available
@@ -379,7 +332,7 @@ struct SOSHistoryCard: View {
                     
                     Text(String(format: "%.4f, %.4f", lat, long))
                         .font(.caption)
-                        .foregroundColor(appearanceManager.secondaryTextColor)
+                        .foregroundColor(DS.Colors.textSecondary)
                     
                     Spacer()
                     
