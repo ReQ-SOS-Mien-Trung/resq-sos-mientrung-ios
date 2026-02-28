@@ -14,6 +14,7 @@ struct ContentView: View {
     @StateObject private var bridgefyManager = BridgefyNetworkManager.shared
     @StateObject private var userProfile = UserProfile.shared
     @StateObject private var authSession = AuthSessionStore.shared
+    @ObservedObject private var appearance = AppearanceManager.shared
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
     
@@ -70,6 +71,7 @@ struct ContentView: View {
 
     var body: some View {
         configuredView
+            .preferredColorScheme(appearance.shouldUseDarkColors ? .dark : nil)
             .onChange(of: isSetupComplete) { _, newValue in
                 if newValue {
                     bridgefyManager.start()
