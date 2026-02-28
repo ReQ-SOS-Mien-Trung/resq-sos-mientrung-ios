@@ -2,19 +2,18 @@
 //  ChatRoomsView.swift
 //  SosMienTrung
 //
-//  Gộp Users và Chat, hiển thị các phòng chat với Chat Tổng ở đầu
+//  ResQ Chat Rooms — Editorial Layout
 //
 
 import SwiftUI
 
 struct ChatRoomsView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     @State private var searchText = ""
     @State private var selectedChatRoom: ChatRoom?
     @State private var showDirectChat = false
     @FocusState private var isSearchFocused: Bool
-    
+
     // Chat room model
     struct ChatRoom: Identifiable {
         let id: UUID
@@ -26,17 +25,15 @@ struct ChatRoomsView: View {
         let lastMessage: String?
         let lastMessageTime: Date?
     }
-    
+
     enum ChatRoomType {
         case general
         case direct
     }
-    
-    // Tính toán danh sách chat rooms
+
     var chatRooms: [ChatRoom] {
         var rooms: [ChatRoom] = []
-        
-        // Chat tổng luôn ở đầu
+
         let generalMessages = bridgefyManager.messages.filter { $0.recipientId == nil }
         let generalUnread = generalMessages.filter { !$0.isFromMe }.count
         let lastGeneralMessage = generalMessages.sorted { $0.timestamp > $1.timestamp }.first
@@ -50,8 +47,7 @@ struct ChatRoomsView: View {
             lastMessage: lastGeneralMessage?.text,
             lastMessageTime: lastGeneralMessage?.timestamp
         ))
-        
-        // Các phòng chat cá nhân từ users, sắp xếp theo tin nhắn mới nhất
+
         var directRooms: [ChatRoom] = []
         for user in bridgefyManager.connectedUsersList {
             let userMessages = bridgefyManager.messages.filter { message in
@@ -59,10 +55,10 @@ struct ChatRoomsView: View {
                 (message.recipientId == user.id && message.isFromMe) ||
                 (message.senderId == user.id && !message.isFromMe && message.recipientId != nil)
             }
-            
+
             let userUnread = userMessages.filter { !$0.isFromMe }.count
             let lastMessage = userMessages.sorted { $0.timestamp > $1.timestamp }.first
-            
+
             directRooms.append(ChatRoom(
                 id: user.id,
                 type: .direct,
@@ -74,204 +70,166 @@ struct ChatRoomsView: View {
                 lastMessageTime: lastMessage?.timestamp
             ))
         }
-        
-        // Sắp xếp các direct rooms theo thời gian tin nhắn mới nhất
+
         directRooms.sort { room1, room2 in
             let time1 = room1.lastMessageTime ?? Date(timeIntervalSince1970: 0)
             let time2 = room2.lastMessageTime ?? Date(timeIntervalSince1970: 0)
             return time1 > time2
         }
-        
+
         rooms.append(contentsOf: directRooms)
         return rooms
     }
-    
+
     var filteredRooms: [ChatRoom] {
-        if searchText.isEmpty {
-            return chatRooms
-        }
-        return chatRooms.filter { room in
-            room.name.localizedCaseInsensitiveContains(searchText)
-        }
+        if searchText.isEmpty { return chatRooms }
+        return chatRooms.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
-    
+
     var body: some View {
-        ZStack {
-            TelegramBackground()
-            
-            VStack(spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Tin Nhắn")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(appearanceManager.textColor)
-                    
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(bridgefyManager.connectedUsersList.isEmpty ? .gray : .green)
-                            .frame(width: 10, height: 10)
-                        Text("\(bridgefyManager.connectedUsersList.count) người trong mạng")
-                            .foregroundStyle(appearanceManager.secondaryTextColor)
-                            .font(.subheadline)
-                    }
+        VStack(spacing: 0) {
+            // Header
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                EyebrowLabel(text: "TIN NHẮN")
+                Text("Chat")
+                    .font(DS.Typography.largeTitle)
+                    .foregroundColor(DS.Colors.text)
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(bridgefyManager.connectedUsersList.isEmpty ? DS.Colors.textTertiary : DS.Colors.success)
+                        .frame(width: 8, height: 8)
+                    Text("\(bridgefyManager.connectedUsersList.count) người trong mạng")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                
-                // Search bar
-                HStack {
+
+                EditorialDivider(height: DS.Border.thick)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.md)
+
+            // Search bar
+            ResQTextField(
+                placeholder: "Tìm kiếm phòng chat...",
+                text: $searchText,
+                icon: "magnifyingglass"
+            )
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+
+            // Chat Rooms List
+            if chatRooms.isEmpty {
+                VStack(spacing: DS.Spacing.md) {
+                    Image(systemName: "bubble.left.slash")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(DS.Colors.textTertiary)
+                    Text("Chưa có phòng chat nào")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                    Text("Đợi người khác mở app và ở gần bạn")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+                .frame(maxHeight: .infinity)
+            } else if filteredRooms.isEmpty {
+                VStack(spacing: DS.Spacing.md) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(appearanceManager.tertiaryTextColor)
-                    
-                    TextField("Tìm kiếm phòng chat...", text: $searchText)
-                        .foregroundColor(appearanceManager.textColor)
-                        .focused($isSearchFocused)
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(DS.Colors.textTertiary)
+                    Text("Không tìm thấy kết quả")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
-                .padding(12)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-                
-                // Chat Rooms List
-                if chatRooms.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "bubble.left.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(appearanceManager.tertiaryTextColor)
-                        
-                        Text("Chưa có phòng chat nào")
-                            .foregroundStyle(appearanceManager.secondaryTextColor)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Đợi người khác mở app và ở gần bạn")
-                            .font(.caption)
-                            .foregroundStyle(appearanceManager.tertiaryTextColor)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                    .frame(maxHeight: .infinity)
-                } else if filteredRooms.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 60))
-                            .foregroundColor(appearanceManager.tertiaryTextColor)
-                        
-                        Text("Không tìm thấy kết quả")
-                            .foregroundStyle(appearanceManager.secondaryTextColor)
-                    }
-                    .padding()
-                    .frame(maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(filteredRooms) { room in
-                                ChatRoomRow(room: room) {
-                                    selectedChatRoom = room
-                                }
+                .frame(maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: DS.Spacing.xs) {
+                        ForEach(filteredRooms) { room in
+                            ChatRoomRow(room: room) {
+                                selectedChatRoom = room
                             }
                         }
-                        .padding()
                     }
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.top, DS.Spacing.xs)
                 }
             }
         }
+        .background(DS.Colors.background)
         .sheet(item: $selectedChatRoom) { room in
             if room.type == .general {
                 ChatView(bridgefyManager: bridgefyManager)
             } else if let user = room.user {
-                DirectChatView(
-                    bridgefyManager: bridgefyManager,
-                    recipient: user
-                )
+                DirectChatView(bridgefyManager: bridgefyManager, recipient: user)
             }
         }
-        .onTapGesture {
-            isSearchFocused = false
-        }
+        .onTapGesture { isSearchFocused = false }
     }
 }
 
 struct ChatRoomRow: View {
     let room: ChatRoomsView.ChatRoom
     let onTap: () -> Void
-    @ObservedObject var appearanceManager = AppearanceManager.shared
-    
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Avatar
+            HStack(spacing: DS.Spacing.sm) {
+                // Avatar — sharp square
                 ZStack {
+                    Rectangle()
+                        .fill(room.type == .general ? DS.Colors.info.opacity(0.15) : DS.Colors.accent.opacity(0.15))
+                        .frame(width: 44, height: 44)
+
                     if room.type == .general {
-                        Circle()
-                            .fill(Color.blue.opacity(0.3))
-                            .frame(width: 50, height: 50)
-                        
                         Image(systemName: room.avatar)
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(DS.Colors.info)
                     } else {
-                        Circle()
-                            .fill(Color.purple.opacity(0.3))
-                            .frame(width: 50, height: 50)
-                        
                         Text(room.avatar)
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .black))
+                            .foregroundColor(DS.Colors.accent)
                     }
                 }
-                
-                // Chat room info
-                VStack(alignment: .leading, spacing: 4) {
+
+                VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(room.name)
-                            .font(.headline)
-                            .foregroundColor(appearanceManager.textColor)
-                        
+                            .font(DS.Typography.headline)
+                            .foregroundColor(DS.Colors.text)
                         Spacer()
-                        
                         if let lastTime = room.lastMessageTime {
                             Text(lastTime, style: .time)
-                                .font(.caption)
-                                .foregroundColor(appearanceManager.tertiaryTextColor)
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.textTertiary)
                         }
                     }
-                    
+
                     if let lastMessage = room.lastMessage {
                         Text(lastMessage)
-                            .font(.subheadline)
-                            .foregroundColor(appearanceManager.secondaryTextColor)
+                            .font(DS.Typography.subheadline)
+                            .foregroundColor(DS.Colors.textSecondary)
                             .lineLimit(1)
                     } else {
                         Text("Chưa có tin nhắn")
-                            .font(.subheadline)
-                            .foregroundColor(appearanceManager.tertiaryTextColor)
+                            .font(DS.Typography.subheadline)
+                            .foregroundColor(DS.Colors.textTertiary)
                             .italic()
                     }
                 }
-                
-                Spacer()
-                
-                VStack(spacing: 8) {
-                    if room.unreadCount > 0 {
-                        ZStack {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 24, height: 24)
-                            
-                            Text("\(room.unreadCount)")
-                                .font(.caption.bold())
-                                .foregroundColor(.white)
-                        }
-                    }
-                    
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(appearanceManager.tertiaryTextColor)
+
+                if room.unreadCount > 0 {
+                    ResQBadge(text: "\(room.unreadCount)", color: DS.Colors.danger)
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(DS.Colors.textTertiary)
             }
-            .padding()
-            .background(.ultraThinMaterial)
-            .cornerRadius(12)
+            .padding(DS.Spacing.sm)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
         }
     }
 }

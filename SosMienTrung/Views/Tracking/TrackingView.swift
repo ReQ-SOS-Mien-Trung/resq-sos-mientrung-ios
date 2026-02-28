@@ -146,9 +146,9 @@ struct TrackingView: View {
                 }
             }
         )
-        .cornerRadius(20)
+        
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        
         .overlay(alignment: .center) {
             NICoachingOverlay(
                 findingMode: findingMode,
@@ -170,15 +170,15 @@ struct TrackingView: View {
                 .font(.caption.bold())
                 .padding(6)
                 .background(.green.opacity(0.2))
-                .cornerRadius(8)
-                .foregroundColor(.white)
+                
+                .foregroundColor(DS.Colors.text)
         case .good:
             Label("Good signal", systemImage: "antenna.radiowaves.left.and.right")
                 .font(.caption.bold())
                 .padding(6)
                 .background(.yellow.opacity(0.2))
-                .cornerRadius(8)
-                .foregroundColor(.white)
+                
+                .foregroundColor(DS.Colors.text)
         case .unknown:
             EmptyView()
         }

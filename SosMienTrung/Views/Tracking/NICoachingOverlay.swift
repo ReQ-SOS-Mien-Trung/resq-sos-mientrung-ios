@@ -132,7 +132,7 @@ struct NICoachingOverlay: View {
             }
             .opacity(showCoachingOverlay ? 1 : 0)
         }
-        .foregroundColor(.white)
+        .foregroundColor(DS.Colors.text)
         .shadow(color: .black.opacity(0.8), radius: 3, x: 0, y: 2)
         .animation(.smooth, value: showCoachingOverlay)
     }

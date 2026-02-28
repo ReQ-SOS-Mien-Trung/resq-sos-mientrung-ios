@@ -19,7 +19,7 @@ struct WindIndicatorView: View {
                 .resizable()
                 .frame(width: 22, height: 22)
                 .rotationEffect(.degrees(toDeg))
-                .foregroundColor(.white)
+                .foregroundColor(DS.Colors.text)
                 .shadow(radius: 2)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -29,17 +29,17 @@ struct WindIndicatorView: View {
                 if let sp = windSpeed {
                     Text(String(format: "%.1f m/s", sp))
                         .font(.subheadline).bold()
-                        .foregroundColor(.white)
+                        .foregroundColor(DS.Colors.text)
                 } else {
                     Text("N/A")
                         .font(.subheadline).bold()
-                        .foregroundColor(.white)
+                        .foregroundColor(DS.Colors.text)
                 }
             }
         }
         .padding(8)
         .background(Color.black.opacity(0.5))
-        .cornerRadius(12)
+        
     }
 }
 

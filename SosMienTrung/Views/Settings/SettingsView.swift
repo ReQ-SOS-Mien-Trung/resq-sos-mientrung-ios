@@ -52,6 +52,7 @@ class SettingsManager: ObservableObject {
     @Published var selectedTheme: AppTheme {
         didSet {
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "appTheme")
+            AppearanceManager.shared.isDarkTheme = (selectedTheme == .dark)
         }
     }
     
@@ -81,6 +82,7 @@ class SettingsManager: ObservableObject {
         // Sync với AppearanceManager khi khởi tạo - defer to avoid publishing during view update
         DispatchQueue.main.async {
             AppearanceManager.shared.batterySavingMode = savedBatterySaving
+            AppearanceManager.shared.isDarkTheme = (AppTheme(rawValue: themeRaw) ?? .system) == .dark
         }
     }
 }
@@ -88,179 +90,107 @@ class SettingsManager: ObservableObject {
 // MARK: - Settings View
 struct SettingsView: View {
     @ObservedObject var userProfile = UserProfile.shared
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var keyManager = IdentityKeyManager.shared
     @StateObject private var identityStore = IdentityStore.shared
-    
+
     @State private var showEditProfile = false
     @State private var showThemePicker = false
     @State private var showLanguagePicker = false
     @State private var showAbout = false
-    @State private var showAppearanceCustomization = false
     @State private var showIdentityHandover = false
     @State private var showIdentityInfo = false
     @State private var showLogoutConfirmation = false
     @State private var isLoggingOut = false
     @StateObject private var authSession = AuthSessionStore.shared
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background - TelegramBackground đã tự động xử lý chế độ tiết kiệm pin
-                TelegramBackground()
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Profile Header
-                        profileHeader
-                        
-                        // Identity Status Banner (if transferred)
-                        if identityStore.isTransferred {
-                            identityTransferredBanner
-                        }
-                        
-                        // Account Section
-                        settingsSection(title: "Tài khoản") {
-                            SettingsRow(
-                                icon: "person.fill",
-                                iconColor: .blue,
-                                title: "Cập nhật thông tin",
-                                subtitle: "Tên, số điện thoại"
-                            ) {
-                                showEditProfile = true
-                            }
-                            
-                            Divider()
-                                .padding(.leading, 56)
-                            
-                            SettingsRow(
-                                icon: "arrow.left.arrow.right",
-                                iconColor: .orange,
-                                title: "Chuyển tài khoản",
-                                subtitle: identityStore.isTransferred ? "Đã chuyển sang thiết bị khác" : "Chuyển sang thiết bị mới"
-                            ) {
-                                showIdentityHandover = true
-                            }
-                            
-                            Divider()
-                                .padding(.leading, 56)
-                            
-                            SettingsRow(
-                                icon: "key.fill",
-                                iconColor: .green,
-                                title: "Danh tính số",
-                                subtitle: identityStatusText
-                            ) {
-                                showIdentityInfo = true
-                            }
-                            
-                            // Logout button - only show if logged in
-                            if userProfile.currentUser != nil {
-                                Divider()
-                                    .padding(.leading, 56)
-                                
-                                SettingsRow(
-                                    icon: "rectangle.portrait.and.arrow.right",
-                                    iconColor: .red,
-                                    title: "Đăng xuất",
-                                    subtitle: authSession.session?.username ?? authSession.session?.fullName ?? userProfile.currentUser?.name ?? "Tài khoản"
-                                ) {
-                                    showLogoutConfirmation = true
-                                }
-                            }
-                        }
-                        
-                        // Appearance Section
-                        settingsSection(title: "Giao diện") {
-                            BatterySavingToggleRow(
-                                isOn: $settingsManager.batterySavingMode
-                            )
-                            
-                            Divider()
-                                .padding(.leading, 56)
-                            
-                            SettingsRow(
-                                icon: "paintbrush.fill",
-                                iconColor: .purple,
-                                title: "Tùy chỉnh hình nền",
-                                subtitle: "Màu sắc, hoạ tiết, cường độ"
-                            ) {
-                                showAppearanceCustomization = true
-                            }
-                            .opacity(appearanceManager.batterySavingMode ? 0.5 : 1.0)
-                            .disabled(appearanceManager.batterySavingMode)
-                            
-                            Divider()
-                                .padding(.leading, 56)
-                            
-                            SettingsRow(
-                                icon: "moon.fill",
-                                iconColor: .indigo,
-                                title: "Chế độ hiển thị",
-                                subtitle: settingsManager.selectedTheme.rawValue
-                            ) {
-                                showThemePicker = true
-                            }
-                            .opacity(appearanceManager.batterySavingMode ? 0.5 : 1.0)
-                            .disabled(appearanceManager.batterySavingMode)
-                            
-                            Divider()
-                                .padding(.leading, 56)
-                            
-                            SettingsRow(
-                                icon: "globe",
-                                iconColor: .green,
-                                title: "Ngôn ngữ",
-                                subtitle: "\(settingsManager.selectedLanguage.flag) \(settingsManager.selectedLanguage.rawValue)"
-                            ) {
-                                showLanguagePicker = true
-                            }
-                        }
-                        
-                        // About Section
-                        settingsSection(title: "Thông tin") {
-                            SettingsRow(
-                                icon: "info.circle.fill",
-                                iconColor: .gray,
-                                title: "Về ứng dụng",
-                                subtitle: "Phiên bản 1.0.0"
-                            ) {
-                                showAbout = true
-                            }
-                        }
-                        
-                        // App Info
-                        VStack(spacing: 4) {
-                            Text("SOS Miền Trung")
-                                .font(.caption)
-                                .foregroundColor(appearanceManager.secondaryTextColor)
-                            Text("Ứng dụng hỗ trợ cứu trợ thiên tai")
-                                .font(.caption2)
-                                .foregroundColor(appearanceManager.tertiaryTextColor)
-                        }
-                        .padding(.top, 20)
-                        
-                        Spacer(minLength: 100)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+                    // Editorial header
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        EyebrowLabel(text: "CÀI ĐẶT")
+                        Text("Tùy chỉnh")
+                            .font(DS.Typography.largeTitle)
+                            .foregroundColor(DS.Colors.text)
+                        EditorialDivider(height: DS.Border.thick)
                     }
-                    .padding()
+                    .padding(.top, DS.Spacing.md)
+
+                    // Profile Header
+                    profileHeader
+
+                    // Identity Status Banner (if transferred)
+                    if identityStore.isTransferred {
+                        identityTransferredBanner
+                    }
+
+                    // Account Section
+                    Text("TÀI KHOẢN").sectionHeader()
+                    settingsSection {
+                        SettingsRow(icon: "person.fill", iconColor: DS.Colors.info, title: "Cập nhật thông tin", subtitle: "Tên, số điện thoại") {
+                            showEditProfile = true
+                        }
+                        EditorialDivider()
+                        SettingsRow(icon: "arrow.left.arrow.right", iconColor: DS.Colors.warning, title: "Chuyển tài khoản", subtitle: identityStore.isTransferred ? "Đã chuyển sang thiết bị khác" : "Chuyển sang thiết bị mới") {
+                            showIdentityHandover = true
+                        }
+                        EditorialDivider()
+                        SettingsRow(icon: "key.fill", iconColor: DS.Colors.success, title: "Danh tính số", subtitle: identityStatusText) {
+                            showIdentityInfo = true
+                        }
+                        if userProfile.currentUser != nil {
+                            EditorialDivider()
+                            SettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: DS.Colors.danger, title: "Đăng xuất", subtitle: authSession.session?.username ?? authSession.session?.fullName ?? userProfile.currentUser?.name ?? "Tài khoản") {
+                                showLogoutConfirmation = true
+                            }
+                        }
+                    }
+
+                    // Appearance Section
+                    Text("GIAO DIỆN").sectionHeader()
+                    settingsSection {
+                        BatterySavingToggleRow(isOn: $settingsManager.batterySavingMode)
+                        EditorialDivider()
+                        SettingsRow(icon: "moon.fill", iconColor: .indigo, title: "Chế độ hiển thị", subtitle: settingsManager.selectedTheme.rawValue) {
+                            showThemePicker = true
+                        }
+                        EditorialDivider()
+                        SettingsRow(icon: "globe", iconColor: DS.Colors.success, title: "Ngôn ngữ", subtitle: "\(settingsManager.selectedLanguage.flag) \(settingsManager.selectedLanguage.rawValue)") {
+                            showLanguagePicker = true
+                        }
+                    }
+
+                    // About Section
+                    Text("THÔNG TIN").sectionHeader()
+                    settingsSection {
+                        SettingsRow(icon: "info.circle.fill", iconColor: DS.Colors.textTertiary, title: "Về ứng dụng", subtitle: "Phiên bản 1.0.0") {
+                            showAbout = true
+                        }
+                    }
+
+                    // App Info
+                    VStack(spacing: 4) {
+                        Text("ResQ — SOS Miền Trung")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                        Text("Ứng dụng hỗ trợ cứu trợ thiên tai")
+                            .font(.caption2)
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, DS.Spacing.md)
+
+                    Spacer(minLength: 100)
                 }
+                .padding(.horizontal, DS.Spacing.md)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Cài đặt")
-                        .font(.title3.bold())
-                        .foregroundColor(appearanceManager.textColor)
-                }
-            }
+            .background(DS.Colors.background)
+            .navigationBarHidden(true)
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileView()
-        }
-        .fullScreenCover(isPresented: $showAppearanceCustomization) {
-            AppearanceCustomizationView()
         }
         .fullScreenCover(isPresented: $showIdentityHandover) {
             IdentityHandoverView()
@@ -279,7 +209,7 @@ struct SettingsView: View {
         .alert("Về ứng dụng", isPresented: $showAbout) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động offline qua mạng mesh.\n\n© 2026 Capstone Project")
+            Text("ResQ — SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động offline qua mạng mesh.\n\n© 2026 Capstone Project")
         }
         .alert("Đăng xuất", isPresented: $showLogoutConfirmation) {
             Button("Hủy", role: .cancel) { }
@@ -290,7 +220,7 @@ struct SettingsView: View {
             Text("Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?")
         }
     }
-    
+
     // MARK: - Logout Action
     private func performLogout() {
         isLoggingOut = true
@@ -298,179 +228,151 @@ struct SettingsView: View {
             isLoggingOut = false
         }
     }
-    
+
     // MARK: - Identity Status Text
     private var identityStatusText: String {
         switch keyManager.identityStatus {
-        case .notInitialized:
-            return "Chưa khởi tạo"
-        case .active:
-            return "Đang hoạt động"
-        case .transferred:
-            return "Đã chuyển"
-        case .revoked:
-            return "Đã thu hồi"
+        case .notInitialized: return "Chưa khởi tạo"
+        case .active: return "Đang hoạt động"
+        case .transferred: return "Đã chuyển"
+        case .revoked: return "Đã thu hồi"
         }
     }
-    
+
     // MARK: - Identity Transferred Banner
     private var identityTransferredBanner: some View {
-        HStack {
+        HStack(spacing: DS.Spacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-            
+                .foregroundColor(DS.Colors.warning)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Tài khoản đã chuyển")
-                    .font(.headline)
-                    .foregroundColor(appearanceManager.textColor)
-                
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
                 Text("Tài khoản đã được chuyển sang thiết bị khác. Một số tính năng bị giới hạn.")
-                    .font(.caption)
-                    .foregroundColor(appearanceManager.secondaryTextColor)
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
             }
         }
-        .padding()
-        .background(Color.orange.opacity(0.15))
-        .cornerRadius(12)
+        .padding(DS.Spacing.sm)
+        .sharpCard(borderColor: DS.Colors.warning, shadow: DS.Shadow.none, backgroundColor: DS.Colors.warning.opacity(0.1))
     }
-    
+
     // MARK: - Profile Header
     private var profileHeader: some View {
-        VStack(spacing: 12) {
-            // Avatar
+        VStack(spacing: DS.Spacing.sm) {
+            // Avatar — sharp rectangle
             ZStack {
-                Circle()
-                    .fill(appearanceManager.textColor.opacity(0.2))
-                    .frame(width: 100, height: 100)
-                
+                Rectangle()
+                    .fill(DS.Colors.accent.opacity(0.15))
+                    .frame(width: 88, height: 88)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+
                 if let firstChar = userProfile.currentUser?.name.first {
                     Text(String(firstChar).uppercased())
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundColor(appearanceManager.textColor)
+                        .font(.system(size: 36, weight: .black))
+                        .foregroundColor(DS.Colors.accent)
                 } else {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(appearanceManager.textColor)
+                        .font(.system(size: 36))
+                        .foregroundColor(DS.Colors.accent)
                 }
             }
-            
-            // Name
-            Text(userProfile.currentUser?.name ?? "Chưa đặt tên")
-                .font(.title2.bold())
-                .foregroundColor(appearanceManager.textColor)
-            
-            // Phone
-            Text(userProfile.currentUser?.phoneNumber ?? "Chưa có số điện thoại")
-                .font(.subheadline)
-                .foregroundColor(appearanceManager.secondaryTextColor)
-        }
-        .padding(.vertical, 20)
-    }
-    
-    // MARK: - Settings Section Builder
-    private func settingsSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(.caption)
-                .foregroundColor(appearanceManager.secondaryTextColor)
-                .padding(.leading, 16)
-       
 
-            
-            VStack(spacing: 0) {
-                content()
-            }
-            .background(.ultraThinMaterial)
-            .cornerRadius(12)
+            Text(userProfile.currentUser?.name ?? "Chưa đặt tên")
+                .font(DS.Typography.title)
+                .foregroundColor(DS.Colors.text)
+
+            Text(userProfile.currentUser?.phoneNumber ?? "Chưa có số điện thoại")
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, DS.Spacing.md)
+    }
+
+    // MARK: - Settings Section Builder
+    private func settingsSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .sharpCard(shadow: DS.Shadow.none)
     }
 }
 
 // MARK: - Settings Row
 struct SettingsRow: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     let icon: String
     let iconColor: Color
     let title: String
     let subtitle: String
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                // Icon
+            HStack(spacing: DS.Spacing.sm) {
+                // Icon — sharp square
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(appearanceManager.batterySavingMode ? Color.gray : iconColor)
+                    Rectangle()
+                        .fill(iconColor.opacity(0.15))
                         .frame(width: 32, height: 32)
-                    
                     Image(systemName: icon)
-                        .font(.system(size: 16))
-                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(iconColor)
                 }
-                
-                // Title & Subtitle
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.body)
-                        .foregroundColor(appearanceManager.textColor)
-                    
+                        .font(DS.Typography.body)
+                        .foregroundColor(DS.Colors.text)
                     if !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.caption)
-                            .foregroundColor(appearanceManager.tertiaryTextColor)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textTertiary)
                     }
                 }
-                
+
                 Spacer()
-                
-                // Arrow
+
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(appearanceManager.tertiaryTextColor)
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(DS.Colors.textTertiary)
             }
-            .padding()
+            .padding(DS.Spacing.sm)
         }
     }
 }
 
 // MARK: - Battery Saving Toggle Row
 struct BatterySavingToggleRow: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     @Binding var isOn: Bool
-    
+
     var body: some View {
-        HStack(spacing: 12) {
-            // Icon
+        HStack(spacing: DS.Spacing.sm) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.yellow)
+                Rectangle()
+                    .fill(DS.Colors.warning.opacity(0.15))
                     .frame(width: 32, height: 32)
-                
                 Image(systemName: "battery.100.bolt")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(DS.Colors.warning)
             }
-            
-            // Title & Subtitle
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("Tiết kiệm pin")
-                    .font(.body)
-                    .foregroundColor(appearanceManager.textColor)
-                
+                    .font(DS.Typography.body)
+                    .foregroundColor(DS.Colors.text)
                 Text(isOn ? "Đang bật" : "Đang tắt")
-                    .font(.caption)
-                    .foregroundColor(appearanceManager.tertiaryTextColor)
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textTertiary)
             }
-            
+
             Spacer()
-            
-            // Toggle
+
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .tint(.yellow)
+                .tint(DS.Colors.warning)
         }
-        .padding()
+        .padding(DS.Spacing.sm)
     }
 }
 
@@ -671,7 +573,6 @@ struct LanguagePickerView: View {
 // MARK: - Identity Info View
 struct IdentityInfoView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     @StateObject private var keyManager = IdentityKeyManager.shared
     @StateObject private var identityStore = IdentityStore.shared
     

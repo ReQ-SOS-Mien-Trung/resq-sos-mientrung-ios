@@ -3,60 +3,56 @@ import MapKit
 
 struct ChatView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
-    @ObservedObject var appearanceManager = AppearanceManager.shared
     @State private var messageText = ""
     @State private var showSOSForm = false
     @FocusState private var isTextFieldFocused: Bool
 
-    // Only show broadcast messages (no recipientId = general chat)
     var generalMessages: [Message] {
-        bridgefyManager.messages.filter { message in
-            message.recipientId == nil
-        }
+        bridgefyManager.messages.filter { $0.recipientId == nil }
     }
-    
+
     var body: some View {
-        ZStack {
-            TelegramBackground()
-            
-            VStack(spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Emergency Chat")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(appearanceManager.textColor)
-                    
-                    HStack(spacing: 6) {
-                            Circle()
-                                .fill(bridgefyManager.connectedUsers.isEmpty ? .gray : .green)
-                                .frame(width: 10, height: 10)
-                            Text("\(bridgefyManager.connectedUsers.count) rescuer\(bridgefyManager.connectedUsers.count == 1 ? "" : "s") connected")
-                                .foregroundStyle(appearanceManager.secondaryTextColor)
-                                .font(.subheadline)
-                        }
-                        
-                        // Warning nếu không có kết nối
-                        if bridgefyManager.connectedUsers.isEmpty {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.yellow)
-                                Text("Broadcast mode: Messages sent to all nearby devices")
-                                    .font(.caption)
-                                    .foregroundStyle(appearanceManager.tertiaryTextColor)
-                            }
-                            .padding(.top, 4)
-                        }
+        VStack(spacing: 0) {
+            // Header
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                EyebrowLabel(text: "EMERGENCY CHAT")
+                Text("Chat Tổng")
+                    .font(DS.Typography.largeTitle)
+                    .foregroundColor(DS.Colors.text)
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(bridgefyManager.connectedUsers.isEmpty ? DS.Colors.textTertiary : DS.Colors.success)
+                        .frame(width: 8, height: 8)
+                    Text("\(bridgefyManager.connectedUsers.count) người kết nối")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+
+                if bridgefyManager.connectedUsers.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(DS.Colors.warning)
+                        Text("Broadcast: Tin nhắn gửi đến tất cả thiết bị gần đây")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
+                }
+
+                EditorialDivider(height: DS.Border.thick)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.md)
                 
                 // Messages List
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 12) {
+                        LazyVStack(spacing: DS.Spacing.sm) {
                             if generalMessages.isEmpty {
-                                Text("No messages yet. Send a message to start the conversation!")
-                                    .foregroundStyle(appearanceManager.tertiaryTextColor)
+                                Text("Chưa có tin nhắn. Gửi tin nhắn để bắt đầu trò chuyện!")
+                                    .font(DS.Typography.subheadline)
+                                    .foregroundColor(DS.Colors.textTertiary)
                                     .multilineTextAlignment(.center)
                                     .padding(.top, 60)
                             } else {
@@ -78,48 +74,37 @@ struct ChatView: View {
                     }
                 }
                 
-                // Message Input - Simple Material Style
-                HStack(spacing: 12) {
-                    // Nút SOS - hiện form khi bấm
+                // Message Input — Sharp Design
+                HStack(spacing: DS.Spacing.sm) {
                     Button {
-                        print("🆘 SOS button tapped, showing form...")
                         isTextFieldFocused = false
                         showSOSForm = true
                     } label: {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.red)
-                            .frame(width: 44, height: 44)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(DS.Colors.danger)
+                            .frame(width: 40, height: 40)
+                            .background(DS.Colors.danger.opacity(0.1))
+                            .overlay(Rectangle().stroke(DS.Colors.danger, lineWidth: DS.Border.thin))
                     }
-                    
-                    // Text Field với Material
-                    TextField("Type message...", text: $messageText)
-                        .focused($isTextFieldFocused)
-                        .foregroundColor(appearanceManager.textColor)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                    
-                    // Send Button
-                    Button {
-                        sendMessage()
-                    } label: {
+
+                    ResQTextField(placeholder: "Nhập tin nhắn...", text: $messageText)
+
+                    Button { sendMessage() } label: {
                         Image(systemName: "paperplane.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(messageText.isEmpty ? .gray : .white)
-                            .frame(width: 44, height: 44)
-                            .background(messageText.isEmpty ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.blue))
-                            .clipShape(Circle())
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(messageText.isEmpty ? DS.Colors.textTertiary : .white)
+                            .frame(width: 40, height: 40)
+                            .background(messageText.isEmpty ? DS.Colors.surface : DS.Colors.accent)
+                            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                     }
                     .disabled(messageText.isEmpty)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(DS.Spacing.sm)
+                .background(DS.Colors.surface)
+                .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
             }
-        }
+            .background(DS.Colors.background)
         .fullScreenCover(isPresented: $showSOSForm) {
             SOSFormView(bridgefyManager: bridgefyManager)
         }
@@ -154,42 +139,36 @@ struct MessageBubble: View {
                         .foregroundColor(message.type == .sosLocation ? .red : .blue)
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text(message.text)
                         .foregroundColor(.white)
-                    
-                    // Hiển thị thông tin vị trí nếu có
+
                     if message.hasLocation, let lat = message.latitude, let long = message.longitude {
-                        Divider()
-                            .background(Color.white.opacity(0.3))
-                        
+                        EditorialDivider(color: .white.opacity(0.3))
+
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
                                 .font(.caption)
                             Text(String(format: "%.6f, %.6f", lat, long))
-                                .font(.caption)
-                                .monospaced()
+                                .font(.system(.caption, design: .monospaced))
                         }
                         .foregroundColor(.white.opacity(0.8))
-                        
-                        Button {
-                            showMap = true
-                        } label: {
-                            HStack {
+
+                        Button { showMap = true } label: {
+                            HStack(spacing: 4) {
                                 Image(systemName: "map.fill")
                                 Text("Xem bản đồ")
                             }
-                            .font(.caption)
+                            .font(.caption.weight(.bold))
                             .padding(6)
                             .background(Color.white.opacity(0.2))
-                            .cornerRadius(8)
                         }
                     }
                 }
-                .padding(12)
-                .background(message.type == .sosLocation ? Color.red : (message.isFromMe ? Color.blue : Color.gray.opacity(0.3)))
-                .foregroundColor(.white)
-                .cornerRadius(16)
+                .padding(DS.Spacing.sm)
+                .background(message.type == .sosLocation ? DS.Colors.danger : (message.isFromMe ? DS.Colors.accent : DS.Colors.surface))
+                .foregroundColor(message.isFromMe || message.type == .sosLocation ? .white : DS.Colors.text)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                 
                 // Just show time, no status
                 Text(message.timestamp, style: .time)

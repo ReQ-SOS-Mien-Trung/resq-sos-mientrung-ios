@@ -25,96 +25,82 @@ struct UsersListView: View {
     }
     
     var body: some View {
-        ZStack {
-            TelegramBackground()
-            
-            VStack(spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Người Dùng")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                    
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(bridgefyManager.connectedUsersList.isEmpty ? .gray : .green)
-                            .frame(width: 10, height: 10)
-                        Text("\(bridgefyManager.connectedUsersList.count) người trong mạng")
-                            .foregroundStyle(.white.opacity(0.7))
-                            .font(.subheadline)
-                    }
+        VStack(spacing: 0) {
+            // Editorial Header
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                EyebrowLabel(text: "MẠNG LƯỚI")
+                Text("Người Dùng")
+                    .font(DS.Typography.largeTitle)
+                    .foregroundColor(DS.Colors.text)
+                HStack(spacing: 6) {
+                    Rectangle()
+                        .fill(bridgefyManager.connectedUsersList.isEmpty ? DS.Colors.textTertiary : DS.Colors.success)
+                        .frame(width: 8, height: 8)
+                    Text("\(bridgefyManager.connectedUsersList.count) người trong mạng")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                
-                // Search bar
-                HStack {
+                EditorialDivider(height: DS.Border.thick)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.md)
+
+            // Search bar
+            ResQTextField(placeholder: "Tìm kiếm theo tên hoặc số điện thoại...", text: $searchText, icon: "magnifyingglass")
+                .focused($isSearchFocused)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+
+            // Users List
+            if bridgefyManager.connectedUsersList.isEmpty {
+                VStack(spacing: DS.Spacing.md) {
+                    Spacer()
+                    Image(systemName: "person.2.slash")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(DS.Colors.textTertiary)
+                    Text("Chưa có người dùng nào trong mạng")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                    Text("Đợi người khác mở app và ở gần bạn")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textTertiary)
+                    Spacer()
+                }
+                .frame(maxHeight: .infinity)
+            } else if filteredUsers.isEmpty {
+                VStack(spacing: DS.Spacing.md) {
+                    Spacer()
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    TextField("Tìm kiếm theo tên hoặc số điện thoại...", text: $searchText)
-                        .foregroundColor(.white)
-                        .focused($isSearchFocused)
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(DS.Colors.textTertiary)
+                    Text("Không tìm thấy kết quả")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                    Spacer()
                 }
-                .padding(12)
-                .background(Color.white.opacity(0.15))
-                .cornerRadius(12)
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-                
-                // Users List
-                if bridgefyManager.connectedUsersList.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "person.2.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        Text("Chưa có người dùng nào trong mạng")
-                            .foregroundStyle(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Đợi người khác mở app và ở gần bạn")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                    .frame(maxHeight: .infinity)
-                } else if filteredUsers.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        Text("Không tìm thấy kết quả")
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .padding()
-                    .frame(maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredUsers) { user in
-                                UserRow(user: user) {
-                                    selectedUser = user
-                                    showDirectChat = true
-                                }
+                .frame(maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredUsers) { user in
+                            UserRow(user: user) {
+                                selectedUser = user
+                                showDirectChat = true
                             }
+                            EditorialDivider()
                         }
-                        .padding()
                     }
+                    .padding(.horizontal, DS.Spacing.md)
                 }
             }
         }
+        .background(DS.Colors.background)
         .sheet(item: $selectedUser) { user in
-            DirectChatView(
-                bridgefyManager: bridgefyManager,
-                recipient: user
-            )
+            DirectChatView(bridgefyManager: bridgefyManager, recipient: user)
         }
-        .onTapGesture {
-            isSearchFocused = false
-        }
+        .onTapGesture { isSearchFocused = false }
     }
 }
 
@@ -124,42 +110,38 @@ struct UserRow: View {
     
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Avatar
+            HStack(spacing: DS.Spacing.sm) {
+                // Sharp square avatar
                 ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                    
+                    Rectangle()
+                        .fill(DS.Colors.accent.opacity(0.15))
+                        .frame(width: 44, height: 44)
                     Text(user.name.prefix(1).uppercased())
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundColor(DS.Colors.accent)
                 }
-                
-                // User info
-                VStack(alignment: .leading, spacing: 4) {
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+
+                VStack(alignment: .leading, spacing: 2) {
                     Text(user.name)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
                     Text(user.phoneNumber)
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
-                
+
                 Spacer()
-                
-                // Online status
-                Circle()
-                    .fill(user.isOnline ? .green : .gray)
-                    .frame(width: 12, height: 12)
-                
+
+                Rectangle()
+                    .fill(user.isOnline ? DS.Colors.success : DS.Colors.textTertiary)
+                    .frame(width: 8, height: 8)
+
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.white.opacity(0.5))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(DS.Colors.textTertiary)
             }
-            .padding()
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(12)
+            .padding(.vertical, DS.Spacing.sm)
         }
     }
 }

@@ -9,104 +9,87 @@ struct ChatBotView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
-                TelegramBackground()
-                
-                VStack(spacing: 0) {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(messages) { message in
-                                    BotMessageBubble(message: message)
-                                        .id(message.id)
-                                }
-                                
-                                if service.isProcessing {
-                                    HStack {
-                                        ProgressView()
-                                            .padding(10)
-                                            .background(Color.secondary.opacity(0.1))
-                                            .cornerRadius(10)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal)
-                                    .id("processing")
-                                }
-                                
-                                // Bottom padding for floating input
-                                Color.clear.frame(height: 80)
+            VStack(spacing: 0) {
+                // Editorial header
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    EyebrowLabel(text: "TRỢ LÝ")
+                    Text("An Toàn")
+                        .font(DS.Typography.largeTitle)
+                        .foregroundColor(DS.Colors.text)
+                    EditorialDivider(height: DS.Border.thick)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.top, DS.Spacing.md)
+
+                // Messages
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: DS.Spacing.sm) {
+                            ForEach(messages) { message in
+                                BotMessageBubble(message: message)
+                                    .id(message.id)
                             }
-                            .padding(.vertical)
-                        }
-                        .onChange(of: scrollToId) { _, newId in
-                            if let id = newId {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    proxy.scrollTo(id, anchor: .bottom)
+
+                            if service.isProcessing {
+                                HStack {
+                                    ProgressView()
+                                        .padding(DS.Spacing.sm)
+                                        .background(DS.Colors.surface)
+                                        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+                                    Spacer()
                                 }
+                                .padding(.horizontal, DS.Spacing.md)
+                                .id("processing")
                             }
+
+                            Color.clear.frame(height: 70)
                         }
-                        .onChange(of: service.isProcessing) { _, processing in
-                            if processing {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        proxy.scrollTo("processing", anchor: .bottom)
-                                    }
-                                }
+                        .padding(.vertical, DS.Spacing.sm)
+                    }
+                    .onChange(of: scrollToId) { _, newId in
+                        if let id = newId {
+                            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) }
+                        }
+                    }
+                    .onChange(of: service.isProcessing) { _, processing in
+                        if processing {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("processing", anchor: .bottom) }
                             }
                         }
                     }
                 }
-                
-                // Floating Input Area - Liquid Glass Effect
-                VStack {
-                    Spacer()
-                    
-                    HStack(spacing: 12) {
-                        HStack(spacing: 8) {
-                            TextField("Hỏi về an toàn lũ lụt...", text: $messageText)
-                                .foregroundColor(.primary)
-                                .focused($isFocused)
-                                .disabled(service.isProcessing)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(24)
-                        
-                        // Send Button - Simple Style
-                        Button(action: sendMessage) {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(messageText.isEmpty || service.isProcessing ? .gray : .white)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    messageText.isEmpty || service.isProcessing ?
-                                    AnyShapeStyle(.ultraThinMaterial) :
-                                    AnyShapeStyle(Color.blue)
-                                )
-                                .clipShape(Circle())
-                        }
-                        .disabled(messageText.isEmpty || service.isProcessing)
-                        .animation(.easeInOut(duration: 0.2), value: messageText.isEmpty)
+
+                // Input bar
+                HStack(spacing: DS.Spacing.sm) {
+                    ResQTextField(placeholder: "Hỏi về an toàn lũ lụt...", text: $messageText)
+                        .focused($isFocused)
+                        .disabled(service.isProcessing)
+
+                    Button(action: sendMessage) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundColor(messageText.isEmpty || service.isProcessing ? DS.Colors.textTertiary : .white)
+                            .frame(width: 40, height: 40)
+                            .background(messageText.isEmpty || service.isProcessing ? DS.Colors.surface : DS.Colors.accent)
+                            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .disabled(messageText.isEmpty || service.isProcessing)
                 }
+                .padding(DS.Spacing.sm)
+                .background(DS.Colors.surface)
+                .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
             }
-            .navigationTitle("Trợ lý An toàn")
-            .navigationBarTitleDisplayMode(.inline)
-            // Nếu target iOS 16+, có thể ẩn nền thanh điều hướng để pattern lộ rõ:
-            // .toolbarBackground(.hidden, for: .navigationBar)
+            .background(DS.Colors.background)
+            .navigationBarHidden(true)
             .onAppear {
                 if messages.isEmpty {
-                    // Initial greeting
                     let welcome = BotChatMessage(text: "Xin chào! Tôi là trợ lý ảo hỗ trợ thông tin về thiên tai và an toàn. Tôi có thể giúp gì cho bạn?", isUser: false)
                     messages.append(welcome)
                 }
             }
-            .onTapGesture {
-                isFocused = false
-            }
+            .onTapGesture { isFocused = false }
         }
     }
     
@@ -159,11 +142,9 @@ struct BotChatMessage: Identifiable, Equatable {
 struct BotMessageBubble: View {
     let message: BotChatMessage
     
-    // Parse markdown to AttributedString
     private var formattedText: AttributedString {
         do {
-            let attributedString = try AttributedString(markdown: message.text, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-            return attributedString
+            return try AttributedString(markdown: message.text, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
         } catch {
             return AttributedString(message.text)
         }
@@ -172,22 +153,23 @@ struct BotMessageBubble: View {
     var body: some View {
         HStack {
             if message.isUser {
-                Spacer()
+                Spacer(minLength: 60)
                 Text(message.text)
-                    .padding()
-                    .background(Color.blue)
+                    .font(DS.Typography.body)
+                    .padding(DS.Spacing.sm)
+                    .background(DS.Colors.accent)
                     .foregroundColor(.white)
-                    .botCornerRadius(15, corners: [.topLeft, .topRight, .bottomLeft])
             } else {
                 Text(formattedText)
-                    .padding()
-                    .background(Color(.systemGray5))
-                    .foregroundColor(.primary)
-                    .botCornerRadius(15, corners: [.topLeft, .topRight, .bottomRight])
-                Spacer()
+                    .font(DS.Typography.body)
+                    .padding(DS.Spacing.sm)
+                    .background(DS.Colors.surface)
+                    .foregroundColor(DS.Colors.text)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+                Spacer(minLength: 60)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, DS.Spacing.md)
     }
 }
 

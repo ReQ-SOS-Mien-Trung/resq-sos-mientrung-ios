@@ -2,12 +2,11 @@
 //  HomeView.swift
 //  SosMienTrung
 //
-//  Màn hình Home với các chức năng chính
+//  ResQ Home — Editorial Grid Layout
 //
 
 import SwiftUI
 import CoreLocation
-
 import MultipeerConnectivity
 
 struct HomeView: View {
@@ -15,51 +14,47 @@ struct HomeView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
     @Binding var selectedPeer: MCPeerID?
-    
-    @ObservedObject var appearanceManager = AppearanceManager.shared
+
     @StateObject private var locationManager = LocationManager()
-    
+
     @State private var showSOSMap = false
     @State private var showSOSForm = false
     @State private var showChatBot = false
-    @State private var showSettings = false
     @State private var showNotifications = false
     @State private var showMapDisabledAlert = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
-    
-    // Weather mock data (có thể kết nối API thực sau)
+
     @State private var weatherInfo = "TP Hồ Chí Minh - Có Mây"
-    @State private var weatherIcon = "cloud.sun.fill"
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background
-                TelegramBackground()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Header
-                        headerSection
-                        
-                        // Weather info
-                        weatherSection
-                        
-                        // Notification button
-                        notificationButton
-                        
-                        // Main grid buttons
-                        mainGridSection
-                        
-                        // Secondary grid buttons
-                        secondaryGridSection
-                        
-                        Spacer(minLength: 100)
-                    }
-                    .padding()
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+
+                    // MARK: - Header
+                    headerSection
+                        .padding(.top, DS.Spacing.md)
+
+                    // MARK: - Weather strip
+                    weatherSection
+
+                    // MARK: - SOS CTA Button
+                    sosCTAButton
+
+                    // MARK: - Main grid
+                    Text("BẢN ĐỒ & CỨU HỘ").sectionHeader()
+                    mainGridSection
+
+                    // MARK: - Secondary grid
+                    Text("TIỆN ÍCH").sectionHeader()
+                    secondaryGridSection
+
+                    Spacer(minLength: 100)
                 }
+                .padding(.horizontal, DS.Spacing.md)
             }
+            .background(DS.Colors.background)
             .navigationBarHidden(true)
         }
         .fullScreenCover(isPresented: $showSOSMap) {
@@ -88,160 +83,133 @@ struct HomeView: View {
                 )
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Đóng") {
-                            showRescuersView = false
-                        }
+                        Button("Đóng") { showRescuersView = false }
                     }
                 }
             }
         }
     }
-    
-    // MARK: - Header Section
+
+    // MARK: - Header
     private var headerSection: some View {
-        HStack {
-            Image(systemName: weatherIcon)
-                .font(.system(size: 32))
-                .foregroundColor(.yellow)
-            
-            Text("TRẠM CỨU TRỢ")
-                .font(.system(size: 28, weight: .heavy, design: .rounded))
-                .foregroundColor(appearanceManager.textColor)
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            EyebrowLabel(text: "TRẠM CỨU TRỢ")
+
+            Text("ResQ SOS")
+                .font(DS.Typography.largeTitle)
+                .foregroundColor(DS.Colors.text)
+
+            EditorialDivider(height: DS.Border.thick)
         }
-        .padding(.top, 10)
     }
-    
-    // MARK: - Weather Section
+
+    // MARK: - Weather
     private var weatherSection: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "sparkles")
-                .foregroundColor(.yellow)
-            Text("Thời tiết: \(weatherInfo)")
-                .font(.subheadline)
-                .foregroundColor(appearanceManager.secondaryTextColor)
+        HStack(spacing: DS.Spacing.xs) {
+            Image(systemName: "cloud.sun.fill")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(DS.Colors.warning)
+            Text(weatherInfo)
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
         }
+        .padding(DS.Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sharpCard(
+            borderWidth: DS.Border.thin,
+            shadow: DS.Shadow.small,
+            backgroundColor: DS.Colors.background
+        )
     }
-    
-    // MARK: - Notification Button
-    private var notificationButton: some View {
+
+    // MARK: - SOS CTA
+    private var sosCTAButton: some View {
         Button {
-            showNotifications = true
+            showSOSForm = true
         } label: {
-            HStack {
-                Text("Xem tất cả thông báo")
-                    .font(.headline)
-                    .foregroundColor(.white)
+            HStack(spacing: DS.Spacing.xs) {
+                Image(systemName: "sos.circle.fill")
+                    .font(.system(size: 20, weight: .bold))
+                Text("GỬI TÍN HIỆU SOS")
+                    .font(DS.Typography.headline)
+                    .tracking(2)
             }
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color(hex: "4CAF50"))
-            .cornerRadius(25)
+            .padding(.vertical, DS.Spacing.md)
+            .background(DS.Colors.danger)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+            .shadow(color: .black.opacity(0.25), radius: 0, x: 4, y: 4)
         }
-        .padding(.horizontal)
     }
-    
-    // MARK: - Main Grid Section (Bản đồ)
+
+    // MARK: - Main Grid (Maps & Rescue)
     private var mainGridSection: some View {
         LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ], spacing: 12) {
-            // Bản đồ cần trợ giúp (tạm ẩn)
-            HomeGridButton(
+            GridItem(.flexible(), spacing: DS.Spacing.sm),
+            GridItem(.flexible(), spacing: DS.Spacing.sm)
+        ], spacing: DS.Spacing.sm) {
+            ResQGridButton(
                 icon: "mappin.and.ellipse",
                 title: "Bản đồ\ncần trợ giúp",
-                iconColor: Color(hex: "E57373"),
-                backgroundColor: Color(hex: "FFEBEE")
+                accentColor: DS.Colors.danger
             ) {
                 showMapDisabledAlert = true
             }
-            
-            // Bản đồ thiên tai
-            HomeGridButton(
+
+            ResQGridButton(
                 icon: "cloud.rain.fill",
                 title: "Bản đồ\nthiên tai",
-                iconColor: Color(hex: "4FC3F7"), // A blue color suitable for maps/weather
-                backgroundColor: Color(hex: "E1F5FE")
+                accentColor: DS.Colors.info
             ) {
-                showSOSMap = true // This will now trigger the map view
+                showSOSMap = true
             }
-            
-            // Bản đồ lánh nạn (tạm ẩn)
-            HomeGridButton(
+
+            ResQGridButton(
                 icon: "house.and.flag.fill",
                 title: "Bản đồ\nlánh nạn",
-                iconColor: Color(hex: "E57373"),
-                backgroundColor: Color(hex: "FFEBEE")
+                accentColor: DS.Colors.warning
             ) {
                 showMapDisabledAlert = true
             }
-            
-            // Cứu hộ
-            HomeGridButton(
+
+            ResQGridButton(
                 icon: "antenna.radiowaves.left.and.right",
                 title: "Cứu hộ",
-                iconColor: Color(hex: "E53935"),
-                backgroundColor: Color(hex: "FFEBEE")
+                accentColor: DS.Colors.accent
             ) {
                 showRescuersView = true
             }
-            
-            // Đăng tin cần trợ giúp
-            HomeGridButton(
-                icon: "hand.raised.fill",
-                title: "Đăng tin\ncần trợ giúp",
-                iconColor: Color(hex: "78909C"),
-                backgroundColor: Color(hex: "ECEFF1")
-            ) {
-                showSOSForm = true
-            }
-            
-            // Liên hệ
-            HomeGridButton(
-                icon: "envelope.fill",
-                title: "Liên hệ",
-                iconColor: Color(hex: "78909C"),
-                backgroundColor: Color(hex: "ECEFF1")
-            ) {
-                // Action liên hệ
-            }
         }
     }
-    
-    // MARK: - Secondary Grid Section
+
+    // MARK: - Secondary Grid (Utils)
     private var secondaryGridSection: some View {
         LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ], spacing: 12) {
-            // Tin tức
-            HomeGridButton(
+            GridItem(.flexible(), spacing: DS.Spacing.sm),
+            GridItem(.flexible(), spacing: DS.Spacing.sm),
+            GridItem(.flexible(), spacing: DS.Spacing.sm)
+        ], spacing: DS.Spacing.sm) {
+            ResQGridButton(
                 icon: "newspaper.fill",
                 title: "Tin tức",
-                iconColor: Color(hex: "FFB74D"),
-                backgroundColor: Color(hex: "FFF3E0")
+                accentColor: DS.Colors.warning
             ) {
                 // Action tin tức
             }
-            
-            // Đẩy nước khỏi loa
-            HomeGridButton(
+
+            ResQGridButton(
                 icon: "speaker.wave.3.fill",
                 title: "Đẩy nước\nkhỏi loa",
-                iconColor: Color(hex: "42A5F5"),
-                backgroundColor: Color(hex: "E3F2FD")
+                accentColor: DS.Colors.info
             ) {
                 showWaterEject = true
             }
-            
-            // Cài đặt / AI Assistant
-            HomeGridButton(
+
+            ResQGridButton(
                 icon: "brain.head.profile",
                 title: "AI\nTrợ lý",
-                iconColor: Color(hex: "81C784"),
-                backgroundColor: Color(hex: "E8F5E9")
+                accentColor: DS.Colors.success
             ) {
                 showChatBot = true
             }
@@ -249,76 +217,16 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Home Grid Button Component
+// MARK: - HomeGridButton (backward compat alias)
 struct HomeGridButton: View {
-    @ObservedObject var appearanceManager = AppearanceManager.shared
-    
     let icon: String
     let title: String
     let iconColor: Color
     let backgroundColor: Color
     let action: () -> Void
-    
-    // Màu nền khi bật chế độ tiết kiệm pin
-    private var batterySavingBackgroundColor: Color {
-        Color.white.opacity(0.1)
-    }
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                // Icon circle - giữ nguyên màu icon
-                ZStack {
-                    Circle()
-                        .fill(iconColor.opacity(0.2))
-                        .frame(width: 50, height: 50)
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: 22))
-                        .foregroundColor(iconColor)
-                }
-                
-                // Title
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(appearanceManager.batterySavingMode ? .white.opacity(0.8) : .black.opacity(0.8))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(height: 32)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 110)
-            .background(appearanceManager.batterySavingMode ? batterySavingBackgroundColor : backgroundColor)
-            .cornerRadius(14)
-            .shadow(color: appearanceManager.batterySavingMode ? .clear : .black.opacity(0.08), radius: 4, x: 0, y: 2)
-        }
-    }
-}
 
-// MARK: - Color Extension for Hex
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (1, 1, 1, 0)
-        }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
-        )
+    var body: some View {
+        ResQGridButton(icon: icon, title: title, accentColor: iconColor, action: action)
     }
 }
 
