@@ -368,6 +368,34 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             print("📴 [SOS] No network – sending via mesh only")
         }
 
+        // Cập nhật status dựa trên kết quả gửi trực tiếp
+        let packetId = sosPacket.packetId
+        if serverReached {
+            await MainActor.run {
+                SOSStorageManager.shared.updateStatusWithEvent(
+                    id: packetId,
+                    status: .sent,
+                    event: SOSSendEvent(type: .sentViaNetwork, note: "Gửi trực tiếp qua Internet")
+                )
+            }
+        } else if NetworkMonitor.shared.isConnected {
+            // Có mạng nhưng upload thất bại → gateway sẽ retry
+            await MainActor.run {
+                SOSStorageManager.shared.addSendEvent(
+                    id: packetId,
+                    event: SOSSendEvent(type: .pendingRetry, note: "Upload thất bại, đang thử lại")
+                )
+            }
+        } else {
+            // Chưa có mạng
+            await MainActor.run {
+                SOSStorageManager.shared.addSendEvent(
+                    id: packetId,
+                    event: SOSSendEvent(type: .pendingRetry, note: "Chưa có mạng, đang chờ gửi lại")
+                )
+            }
+        }
+
         if !serverReached {
             // Không gửi được lên server → relay qua mesh / retry gateway
             ServerRequestGateway.shared.submitSOSEnhanced(enhancedPacket)
@@ -377,6 +405,14 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         if bridgefy != nil {
             await MainActor.run {
                 broadcastSOSPacket(sosPacket, originalMessage: formData.toSOSMessage(), timestamp: timestamp)
+                if !serverReached {
+                    // Ghi nhận đã phát qua mesh (nhờ người khác relay)
+                    SOSStorageManager.shared.updateStatusWithEvent(
+                        id: packetId,
+                        status: .relayed,
+                        event: SOSSendEvent(type: .sentViaMesh, note: "Phát qua Mesh Network để nhờ relay lên server")
+                    )
+                }
             }
         }
 
@@ -454,6 +490,21 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         print("✅ Bridgefy STARTED with userId: \(userId)")
         MeshManager.shared.updateMyDeviceId(userId.uuidString)
         MeshManager.shared.start()
+        // Đăng ký mapping serverUserId → bridgefyDeviceId ngay khi Bridgefy sẵn sàng
+        if let serverUserId = AuthSessionStore.shared.session?.userId {
+            updateIdentityMapping(userId: serverUserId, newPeerId: userId)
+            print("🔗 Registered identity mapping: serverUserId=\(serverUserId) → bridgefyId=\(userId)")
+        }
+    }
+
+    /// Gọi sau khi đăng nhập thành công để đồng bộ mapping nếu Bridgefy đã chạy
+    func registerServerIdentity(_ serverUserId: String) {
+        guard let bridgefyId = currentUserId else {
+            print("⚠️ registerServerIdentity: Bridgefy chưa start, mapping sẽ được đăng ký khi Bridgefy start")
+            return
+        }
+        updateIdentityMapping(userId: serverUserId, newPeerId: bridgefyId)
+        print("🔗 Synced identity mapping: serverUserId=\(serverUserId) → bridgefyId=\(bridgefyId)")
     }
 
     func bridgefyDidFailToStart(with error: BridgefyError) {

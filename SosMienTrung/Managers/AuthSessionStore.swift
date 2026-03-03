@@ -44,6 +44,12 @@ final class AuthSessionStore: ObservableObject {
         if let data = try? JSONEncoder().encode(session) {
             UserDefaults.standard.set(data, forKey: sessionKey)
         }
+        
+        // Đồng bộ serverUserId ↔ Bridgefy deviceId
+        BridgefyNetworkManager.shared.registerServerIdentity(response.userId)
+
+        // Load dữ liệu SOS local của user mới đăng nhập
+        SOSStorageManager.shared.reloadForUser(response.userId)
     }
 
     func clear() {

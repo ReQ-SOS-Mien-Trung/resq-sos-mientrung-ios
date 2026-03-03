@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-final class ServerRequestGateway {
+final class ServerRequestGateway: ObservableObject {
     static let shared = ServerRequestGateway()
 
     enum TransportSource {
@@ -34,6 +34,14 @@ final class ServerRequestGateway {
     private var cancellables: Set<AnyCancellable> = []
     private var retryTimer: DispatchSourceTimer?
     private var isStarted = false
+
+    /// Set các requestId đã được server xác nhận — dùng để hiển thị UI
+    @Published private(set) var confirmedIds: Set<String> = []
+
+    /// Kiểm tra nhanh một packet đã được server xác nhận chưa
+    func isServerConfirmed(_ requestId: String) -> Bool {
+        confirmedIds.contains(requestId)
+    }
 
     private let maxHopCount = 10
 
@@ -91,11 +99,21 @@ final class ServerRequestGateway {
 
     func handleIncomingAck(_ ack: ServerRequestAck, transport: TransportSource) {
         stateQueue.async {
+            // Nếu ACK này đã được xử lý rồi thì bỏ qua, tránh lặp event
+            guard !self.completed.contains(ack.requestId) else { return }
+
             self.completed.insert(ack.requestId)
+            let confirmedId = ack.requestId
+            DispatchQueue.main.async { self.confirmedIds.insert(confirmedId) }
             self.pending.removeValue(forKey: ack.requestId)
             if ack.originDeviceId == self.myDeviceId {
                 DispatchQueue.main.async {
-                    SOSStorageManager.shared.updateStatus(id: ack.requestId, status: .delivered)
+                    // Nhận ACK từ server qua relay: server đã xác nhận
+                    SOSStorageManager.shared.updateStatusWithEvent(
+                        id: ack.requestId,
+                        status: .delivered,
+                        event: SOSSendEvent(type: .serverAcknowledged, note: "Server xác nhận qua Mesh relay")
+                    )
                 }
             }
         }
@@ -152,6 +170,8 @@ final class ServerRequestGateway {
     private func handleUploadResult(for envelope: ServerRequestEnvelope, success: Bool, ackTransport: TransportSource?) {
         if success {
             completed.insert(envelope.requestId)
+            let confirmedId = envelope.requestId
+            DispatchQueue.main.async { self.confirmedIds.insert(confirmedId) }
             pending.removeValue(forKey: envelope.requestId)
 
             if let ackTransport = ackTransport, envelope.originDeviceId != myDeviceId {
@@ -160,7 +180,12 @@ final class ServerRequestGateway {
 
             if envelope.originDeviceId == myDeviceId {
                 DispatchQueue.main.async {
-                    SOSStorageManager.shared.updateStatus(id: envelope.requestId, status: .delivered)
+                    // Gateway retry thành công: đã gửi lên server
+                    SOSStorageManager.shared.updateStatusWithEvent(
+                        id: envelope.requestId,
+                        status: .sent,
+                        event: SOSSendEvent(type: .sentViaNetwork, note: "Gửi qua Internet (retry tự động)")
+                    )
                 }
             }
             return
@@ -170,18 +195,57 @@ final class ServerRequestGateway {
     }
 
     private func performUpload(for envelope: ServerRequestEnvelope) async -> Bool {
+        // Nếu packet không phải từ thiết bị này → relay, truyền userId gốc để BE biết
+        let isRelay = envelope.originDeviceId != myDeviceId
+        let originalUserId: String? = isRelay ? envelope.sosPacket?.senderInfo?.userId
+            ?? envelope.sosEnhanced?.senderInfo?.userId
+            : nil
+
         switch envelope.type {
         case .sosBasic:
             guard let packet = envelope.sosPacket else { return false }
-            return await sosRelayService.uploadSOS(packet)
+
+            // ── LOG CHI TIẾT KHI RELAY ──────────────────────
+            print("""
+[Gateway] 📤 Uploading \(isRelay ? "RELAYED" : "OWN") sosBasic
+  packetId      : \(packet.packetId)
+  originId      : \(packet.originId)           ← Bridgefy UUID thiết bị gốc
+  myDeviceId    : \(myDeviceId)                ← Bridgefy UUID thiết bị relay (mình)
+  isRelay       : \(isRelay)
+  hopCount      : \(packet.hopCount)
+  path          : \(packet.path)
+  senderInfo
+    device_id   : \(packet.senderInfo?.deviceId ?? "nil")
+    user_id     : \(packet.senderInfo?.userId ?? "nil")  ← phải là userId của người gửi gốc
+    user_name   : \(packet.senderInfo?.userName ?? "nil")
+  mySession
+    userId(BE)  : \(AuthSessionStore.shared.session?.userId ?? "nil")  ← userId của máy relay
+  relayingFor   : \(originalUserId ?? "nil (own packet, not relay)")
+""")
+            // ─────────────────────────────────────────────────
+
+            return await APIService.shared.uploadSOS(packet: packet, relayingFor: originalUserId)
         case .sosEnhanced:
             guard let packet = envelope.sosEnhanced else { return false }
-            return await uploadEnhancedSOS(packet)
-        }
-    }
 
-    private func uploadEnhancedSOS(_ packet: SOSPacketEnhanced) async -> Bool {
-        return await APIService.shared.uploadSOS(enhanced: packet)
+            print("""
+[Gateway] 📤 Uploading \(isRelay ? "RELAYED" : "OWN") sosEnhanced
+  packetId      : \(packet.packetId)
+  originId      : \(packet.originId)
+  myDeviceId    : \(myDeviceId)
+  isRelay       : \(isRelay)
+  hopCount      : \(packet.hopCount)
+  path          : \(packet.path)
+  senderInfo
+    device_id   : \(packet.senderInfo?.deviceId ?? "nil")
+    user_id     : \(packet.senderInfo?.userId ?? "nil")
+  mySession
+    userId(BE)  : \(AuthSessionStore.shared.session?.userId ?? "nil")
+  relayingFor   : \(originalUserId ?? "nil (own packet, not relay)")
+""")
+
+            return await APIService.shared.uploadSOS(enhanced: packet, relayingFor: originalUserId)
+        }
     }
 
     private func relayIfNeeded(_ envelope: ServerRequestEnvelope, excluding transport: TransportSource?) {
