@@ -37,7 +37,20 @@ struct LoginResponse: Codable {
     let userId: String
     let username: String?
     let fullName: String?
+    let firstName: String?
+    let lastName: String?
     let roleId: Int?
+
+    /// Tên hiển thị: ưu tiên fullName → ghép lastName + firstName → username
+    var displayName: String? {
+        if let full = fullName, !full.isEmpty { return full }
+        let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
+        if !parts.isEmpty { return parts.joined(separator: " ") }
+        return username
+    }
+
+    /// roleId 3 = Rescuer, roleId 5 = Victim
+    var isRescuer: Bool { roleId == 3 }
 }
 
 // MARK: - Auth Service
@@ -49,7 +62,7 @@ final class AuthService {
     private let session: URLSession
 
     private init(session: URLSession? = nil) {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://localhost:8080"
+        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://192.168.1.26:8080/api"
         #if targetEnvironment(simulator)
         // Simulator shares Mac loopback — replace any LAN/hotspot IP with localhost
         let urlString: String
@@ -118,6 +131,8 @@ final class AuthService {
         AuthSessionStore.shared.clear()
         // Xóa thông tin user → ContentView sẽ tự quay về SetupProfileView
         UserProfile.shared.clearUser()
+        // Xóa danh sách SOS in-memory (dữ liệu local vẫn giữ theo userId)
+        SOSStorageManager.shared.clearSession()
         
         DispatchQueue.main.async {
             completion?(.success(()))

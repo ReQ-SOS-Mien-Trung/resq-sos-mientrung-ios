@@ -22,6 +22,7 @@ struct SetupProfileView: View {
     @State private var showSuccess = false
     @State private var successMessage = ""
     @State private var showIdentityHandover = false
+    @State private var isRescuerMode = false
     @Binding var isSetupComplete: Bool
     @FocusState private var focusedField: Field?
     
@@ -60,15 +61,67 @@ struct SetupProfileView: View {
                         .frame(maxWidth: .infinity)
 
                         // Auth mode selector
-                        Picker("", selection: $authMode) {
-                            ForEach(AuthMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
+                        if !isRescuerMode {
+                            Picker("", selection: $authMode) {
+                                ForEach(AuthMode.allCases) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
                             }
+                            .pickerStyle(.segmented)
                         }
-                        .pickerStyle(.segmented)
+
+                        // Rescuer mode toggle
+                        HStack(spacing: DS.Spacing.sm) {
+                            Image(systemName: "shield.lefthalf.filled")
+                                .foregroundColor(isRescuerMode ? DS.Colors.warning : DS.Colors.textTertiary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Lính cứu trợ")
+                                    .font(DS.Typography.subheadline.bold())
+                                    .foregroundColor(DS.Colors.text)
+                                Text("Đăng nhập với tư cách Rescuer")
+                                    .font(DS.Typography.caption)
+                                    .foregroundColor(DS.Colors.textSecondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $isRescuerMode)
+                                .labelsHidden()
+                                .tint(DS.Colors.warning)
+                                .onChange(of: isRescuerMode) { _, on in
+                                    if on { authMode = .login }
+                                }
+                        }
+                        .padding(DS.Spacing.sm)
+                        .background(
+                            isRescuerMode
+                                ? DS.Colors.warning.opacity(0.08)
+                                : DS.Colors.surface
+                        )
+                        .overlay(Rectangle().stroke(
+                            isRescuerMode ? DS.Colors.warning : DS.Colors.border,
+                            lineWidth: DS.Border.medium
+                        ))
                         
                         // Form
-                        VStack(spacing: DS.Spacing.md) {
+                        if isRescuerMode {
+                            // Rescuer: không cần nhập gì, chỉ hiện thông tin
+                            HStack(spacing: DS.Spacing.sm) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundColor(DS.Colors.warning)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Tài khoản: rescuer")
+                                        .font(DS.Typography.subheadline.bold())
+                                        .foregroundColor(DS.Colors.text)
+                                    Text("Đăng nhập một chạm, không cần đăng ký")
+                                        .font(DS.Typography.caption)
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(DS.Spacing.sm)
+                            .background(DS.Colors.warning.opacity(0.06))
+                            .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.4), lineWidth: DS.Border.thin))
+                        } else {
+                            VStack(spacing: DS.Spacing.md) {
                             // Phone field
                             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                                 Text("SỐ ĐIỆN THOẠI")
@@ -131,22 +184,41 @@ struct SetupProfileView: View {
                                 .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
                             }
                         }
+                        } // end else (normal form fields)
                         
                         // Submit button
-                        Button { submit() } label: {
-                            HStack(spacing: DS.Spacing.sm) {
-                                if isLoading { ProgressView().tint(.white) }
-                                Text(authMode == .register ? "TẠO TÀI KHOẢN MỚI" : "ĐĂNG NHẬP")
-                                    .font(DS.Typography.headline).tracking(2)
+                        if isRescuerMode {
+                            Button { submitRescuer() } label: {
+                                HStack(spacing: DS.Spacing.sm) {
+                                    if isLoading { ProgressView().tint(.white) }
+                                    Image(systemName: "shield.lefthalf.filled")
+                                    Text("ĐĂNG NHẬP LÍNH CỨU TRỢ")
+                                        .font(DS.Typography.headline).tracking(2)
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DS.Spacing.md)
+                                .background(isLoading ? DS.Colors.textTertiary : DS.Colors.warning)
+                                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                                .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
                             }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, DS.Spacing.md)
-                            .background(isFormValid && !isLoading ? DS.Colors.accent : DS.Colors.textTertiary)
-                            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
-                            .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+                            .disabled(isLoading)
+                        } else {
+                            Button { submit() } label: {
+                                HStack(spacing: DS.Spacing.sm) {
+                                    if isLoading { ProgressView().tint(.white) }
+                                    Text(authMode == .register ? "TẠO TÀI KHOẢN MỚI" : "ĐĂNG NHẬP")
+                                        .font(DS.Typography.headline).tracking(2)
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DS.Spacing.md)
+                                .background(isFormValid && !isLoading ? DS.Colors.accent : DS.Colors.textTertiary)
+                                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                                .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+                            }
+                            .disabled(!isFormValid || isLoading)
                         }
-                        .disabled(!isFormValid || isLoading)
                     }
                     .padding(DS.Spacing.lg)
                     .background(DS.Colors.surface)
@@ -208,9 +280,9 @@ struct SetupProfileView: View {
     }
     
     private var isFormValid: Bool {
+        if isRescuerMode { return true }
         let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
         let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
-
         // Phone >= 9 digits, PIN must be exactly 6 digits
         return !trimmedPhone.isEmpty && trimmedPhone.count >= 9 && trimmedPassword.count == 6
     }
@@ -251,12 +323,28 @@ struct SetupProfileView: View {
                 switch result {
                 case .success(let response):
                     AuthSessionStore.shared.save(from: response)
-                    let displayName = response.fullName ?? response.username ?? trimmedPhone
+                    let displayName = response.displayName ?? trimmedPhone
                     userProfile.saveUser(name: displayName, phoneNumber: trimmedPhone)
                     isSetupComplete = true
                 case .failure(let error):
                     handleError(error)
                 }
+            }
+        }
+    }
+
+    private func submitRescuer() {
+        isLoading = true
+        AuthService.shared.login(username: "rescuer", phone: nil, password: "Rescuer@123") { result in
+            isLoading = false
+            switch result {
+            case .success(let response):
+                AuthSessionStore.shared.save(from: response)
+                let displayName = response.displayName ?? "Lính Cứu Trợ"
+                userProfile.saveUser(name: displayName, phoneNumber: "")
+                isSetupComplete = true
+            case .failure(let error):
+                handleError(error)
             }
         }
     }
