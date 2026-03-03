@@ -64,7 +64,7 @@ struct SOSWizardView: View {
                         .foregroundColor(DS.Colors.textSecondary)
                 }
             }
-            .alert(sentToServer ? "✅ Đã gửi lên Server" : "📡 Đã gửi qua Mesh Network", isPresented: $showSuccess) {
+            .alert(sentToServer ? "✅ Đã gửi lên Server" : "📡 Đang chờ gửi lên Server", isPresented: $showSuccess) {
                 Button("OK") {
                     dismiss()
                 }
@@ -108,7 +108,7 @@ struct SOSWizardView: View {
                             Text("GỬI SOS").font(DS.Typography.headline).tracking(2)
                         }
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(DS.Colors.text)
                     .padding(.horizontal, DS.Spacing.xl)
                     .padding(.vertical, DS.Spacing.sm)
                     .background(DS.Colors.danger)
@@ -123,7 +123,7 @@ struct SOSWizardView: View {
                         Image(systemName: "chevron.right")
                     }
                     .font(DS.Typography.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(DS.Colors.text)
                     .padding(.horizontal, DS.Spacing.lg)
                     .padding(.vertical, DS.Spacing.sm)
                     .background(formData.canProceedToNextStep ? DS.Colors.accent : DS.Colors.textTertiary)
@@ -141,16 +141,16 @@ struct SOSWizardView: View {
     
     private var successMessage: String {
         if sentToServer {
-            return "✅ Tin hiệu SOS đã được gửi trực tiếp lên server thành công."
+            return "✅ Tín hiệu SOS đã được gửi trực tiếp lên server thành công."
         } else {
-            return "📡 Không có kết nối mạng. SOS đã được broadcast qua Mesh Network – khi có thiết bị liên mạng nhận được sẽ relay lên server giúp bạn."
+            return "📡 Chưa có kết nối mạng. SOS đang ở trạng thái \"Đang gửi\" – hệ thống sẽ tự gửi lên server khi có mạng, hoặc nhờ thiết bị lân cận relay qua Mesh Network."
         }
     }
     
     private func setupAutoInfo() {
         let baseInfo = AutoCollectedInfo(
             deviceId: bridgefyManager.currentUserId?.uuidString ?? UUID().uuidString,
-            userId: UserProfile.shared.currentUser?.id.uuidString,
+            userId: AuthSessionStore.shared.session?.userId,
             userName: UserProfile.shared.currentUser?.name,
             userPhone: UserProfile.shared.currentUser?.phoneNumber,
             timestamp: Date(),
