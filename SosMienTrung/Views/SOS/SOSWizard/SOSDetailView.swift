@@ -21,12 +21,15 @@ struct SOSDetailView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                DS.Colors.background.ignoresSafeArea()
+                Color(UIColor.systemGroupedBackground).ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 20) {
                         // Header with status
                         statusHeader
+                        
+                        // Send history timeline
+                        sendHistoryCard
                         
                         // Location card
                         if savedSOS.latitude != nil && savedSOS.longitude != nil {
@@ -122,31 +125,35 @@ struct SOSDetailView: View {
     
     // MARK: - Status Header
     
+    private var currentSOS: SavedSOS {
+        SOSStorageManager.shared.getSOS(id: savedSOS.id) ?? savedSOS
+    }
+    
     private var statusHeader: some View {
         VStack(spacing: 12) {
             // Status badge
             HStack {
-                Image(systemName: savedSOS.status.icon)
+                Image(systemName: currentSOS.status.icon)
                     .font(.title2)
-                Text(savedSOS.status.title)
+                Text(currentSOS.status.title)
                     .font(DS.Typography.headline)
             }
-            .foregroundColor(savedSOS.status.color)
+            .foregroundColor(currentSOS.status.color)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .background(savedSOS.status.color.opacity(0.2))
+            .background(currentSOS.status.color.opacity(0.2))
             
             
             // Timestamps
             VStack(spacing: 4) {
-                Text("Gửi lúc: \(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                Text("Tạo lúc: \(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))")
                     .font(DS.Typography.subheadline)
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(DS.Colors.text)
                 
-                if savedSOS.lastUpdated != savedSOS.timestamp {
-                    Text("Cập nhật: \(savedSOS.lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                if currentSOS.lastUpdated != savedSOS.timestamp {
+                    Text("Cập nhật: \(currentSOS.lastUpdated.formatted(date: .abbreviated, time: .shortened))")
                         .font(DS.Typography.caption)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
             }
         }
@@ -154,6 +161,82 @@ struct SOSDetailView: View {
         .frame(maxWidth: .infinity)
         .background(DS.Colors.surface)
         
+    }
+    
+    // MARK: - Send History Card
+    
+    private var sendHistoryCard: some View {
+        let history = currentSOS.sendHistory
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundColor(DS.Colors.accent)
+                Text("Lịch sử gửi")
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
+                Spacer()
+                Text("\(history.count) sự kiện")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+            
+            if history.isEmpty {
+                Text("Chưa có lịch sử gửi")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(history.enumerated()), id: \.element.id) { index, event in
+                        HStack(alignment: .top, spacing: 12) {
+                            // Timeline đường dọc
+                            VStack(spacing: 0) {
+                                Circle()
+                                    .fill(event.type.color)
+                                    .frame(width: 10, height: 10)
+                                    .padding(.top, 5)
+                                if index < history.count - 1 {
+                                    Rectangle()
+                                        .fill(DS.Colors.border)
+                                        .frame(width: 2)
+                                        .frame(minHeight: 30)
+                                }
+                            }
+                            .frame(width: 10)
+                            
+                            // Nội dung sự kiện
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: event.type.icon)
+                                        .font(.caption)
+                                        .foregroundColor(event.type.color)
+                                    Text(event.type.title)
+                                        .font(.caption.bold())
+                                        .foregroundColor(DS.Colors.text)
+                                }
+                                
+                                Text(event.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption2)
+                                    .foregroundColor(DS.Colors.textSecondary)
+                                
+                                if let note = event.note {
+                                    Text(note)
+                                        .font(.caption2)
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                        .italic()
+                                }
+                            }
+                            .padding(.bottom, index < history.count - 1 ? 12 : 0)
+                            
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(DS.Colors.surface)
     }
     
     // MARK: - Location Card
@@ -183,7 +266,7 @@ struct SOSDetailView: View {
                 HStack {
                     Text(String(format: "%.6f, %.6f", lat, lon))
                         .font(DS.Typography.caption)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                     
                     Spacer()
                     
@@ -216,7 +299,7 @@ struct SOSDetailView: View {
                 
                 Text(type.subtitle)
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(DS.Colors.textSecondary)
             }
             
             Spacer()
@@ -275,7 +358,7 @@ struct SOSDetailView: View {
                     ForEach(Array(rescue.medicalInfoByPerson.values), id: \.personId) { info in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("Người \(info.personId)")
+                                Text(personLabel(info.personId))
                                     .font(.caption.bold())
                                     .foregroundColor(DS.Colors.text)
                                 
@@ -291,7 +374,7 @@ struct SOSDetailView: View {
                             if !info.medicalIssues.isEmpty {
                                 Text(info.medicalIssues.map { $0.title }.joined(separator: ", "))
                                     .font(DS.Typography.caption)
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(DS.Colors.textSecondary)
                             }
                         }
                         .padding(8)
@@ -320,7 +403,7 @@ struct SOSDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Nhu yếu phẩm cần:")
                             .font(DS.Typography.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(DS.Colors.text)
                         
                         FlowLayout(spacing: 8) {
                             ForEach(Array(relief.supplies), id: \.self) { supply in
@@ -366,7 +449,7 @@ struct SOSDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "text.alignleft")
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(DS.Colors.textSecondary)
                 Text("Mô tả thêm")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
@@ -374,7 +457,7 @@ struct SOSDetailView: View {
             
             Text(savedSOS.additionalDescription)
                 .font(DS.Typography.subheadline)
-                .foregroundColor(.white.opacity(0.9))
+                .foregroundColor(DS.Colors.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding()
@@ -402,9 +485,13 @@ struct SOSDetailView: View {
             }
             
             // Mark as resolved
-            if savedSOS.status != .resolved {
+            if currentSOS.status != .resolved {
                 Button {
-                    SOSStorageManager.shared.updateStatus(id: savedSOS.id, status: .resolved)
+                    SOSStorageManager.shared.updateStatusWithEvent(
+                        id: savedSOS.id,
+                        status: .resolved,
+                        event: SOSSendEvent(type: .serverAcknowledged, note: "Người dùng đánh dấu đã xử lý")
+                    )
                     dismiss()
                 } label: {
                     HStack {
@@ -433,6 +520,22 @@ struct SOSDetailView: View {
         }
     }
     
+    /// Chuyển personId ("adult_1", "child_2", "elderly_1") thành nhãn tiếng Việt
+    private func personLabel(_ personId: String) -> String {
+        let parts = personId.split(separator: "_")
+        guard parts.count == 2, let index = parts.last.flatMap({ Int($0) }) else {
+            return "Người \(personId)"
+        }
+        let typeName: String
+        switch parts.first {
+        case "adult":   typeName = "Người lớn"
+        case "child":   typeName = "Trẻ em"
+        case "elderly": typeName = "Người già"
+        default:        typeName = "Người"
+        }
+        return "\(typeName) \(index)"
+    }
+    
     private func openInMaps(lat: Double, lon: Double) {
         let urlString = "maps://?ll=\(lat),\(lon)&q=SOS%20Location"
         if let url = URL(string: urlString) {
@@ -442,13 +545,23 @@ struct SOSDetailView: View {
     
     private func resendSOS() {
         isSending = true
+        
+        // Ghi sự kiện đang thử gửi lại
+        SOSStorageManager.shared.addSendEvent(
+            id: savedSOS.id,
+            event: SOSSendEvent(type: .pendingRetry, note: "Người dùng yêu cầu gửi lại")
+        )
+        
         let formData = savedSOS.toFormData()
         
         Task {
-            _ = await bridgefyManager.sendStructuredSOS(formData)
+            let success = await bridgefyManager.sendStructuredSOS(formData)
             await MainActor.run {
                 isSending = false
-                dismiss()
+                // Không dismiss – người dùng có thể xem lịch sử cập nhật
+                if success {
+                    showResendConfirm = false
+                }
             }
         }
     }
@@ -469,7 +582,7 @@ struct DetailRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(DS.Colors.textSecondary)
                 
                 Text(value)
                     .font(DS.Typography.subheadline)
@@ -528,12 +641,11 @@ struct SOSEditView: View {
         isSending = true
         
         Task {
-            // Send as new SOS
+            // Gửi như SOS mới (tạo packet mới, tự lưu vào storage)
             _ = await bridgefyManager.sendStructuredSOS(formData)
             
-            // Update stored SOS
+            // Cập nhật nội dung của SOS cũ (giữ lịch sử) nhưng không ghi đè sendHistory
             var updated = savedSOS
-            updated.status = .sent
             updated.lastUpdated = Date()
             
             // Lưu cả relief và rescue data nếu có
@@ -550,6 +662,11 @@ struct SOSEditView: View {
             }
             
             SOSStorageManager.shared.updateSOS(updated)
+            // Ghi sự kiện "đã chỉnh sửa & gửi lại"
+            SOSStorageManager.shared.addSendEvent(
+                id: savedSOS.id,
+                event: SOSSendEvent(type: .pendingRetry, note: "Đã chỉnh sửa nội dung và gửi lại")
+            )
             
             await MainActor.run {
                 isSending = false

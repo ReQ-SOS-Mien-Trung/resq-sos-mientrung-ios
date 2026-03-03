@@ -32,7 +32,7 @@ struct Step0AutoInfoView: View {
                     
                     Text("Hệ thống đã thu thập các thông tin sau")
                         .font(DS.Typography.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
                 .padding(.top, 20)
                 
@@ -165,7 +165,7 @@ struct Step1SelectTypeView: View {
                     
                     Text("Có thể chọn 1 hoặc cả 2")
                         .font(DS.Typography.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
                 .padding(.top, 20)
                 
@@ -173,7 +173,7 @@ struct Step1SelectTypeView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Chọn nhanh:")
                         .font(DS.Typography.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
@@ -251,7 +251,7 @@ struct SharedPeopleCountSection: View {
             
             Text("Xác định ngay số người để ưu tiên xử lý")
                 .font(DS.Typography.caption)
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(DS.Colors.textSecondary)
             
             VStack(spacing: 12) {
                 PeopleCountRowNew(
@@ -282,7 +282,7 @@ struct SharedPeopleCountSection: View {
                 Spacer()
                 Text("💡 Trẻ em & người già được ưu tiên")
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(DS.Colors.textMuted)
             }
             .padding(.top, 4)
         }
@@ -302,7 +302,7 @@ struct SOSTypeCheckbox: View {
                 // Checkbox
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                     .font(.title2)
-                    .foregroundColor(isSelected ? (type == .rescue ? .red : .yellow) : .white.opacity(0.6))
+                    .foregroundColor(isSelected ? (type == .rescue ? .red : .yellow) : DS.Colors.textSecondary)
                 
                 // Icon
                 Text(type.icon)
@@ -316,7 +316,7 @@ struct SOSTypeCheckbox: View {
                     
                     Text(type.subtitle)
                         .font(DS.Typography.caption)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                         .lineLimit(2)
                 }
                 
@@ -359,7 +359,7 @@ struct Step2AReliefView: View {
                     // Show people count summary
                     Text("Hỗ trợ cho \(formData.sharedPeopleCount.total) người")
                         .font(DS.Typography.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
                 .padding(.top, 20)
                 
@@ -425,11 +425,11 @@ struct Step2BRescueView: View {
                     if injuredCount > 0 {
                         Text("Cứu hộ cho \(injuredCount) người bị thương")
                             .font(DS.Typography.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(DS.Colors.textSecondary)
                     } else {
                         Text("Chọn người cần cứu hộ bên dưới")
                             .font(DS.Typography.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(DS.Colors.textSecondary)
                     }
                 }
                 .padding(.top, 20)
@@ -547,7 +547,7 @@ struct PeopleCountSectionNew: View {
                 Spacer()
                 Text("💡 Trẻ em & người già được ưu tiên")
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(DS.Colors.textMuted)
             }
             .padding(.top, 4)
         }
@@ -565,7 +565,7 @@ struct PeopleCountRowNew: View {
             Text(icon)
             Text(title)
                 .font(DS.Typography.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(DS.Colors.text)
             
             Spacer()
             
@@ -575,7 +575,7 @@ struct PeopleCountRowNew: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundColor(count > minValue ? .white : .white.opacity(0.3))
+                        .foregroundColor(count > minValue ? DS.Colors.text : DS.Colors.textMuted)
                 }
                 .disabled(count <= minValue)
                 
@@ -651,7 +651,7 @@ struct InjuredPersonSelectionSection: View {
             
             Text("Chọn người bị thương, sau đó nhập tình trạng y tế")
                 .font(DS.Typography.caption)
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(DS.Colors.textSecondary)
             
             // Danh sách người
             ForEach(formData.rescueData.people) { person in
@@ -676,11 +676,11 @@ struct InjuredPersonSelectionSection: View {
                 } label: {
                     HStack {
                         Image(systemName: formData.rescueData.othersAreStable ? "checkmark.square.fill" : "square")
-                            .foregroundColor(formData.rescueData.othersAreStable ? .green : .white.opacity(0.6))
+                            .foregroundColor(formData.rescueData.othersAreStable ? .green : DS.Colors.textSecondary)
                         
                         Text("Những người còn lại ổn định")
                             .font(DS.Typography.caption)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(DS.Colors.text)
                     }
                 }
                 .padding(.top, 8)
@@ -715,7 +715,7 @@ struct PersonInjuredRow: View {
             Button(action: onToggle) {
                 HStack {
                     Image(systemName: isInjured ? "checkmark.square.fill" : "square")
-                        .foregroundColor(isInjured ? .red : .white.opacity(0.6))
+                        .foregroundColor(isInjured ? .red : DS.Colors.textSecondary)
                     
                     Text(person.type.icon)
                     Text(person.displayName)
@@ -766,11 +766,11 @@ struct PersonInjuredRow: View {
                         HStack {
                             Text("Nhấn để chỉnh sửa")
                                 .font(.caption2)
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(DS.Colors.textMuted)
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(DS.Colors.textMuted)
                         }
                     }
                     .padding(12)
@@ -1108,7 +1108,7 @@ struct Step3AdditionalInfoView: View {
                     
                     Text("Tùy chọn - Chỉ để bổ sung thông tin")
                         .font(DS.Typography.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DS.Colors.textSecondary)
                 }
                 .padding(.top, 20)
                 
@@ -1125,7 +1125,7 @@ struct Step3AdditionalInfoView: View {
                             Group {
                                 if formData.additionalDescription.isEmpty {
                                     Text("Ví dụ: Có 1 người lớn bị gãy chân, 2 trẻ em ổn định, đang thiếu nước uống...")
-                                        .foregroundColor(.white.opacity(0.4))
+                                        .foregroundColor(DS.Colors.textMuted)
                                         .padding(12)
                                         .allowsHitTesting(false)
                                 }
@@ -1135,7 +1135,7 @@ struct Step3AdditionalInfoView: View {
                     
                     Text("Không cần nhập lại thông tin đã chọn ở các bước trước")
                         .font(DS.Typography.caption)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(DS.Colors.textMuted)
                 }
                 .padding(.horizontal)
                 
@@ -1210,7 +1210,7 @@ struct Step4ReviewView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("🚑 Người bị thương:")
                                     .font(.caption.bold())
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(DS.Colors.text)
                                 
                                 ForEach(formData.rescueData.people.filter { 
                                     formData.rescueData.injuredPersonIds.contains($0.id) 
@@ -1311,7 +1311,7 @@ struct InjuredPersonReviewCard: View {
             if !medicalInfo.medicalIssues.isEmpty {
                 Text(medicalInfo.medicalIssues.map { "\($0.icon) \($0.title)" }.joined(separator: ", "))
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(DS.Colors.textSecondary)
             }
         }
         .padding(10)
@@ -1339,7 +1339,7 @@ struct InfoCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(DS.Colors.textSecondary)
                 
                 HStack {
                     Text(value)
@@ -1385,7 +1385,7 @@ struct BatteryDotsCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Pin")
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(DS.Colors.textSecondary)
                 
                 Text(batteryLevelText)
                     .font(DS.Typography.subheadline)
@@ -1485,7 +1485,7 @@ struct SOSTypeCard: View {
                 
                 Text(type.subtitle)
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(DS.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -1515,7 +1515,7 @@ struct SupplyCheckbox: View {
         Button(action: action) {
             HStack {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                    .foregroundColor(isSelected ? .green : .white.opacity(0.6))
+                    .foregroundColor(isSelected ? .green : DS.Colors.textSecondary)
                 
                 Text(supply.icon)
                 Text(supply.title)
@@ -1548,7 +1548,7 @@ struct SituationRadio: View {
         Button(action: action) {
             HStack {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(isSelected ? .red : .white.opacity(0.6))
+                    .foregroundColor(isSelected ? .red : DS.Colors.textSecondary)
                 
                 Text(situation.icon)
                 Text(situation.title)
@@ -1607,7 +1607,7 @@ struct MedicalIssueCheckbox: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                    .foregroundColor(isSelected ? .red : .white.opacity(0.6))
+                    .foregroundColor(isSelected ? .red : DS.Colors.textSecondary)
                     .font(DS.Typography.caption)
                 
                 Text(issue.icon)
@@ -1658,7 +1658,7 @@ struct PeopleCountSection: View {
             
             Text("💡 Trẻ em & người già sẽ được ưu tiên cao hơn")
                 .font(DS.Typography.caption)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(DS.Colors.textMuted)
         }
     }
 }
@@ -1672,7 +1672,7 @@ struct PeopleCountRow: View {
         HStack {
             Text(title)
                 .font(DS.Typography.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(DS.Colors.text)
             
             Spacer()
             
@@ -1682,7 +1682,7 @@ struct PeopleCountRow: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundColor(count > minValue ? .white : .white.opacity(0.3))
+                        .foregroundColor(count > minValue ? DS.Colors.text : DS.Colors.textMuted)
                 }
                 .disabled(count <= minValue)
                 
@@ -1719,7 +1719,7 @@ struct ReviewRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(DS.Typography.caption)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(DS.Colors.textSecondary)
                 
                 Text(value)
                     .font(DS.Typography.subheadline)

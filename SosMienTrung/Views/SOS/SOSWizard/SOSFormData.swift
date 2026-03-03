@@ -790,9 +790,12 @@ extension SOSFormData {
                 ? rescueData.otherSituationDescription 
                 : nil,
             hasInjured: needsRescueStep ? rescueData.hasInjured : nil,
-            medicalIssues: needsRescueStep && !rescueData.medicalIssues.isEmpty 
-                ? rescueData.medicalIssues.map { $0.rawValue } 
-                : nil,
+            medicalIssues: needsRescueStep ? {
+                let perPerson = rescueData.medicalInfoByPerson.values
+                    .flatMap { $0.medicalIssues }
+                    .map { $0.rawValue }
+                return perPerson.isEmpty ? nil : Array(Set(perPerson))
+            }() : nil,
             otherMedicalDescription: needsRescueStep && !rescueData.otherMedicalDescription.isEmpty 
                 ? rescueData.otherMedicalDescription 
                 : nil,

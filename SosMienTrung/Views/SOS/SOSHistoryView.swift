@@ -13,6 +13,7 @@ struct SOSHistoryView: View {
 
     @State private var showSOSForm = false
     @State private var selectedSOS: SavedSOS?
+    @State private var isSyncing = false
     
     // SOS từ storage
     private var savedSOSList: [SavedSOS] {
@@ -62,6 +63,14 @@ struct SOSHistoryView: View {
             .background(DS.Colors.background)
             .navigationBarHidden(true)
         }
+        .onAppear {
+            guard networkMonitor.isConnected else { return }
+            isSyncing = true
+            Task {
+                await SOSStorageManager.shared.fetchAndMergeFromServer()
+                await MainActor.run { isSyncing = false }
+            }
+        }
         .fullScreenCover(isPresented: $showSOSForm) {
             SOSFormView(bridgefyManager: bridgefyManager)
         }
@@ -75,7 +84,22 @@ struct SOSHistoryView: View {
         HStack(spacing: DS.Spacing.sm) {
             StatCard(icon: "arrow.up.circle.fill", value: "\(mySOS.count)", label: "Đã gửi", color: DS.Colors.danger)
             StatCard(icon: "arrow.down.circle.fill", value: "\(receivedSOS.count)", label: "Đã nhận", color: DS.Colors.info)
-            StatCard(icon: networkMonitor.isConnected ? "wifi" : "wifi.slash", value: networkMonitor.isConnected ? "Online" : "Mesh", label: "Trạng thái", color: networkMonitor.isConnected ? DS.Colors.success : DS.Colors.warning)
+            if isSyncing {
+                VStack(spacing: 4) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(height: 20)
+                    Text("Đồng bộ...")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Colors.surface)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+            } else {
+                StatCard(icon: networkMonitor.isConnected ? "wifi" : "wifi.slash", value: networkMonitor.isConnected ? "Online" : "Mesh", label: "Trạng thái", color: networkMonitor.isConnected ? DS.Colors.success : DS.Colors.warning)
+            }
         }
         .padding(.horizontal, DS.Spacing.md)
         .padding(.vertical, DS.Spacing.sm)
@@ -290,67 +314,157 @@ struct StatCard: View {
 
 // MARK: - SOS History Card
 struct SOSHistoryCard: View {
-    
+
     let message: Message
     let isMine: Bool
-    
+
+    @ObservedObject private var gateway = ServerRequestGateway.shared
+
+    /// 4 ký tự cuối của senderId (ẩn danh hoá)
+    private var senderSuffix: String {
+        let raw = message.senderId.uuidString.replacingOccurrences(of: "-", with: "")
+        return String(raw.suffix(4)).uppercased()
+    }
+
+    /// Kiểm tra server đã xác nhận packet này chưa (message.id == packetId)
+    private var isServerConfirmed: Bool {
+        gateway.isServerConfirmed(message.id.uuidString)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header
-            HStack {
-                Image(systemName: isMine ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                    .foregroundColor(isMine ? .red : .blue)
-                
+        VStack(alignment: .leading, spacing: 0) {
+
+            // ── Header ──────────────────────────────────────
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.12))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.blue)
+                }
+
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isMine ? "Đã gửi" : "Nhận từ: \(message.senderName.isEmpty ? "Không rõ" : message.senderName)")
-                        .font(.subheadline.bold())
-                        .foregroundColor(DS.Colors.text)
-                    
+                    HStack(spacing: 6) {
+                        Text("Thiết bị ···\(senderSuffix)")
+                            .font(.subheadline.bold())
+                            .foregroundColor(DS.Colors.text)
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
                     Text(message.timestamp.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
-                
+
                 Spacer()
-                
-                // Status badge
-                StatusBadge(status: .sent)
+
+                // Badge trạng thái
+                serverStatusBadge
             }
-            
-            // Message content
-            Text(message.text)
-                .font(.subheadline)
-                .foregroundColor(DS.Colors.text)
-                .lineLimit(3)
-            
-            // Location if available
+            .padding(.horizontal, DS.Spacing.sm)
+            .padding(.top, DS.Spacing.sm)
+
+            Divider()
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, 8)
+
+            // ── Lịch sử xử lý (ẩn nội dung SOS) ────────────
+            VStack(alignment: .leading, spacing: 6) {
+
+                historyRow(
+                    icon: "dot.radiowaves.left.and.right",
+                    color: .purple,
+                    label: "Nhận qua Mesh Network"
+                )
+
+                historyRow(
+                    icon: isServerConfirmed ? "checkmark.icloud.fill" : "icloud.slash",
+                    color: isServerConfirmed ? .green : .orange,
+                    label: isServerConfirmed
+                        ? "Đã relay lên server thành công"
+                        : "Chưa xác nhận lên server"
+                )
+            }
+            .padding(.horizontal, DS.Spacing.sm)
+            .padding(.bottom, 8)
+
+            // ── Vị trí ───────────────────────────────────────
             if let lat = message.latitude, let long = message.longitude {
+                Divider()
+                    .padding(.horizontal, DS.Spacing.sm)
+
                 HStack(spacing: 4) {
                     Image(systemName: "location.fill")
                         .font(.caption)
                         .foregroundColor(.blue)
-                    
                     Text(String(format: "%.4f, %.4f", lat, long))
-                        .font(.caption)
+                        .font(.caption.monospacedDigit())
                         .foregroundColor(DS.Colors.textSecondary)
-                    
                     Spacer()
-                    
                     Button {
                         openInMaps(lat: lat, long: long)
                     } label: {
-                        Text("Xem bản đồ")
-                            .font(.caption.bold())
-                            .foregroundColor(.blue)
+                        HStack(spacing: 3) {
+                            Image(systemName: "map")
+                                .font(.caption2)
+                            Text("Bản đồ")
+                                .font(.caption.bold())
+                        }
+                        .foregroundColor(.blue)
                     }
                 }
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, 8)
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.08))
-        .cornerRadius(12)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
     }
-    
+
+    @ViewBuilder
+    private var serverStatusBadge: some View {
+        if isServerConfirmed {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.icloud.fill")
+                    .font(.system(size: 9))
+                Text("Server OK")
+                    .font(.caption2.bold())
+            }
+            .foregroundColor(.green)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.green.opacity(0.12))
+            .cornerRadius(6)
+        } else {
+            HStack(spacing: 4) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 9))
+                Text("Mesh relay")
+                    .font(.caption2.bold())
+            }
+            .foregroundColor(.purple)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.purple.opacity(0.12))
+            .cornerRadius(6)
+        }
+    }
+
+    private func historyRow(icon: String, color: Color, label: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundColor(color)
+                .frame(width: 16)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+    }
+
     private func openInMaps(lat: Double, long: Double) {
         let urlString = "maps://?ll=\(lat),\(long)&q=SOS%20Location"
         if let url = URL(string: urlString) {
@@ -359,43 +473,7 @@ struct SOSHistoryCard: View {
     }
 }
 
-// MARK: - Status Badge
-enum SOSStatus {
-    case sent
-    case delivered
-    case relayed
-    
-    var text: String {
-        switch self {
-        case .sent: return "Đã gửi"
-        case .delivered: return "Đã nhận"
-        case .relayed: return "Đã relay"
-        }
-    }
-    
-    var color: Color {
-        switch self {
-        case .sent: return .orange
-        case .delivered: return .green
-        case .relayed: return .blue
-        }
-    }
-}
-
-struct StatusBadge: View {
-    let status: SOSStatus
-    
-    var body: some View {
-        Text(status.text)
-            .font(.caption2.bold())
-            .foregroundColor(status.color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(status.color.opacity(0.2))
-            .cornerRadius(8)
-    }
-}
-
+// MARK: - Preview
 #Preview {
     SOSHistoryView(bridgefyManager: BridgefyNetworkManager.shared)
 }
