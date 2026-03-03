@@ -68,17 +68,9 @@ struct ResQGridButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: DS.Spacing.xs) {
-                // Icon — square, sharp
-                ZStack {
-                    Rectangle()
-                        .fill(accentColor.opacity(0.1))
-                        .frame(width: 48, height: 48)
-                        .overlay(Rectangle().stroke(accentColor.opacity(0.3), lineWidth: DS.Border.thin))
-
-                    Image(systemName: icon)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(accentColor)
-                }
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(accentColor)
 
                 Text(title)
                     .font(DS.Typography.caption)
@@ -90,9 +82,8 @@ struct ResQGridButton: View {
             .frame(maxWidth: .infinity)
             .frame(height: 110)
             .sharpCard(
-                borderWidth: DS.Border.thin,
                 shadow: DS.Shadow.small,
-                backgroundColor: DS.Colors.background
+                backgroundColor: accentColor.opacity(0.08)
             )
         }
         .buttonStyle(.plain)
@@ -114,7 +105,7 @@ struct ResQBadge: View {
             .padding(.horizontal, DS.Spacing.xs)
             .padding(.vertical, DS.Spacing.xxxs)
             .background(color)
-            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xs))
     }
 }
 
@@ -139,7 +130,8 @@ struct ResQTextField: View {
         }
         .padding(DS.Spacing.sm)
         .background(DS.Colors.background)
-        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.sm).stroke(DS.Colors.borderSubtle, lineWidth: DS.Border.thin))
     }
 }
 
@@ -221,7 +213,6 @@ struct ResQStatCard: View {
         .frame(maxWidth: .infinity)
         .padding(DS.Spacing.md)
         .sharpCard(
-            borderWidth: DS.Border.thin,
             shadow: DS.Shadow.small,
             backgroundColor: DS.Colors.background
         )
@@ -252,10 +243,7 @@ struct ResQMessageBubble: View {
             .padding(DS.Spacing.sm)
             .background(isFromMe ? DS.Colors.info : DS.Colors.surface)
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.sm)
-                    .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
-            )
+            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 1)
 
             if !isFromMe { Spacer(minLength: 60) }
         }

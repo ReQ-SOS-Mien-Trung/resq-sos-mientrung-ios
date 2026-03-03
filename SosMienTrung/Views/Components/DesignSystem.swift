@@ -47,7 +47,7 @@ enum DS {
         // MARK: Semantic — battery-saving overrides to OLED black
         /// Primary background
         static var background: Color {
-            isDarkMode ? Color(hex: "000000") : Color(UIColor.systemBackground)
+            isDarkMode ? Color(hex: "000000") : Color(hex: "FCFCFC")
         }
 
         /// Grouped / card surface
@@ -78,7 +78,7 @@ enum DS {
 
         /// Border — strong
         static var border: Color {
-            isDarkMode ? Color(hex: "444444") : Color(UIColor.label)
+            isDarkMode ? Color(hex: "444444") : Color(hex: "D1D5DB")
         }
 
         /// Border — subtle
@@ -147,12 +147,12 @@ enum DS {
         static let lg: CGFloat = 10
     }
 
-    // MARK: - Shadow (hard, no blur — Neo-Brutalist)
+    // MARK: - Shadow (soft, blur-based)
     enum Shadow {
         static let none = ShadowStyle(color: .clear, radius: 0, x: 0, y: 0)
-        static let small = ShadowStyle(color: .black.opacity(0.15), radius: 0, x: 2, y: 2)
-        static let medium = ShadowStyle(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
-        static let large = ShadowStyle(color: .black.opacity(0.25), radius: 0, x: 4, y: 4)
+        static let small = ShadowStyle(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+        static let medium = ShadowStyle(color: .black.opacity(0.08), radius: 8, x: 0, y: 3)
+        static let large = ShadowStyle(color: .black.opacity(0.12), radius: 14, x: 0, y: 6)
     }
 }
 
@@ -193,13 +193,13 @@ extension Color {
 
 // MARK: - View Modifiers
 
-/// Sharp card with border + hard shadow
+/// Card with subtle border + soft shadow
 struct SharpCardModifier: ViewModifier {
-    var borderColor: Color = DS.Colors.border
-    var borderWidth: CGFloat = DS.Border.medium
+    var borderColor: Color = DS.Colors.borderSubtle
+    var borderWidth: CGFloat = DS.Border.thin
     var shadow: ShadowStyle = DS.Shadow.medium
     var backgroundColor: Color = DS.Colors.surface
-    var radius: CGFloat = DS.Radius.none
+    var radius: CGFloat = DS.Radius.sm
 
     func body(content: Content) -> some View {
         content
@@ -213,12 +213,12 @@ struct SharpCardModifier: ViewModifier {
     }
 }
 
-/// Sharp button style
+/// Filled button style — no border
 struct SharpButtonModifier: ViewModifier {
     var color: Color = DS.Colors.accent
     var textColor: Color = .white
-    var borderColor: Color = DS.Colors.border
-    var borderWidth: CGFloat = DS.Border.medium
+    var borderColor: Color = Color.clear
+    var borderWidth: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
@@ -227,13 +227,11 @@ struct SharpButtonModifier: ViewModifier {
             .padding(.horizontal, DS.Spacing.lg)
             .padding(.vertical, DS.Spacing.sm)
             .background(color)
-            .clipShape(Rectangle())
-            .overlay(Rectangle().stroke(borderColor, lineWidth: borderWidth))
-            .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
     }
 }
 
-/// Outline button style
+/// Outline button style — subtle border
 struct SharpOutlineButtonModifier: ViewModifier {
     var borderColor: Color = DS.Colors.border
     var textColor: Color = DS.Colors.text
@@ -245,7 +243,7 @@ struct SharpOutlineButtonModifier: ViewModifier {
             .padding(.horizontal, DS.Spacing.lg)
             .padding(.vertical, DS.Spacing.sm)
             .background(Color.clear)
-            .overlay(Rectangle().stroke(borderColor, lineWidth: DS.Border.medium))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
     }
 }
 
@@ -272,8 +270,8 @@ struct SectionHeaderModifier: ViewModifier {
                 .textCase(.uppercase)
                 .foregroundColor(DS.Colors.textSecondary)
             Rectangle()
-                .fill(DS.Colors.border)
-                .frame(height: DS.Border.medium)
+                .fill(DS.Colors.divider)
+                .frame(height: DS.Border.thin)
         }
     }
 }
@@ -292,13 +290,13 @@ struct EditorialDivider: View {
 
 // MARK: - View Extensions
 extension View {
-    /// Apply sharp card styling (border + hard shadow)
+    /// Apply card styling (subtle border + soft shadow)
     func sharpCard(
-        borderColor: Color = DS.Colors.border,
-        borderWidth: CGFloat = DS.Border.medium,
+        borderColor: Color = DS.Colors.borderSubtle,
+        borderWidth: CGFloat = DS.Border.thin,
         shadow: ShadowStyle = DS.Shadow.medium,
         backgroundColor: Color = DS.Colors.surface,
-        radius: CGFloat = DS.Radius.none
+        radius: CGFloat = DS.Radius.sm
     ) -> some View {
         modifier(SharpCardModifier(
             borderColor: borderColor,

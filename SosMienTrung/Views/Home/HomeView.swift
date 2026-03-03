@@ -93,13 +93,13 @@ struct HomeView: View {
     // MARK: - Header
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            EyebrowLabel(text: "TRẠM CỨU TRỢ")
 
-            Text("ResQ SOS")
-                .font(DS.Typography.largeTitle)
-                .foregroundColor(DS.Colors.text)
+            Image("resq_typo_logo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 64)
 
-            EditorialDivider(height: DS.Border.thick)
+            EditorialDivider(height: DS.Border.thin)
         }
     }
 
@@ -138,8 +138,7 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, DS.Spacing.md)
             .background(DS.Colors.danger)
-            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
-            .shadow(color: .black.opacity(0.25), radius: 0, x: 4, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
         }
     }
 

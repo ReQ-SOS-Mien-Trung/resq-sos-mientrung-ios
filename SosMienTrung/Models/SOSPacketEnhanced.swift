@@ -54,6 +54,7 @@ struct SOSPacketEnhanced: Codable {
         let othersAreStable: Bool?
         
         // Common
+        let canMove: Bool?
         let peopleCount: PeopleCountData?
         let additionalDescription: String?
         
@@ -66,6 +67,7 @@ struct SOSPacketEnhanced: Codable {
             case medicalIssues = "medical_issues"
             case otherMedicalDescription = "other_medical_description"
             case othersAreStable = "others_are_stable"
+            case canMove = "can_move"
             case peopleCount = "people_count"
             case additionalDescription = "additional_description"
         }
@@ -88,6 +90,8 @@ struct SOSPacketEnhanced: Codable {
     }
     
     struct SenderInfo: Codable {
+        let deviceId: String?
+        let userId: String?
         let userName: String?
         let userPhone: String?
         let batteryLevel: Int?
@@ -95,6 +99,8 @@ struct SOSPacketEnhanced: Codable {
         let isOnline: Bool
         
         enum CodingKeys: String, CodingKey {
+            case deviceId = "device_id"
+            case userId = "user_id"
             case userName = "user_name"
             case userPhone = "user_phone"
             case batteryLevel = "battery_level"
@@ -144,13 +150,19 @@ struct SOSPacketEnhanced: Codable {
         }
         
         // Rescue data - nếu có chọn rescue
+        var canMove: Bool? = nil
         if formData.needsRescueStep {
             situation = formData.rescueData.situation?.rawValue
             otherSituationDescription = formData.rescueData.otherSituationDescription.isEmpty ? nil : formData.rescueData.otherSituationDescription
             hasInjured = formData.rescueData.hasInjured
-            medicalIssues = formData.rescueData.medicalIssues.isEmpty ? nil : formData.rescueData.medicalIssues.map { $0.rawValue }
+            // Collect medical issues từ per-person data (new approach)
+            let allMedicalIssues = formData.rescueData.medicalInfoByPerson.values
+                .flatMap { $0.medicalIssues }
+                .map { $0.rawValue }
+            medicalIssues = allMedicalIssues.isEmpty ? nil : Array(Set(allMedicalIssues))
             otherMedicalDescription = formData.rescueData.otherMedicalDescription.isEmpty ? nil : formData.rescueData.otherMedicalDescription
             othersAreStable = formData.rescueData.othersAreStable
+            canMove = formData.rescueData.situation != .cannotMove
         }
         
         self.structuredData = StructuredData(
@@ -162,6 +174,7 @@ struct SOSPacketEnhanced: Codable {
             medicalIssues: medicalIssues,
             otherMedicalDescription: otherMedicalDescription,
             othersAreStable: othersAreStable,
+            canMove: canMove,
             peopleCount: peopleCount,
             additionalDescription: formData.additionalDescription.isEmpty ? nil : formData.additionalDescription
         )
@@ -169,6 +182,8 @@ struct SOSPacketEnhanced: Codable {
         // Build sender info
         if let autoInfo = formData.autoInfo {
             self.senderInfo = SenderInfo(
+                deviceId: autoInfo.deviceId,
+                userId: autoInfo.userId,
                 userName: autoInfo.userName,
                 userPhone: autoInfo.userPhone,
                 batteryLevel: autoInfo.batteryLevel,
@@ -221,7 +236,7 @@ struct SOSPacketEnhanced: Codable {
                 medicalIssues: sd.medicalIssues,
                 otherMedicalDescription: sd.otherMedicalDescription,
                 othersAreStable: sd.othersAreStable,
-                canMove: nil,
+                canMove: sd.canMove,
                 needMedical: sd.hasInjured,
                 supplies: sd.supplies,
                 otherSupplyDescription: sd.otherSupplyDescription,
@@ -236,8 +251,8 @@ struct SOSPacketEnhanced: Codable {
         let sosSenderInfo: SOSSenderInfo?
         if let si = senderInfo {
             sosSenderInfo = SOSSenderInfo(
-                deviceId: nil,
-                userId: nil,
+                deviceId: si.deviceId ?? originId,
+                userId: si.userId,
                 userName: si.userName,
                 userPhone: si.userPhone,
                 batteryLevel: si.batteryLevel,
