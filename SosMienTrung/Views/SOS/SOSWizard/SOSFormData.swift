@@ -112,56 +112,193 @@ enum RescueSituation: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Vấn đề y tế
-enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
-    case bleeding = "BLEEDING"
-    case fracture = "FRACTURE"
-    case unconscious = "UNCONSCIOUS"
-    case breathingDifficulty = "BREATHING_DIFFICULTY"
-    case chronicDisease = "CHRONIC_DISEASE"
-    case burns = "BURNS"
-    case pregnant = "PREGNANT"
+// MARK: - Nhóm vấn đề y tế
+
+enum MedicalIssueCategory: String, CaseIterable, Identifiable {
+    case injury = "INJURY"
+    case danger = "DANGER"
+    case special = "SPECIAL"
     case other = "OTHER"
     
     var id: String { rawValue }
     
     var title: String {
         switch self {
-        case .bleeding: return "Chảy máu"
-        case .fracture: return "Gãy xương"
-        case .unconscious: return "Bất tỉnh"
-        case .breathingDifficulty: return "Khó thở"
-        case .chronicDisease: return "Bệnh nền"
-        case .burns: return "Bỏng"
-        case .pregnant: return "Có bầu"
+        case .injury: return "Chấn thương"
+        case .danger: return "Tình trạng nguy hiểm"
+        case .special: return "Tình trạng đặc thù"
         case .other: return "Khác"
+        }
+    }
+}
+
+/// Vấn đề y tế — phân loại theo độ tuổi
+enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
+    // --- Chấn thương (chung) ---
+    case bleeding          = "BLEEDING"
+    case severelyBleeding  = "SEVERELY_BLEEDING"
+    case fracture          = "FRACTURE"
+    case headInjury        = "HEAD_INJURY"
+    case burns             = "BURNS"
+    
+    // --- Tình trạng nguy hiểm (chung) ---
+    case unconscious       = "UNCONSCIOUS"
+    case breathingDifficulty = "BREATHING_DIFFICULTY"
+    case chestPainStroke   = "CHEST_PAIN_STROKE"
+    case cannotMove        = "CANNOT_MOVE"
+    case drowning          = "DROWNING"
+    
+    // --- Trẻ em đặc thù ---
+    case highFever         = "HIGH_FEVER"
+    case dehydration       = "DEHYDRATION"
+    case infantNeedsMilk   = "INFANT_NEEDS_MILK"
+    case lostParent        = "LOST_PARENT"
+    
+    // --- Người già đặc thù ---
+    case chronicDisease    = "CHRONIC_DISEASE"
+    case confusion         = "CONFUSION"
+    case needsMedicalDevice = "NEEDS_MEDICAL_DEVICE"
+    
+    // --- Khác ---
+    case other             = "OTHER"
+    
+    var id: String { rawValue }
+    
+    var title: String {
+        switch self {
+        case .bleeding:            return "Chảy máu"
+        case .severelyBleeding:    return "Chảy máu nặng"
+        case .fracture:            return "Gãy xương"
+        case .headInjury:          return "Chấn thương đầu"
+        case .burns:               return "Bỏng"
+        case .unconscious:         return "Bất tỉnh"
+        case .breathingDifficulty: return "Khó thở"
+        case .chestPainStroke:     return "Đau ngực / nghi đột quỵ"
+        case .cannotMove:          return "Không thể di chuyển"
+        case .drowning:            return "Đuối nước"
+        case .highFever:           return "Sốt cao"
+        case .dehydration:         return "Mất nước"
+        case .infantNeedsMilk:     return "Trẻ sơ sinh cần sữa"
+        case .lostParent:          return "Lạc cha mẹ"
+        case .chronicDisease:      return "Cần thuốc bệnh nền"
+        case .confusion:           return "Lú lẫn / mất phương hướng"
+        case .needsMedicalDevice:  return "Cần thiết bị y tế"
+        case .other:               return "Khác"
         }
     }
     
     var icon: String {
         switch self {
-        case .bleeding: return "🩸"
-        case .fracture: return "🦴"
-        case .unconscious: return "😵"
+        case .bleeding:            return "🩸"
+        case .severelyBleeding:    return "🩸"
+        case .fracture:            return "🦴"
+        case .headInjury:          return "🤕"
+        case .burns:               return "🔥"
+        case .unconscious:         return "😵"
         case .breathingDifficulty: return "😮‍💨"
-        case .chronicDisease: return "💉"
-        case .burns: return "🔥"
-        case .pregnant: return "🤰"
-        case .other: return "🏥"
+        case .chestPainStroke:     return "💔"
+        case .cannotMove:          return "🚶"
+        case .drowning:            return "🌊"
+        case .highFever:           return "🤒"
+        case .dehydration:         return "💧"
+        case .infantNeedsMilk:     return "🍼"
+        case .lostParent:          return "🧸"
+        case .chronicDisease:      return "💊"
+        case .confusion:           return "🧠"
+        case .needsMedicalDevice:  return "🩺"
+        case .other:               return "🏥"
         }
     }
     
     /// Mức độ nghiêm trọng (dùng cho priority)
     var severity: Int {
         switch self {
-        case .unconscious: return 5
-        case .breathingDifficulty: return 5
-        case .bleeding: return 4
-        case .burns: return 4
-        case .pregnant: return 4
-        case .fracture: return 3
-        case .chronicDisease: return 2
-        case .other: return 1
+        case .unconscious:          return 5
+        case .breathingDifficulty:  return 5
+        case .chestPainStroke:      return 5
+        case .drowning:             return 5
+        case .severelyBleeding:     return 4
+        case .bleeding:             return 4
+        case .burns:                return 4
+        case .headInjury:           return 4
+        case .cannotMove:           return 4
+        case .highFever:            return 3
+        case .dehydration:          return 3
+        case .fracture:             return 3
+        case .infantNeedsMilk:      return 3
+        case .lostParent:           return 3
+        case .chronicDisease:       return 2
+        case .confusion:            return 2
+        case .needsMedicalDevice:   return 2
+        case .other:                return 1
+        }
+    }
+    
+    /// Nhóm (category) của issue
+    var category: MedicalIssueCategory {
+        switch self {
+        case .bleeding, .severelyBleeding, .fracture, .headInjury, .burns:
+            return .injury
+        case .unconscious, .breathingDifficulty, .chestPainStroke, .cannotMove, .drowning:
+            return .danger
+        case .highFever, .dehydration, .infantNeedsMilk, .lostParent,
+             .chronicDisease, .confusion, .needsMedicalDevice:
+            return .special
+        case .other:
+            return .other
+        }
+    }
+    
+    // MARK: Issues theo loại người
+    
+    /// Trả về danh sách issue phù hợp theo PersonType, gom theo category
+    static func groupedIssues(for personType: Person.PersonType) -> [(category: MedicalIssueCategory, issues: [MedicalIssue])] {
+        let flat = issuesForPersonType(personType)
+        // Giữ thứ tự category: injury → danger → special → other
+        var result: [(category: MedicalIssueCategory, issues: [MedicalIssue])] = []
+        for cat in MedicalIssueCategory.allCases {
+            let matching = flat.filter { $0.category == cat }
+            if !matching.isEmpty {
+                result.append((category: cat, issues: matching))
+            }
+        }
+        return result
+    }
+    
+    /// Danh sách phẳng issue cho mỗi PersonType
+    static func issuesForPersonType(_ type: Person.PersonType) -> [MedicalIssue] {
+        switch type {
+        case .adult:
+            return [
+                // Chấn thương
+                .severelyBleeding, .fracture, .headInjury,
+                // Nguy hiểm
+                .unconscious, .breathingDifficulty, .chestPainStroke, .cannotMove, .drowning,
+                // Khác
+                .chronicDisease, .other
+            ]
+        case .child:
+            return [
+                // Chấn thương
+                .bleeding, .fracture,
+                // Nguy hiểm
+                .unconscious, .breathingDifficulty, .highFever, .dehydration, .drowning,
+                // Đặc thù
+                .infantNeedsMilk, .lostParent,
+                // Khác
+                .other
+            ]
+        case .elderly:
+            return [
+                // Chấn thương
+                .fracture, .bleeding, .burns,
+                // Nguy hiểm
+                .unconscious, .breathingDifficulty, .chestPainStroke, .cannotMove, .drowning,
+                // Đặc thù
+                .chronicDisease, .confusion, .needsMedicalDevice,
+                // Khác
+                .other
+            ]
         }
     }
 }
@@ -223,9 +360,10 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
     let id: String
     let type: PersonType
     let index: Int
+    var customName: String = ""
     
     var displayName: String {
-        "\(type.title) \(index)"
+        customName.isEmpty ? "\(type.title) \(index)" : customName
     }
     
     enum PersonType: String, Codable {
@@ -341,25 +479,34 @@ struct RescueData: Codable, Equatable {
     
     /// Tạo danh sách người từ peopleCount
     mutating func generatePeople() {
+        // Lưu customName hiện có để khôi phục sau khi tạo lại
+        let existingNames = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0.customName) })
+        
         var newPeople: [Person] = []
         
         // Tạo người lớn (luôn ít nhất 1)
         let adultCount = max(1, peopleCount.adults)
         for i in 1...adultCount {
-            newPeople.append(Person(id: "adult_\(i)", type: .adult, index: i))
+            var person = Person(id: "adult_\(i)", type: .adult, index: i)
+            person.customName = existingNames[person.id] ?? ""
+            newPeople.append(person)
         }
         
         // Tạo trẻ em
         if peopleCount.children > 0 {
             for i in 1...peopleCount.children {
-                newPeople.append(Person(id: "child_\(i)", type: .child, index: i))
+                var person = Person(id: "child_\(i)", type: .child, index: i)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
             }
         }
         
         // Tạo người già
         if peopleCount.elderly > 0 {
             for i in 1...peopleCount.elderly {
-                newPeople.append(Person(id: "elderly_\(i)", type: .elderly, index: i))
+                var person = Person(id: "elderly_\(i)", type: .elderly, index: i)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
             }
         }
         
@@ -631,7 +778,13 @@ class SOSFormData {
                     if let person = rescueData.people.first(where: { $0.id == personId }),
                        let medicalInfo = rescueData.medicalInfoByPerson[personId] {
                         let issues = medicalInfo.medicalIssues.map { $0.title }.joined(separator: ", ")
-                        injuredInfo.append("\(person.displayName): \(issues) (\(medicalInfo.severity.title))")
+                        let nameLabel: String
+                        if person.customName.isEmpty {
+                            nameLabel = person.displayName
+                        } else {
+                            nameLabel = "\(person.type.title) \(person.index): \(person.customName)"
+                        }
+                        injuredInfo.append("\(nameLabel) - \(issues) (\(medicalInfo.severity.title))")
                     }
                 }
                 if !injuredInfo.isEmpty {
@@ -802,6 +955,23 @@ extension SOSFormData {
             othersAreStable: needsRescueStep ? rescueData.othersAreStable : nil,
             canMove: needsRescueStep ? (rescueData.situation != .cannotMove) : nil,
             needMedical: needsRescueStep ? rescueData.hasInjured : nil,
+            injuredPersons: needsRescueStep && !rescueData.injuredPersonIds.isEmpty ? {
+                var persons: [SOSInjuredPerson] = []
+                for personId in rescueData.injuredPersonIds {
+                    if let person = rescueData.people.first(where: { $0.id == personId }),
+                       let info = rescueData.medicalInfoByPerson[personId] {
+                        persons.append(SOSInjuredPerson(
+                            personType: person.type.rawValue,
+                            index: person.index,
+                            name: person.displayName,
+                            customName: person.customName.isEmpty ? nil : person.customName,
+                            medicalIssues: info.medicalIssues.map { $0.rawValue },
+                            severity: info.severity.rawValue
+                        ))
+                    }
+                }
+                return persons.isEmpty ? nil : persons
+            }() : nil,
             
             // Relief fields
             supplies: needsReliefStep && !reliefData.supplies.isEmpty 

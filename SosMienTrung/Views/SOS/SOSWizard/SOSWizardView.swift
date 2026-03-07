@@ -11,12 +11,19 @@ import CoreLocation
 struct SOSWizardView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @ObservedObject var networkMonitor = NetworkMonitor.shared
+    @ObservedObject var locationManager: LocationManager
     @Environment(\.dismiss) var dismiss
     
     @State private var formData = SOSFormData()
     @State private var isSending = false
     @State private var showSuccess = false
     @State private var sentToServer = false
+    @State private var showLocationRequiredAlert = false
+    
+    init(bridgefyManager: BridgefyNetworkManager) {
+        self.bridgefyManager = bridgefyManager
+        self.locationManager = bridgefyManager.locationManager
+    }
     
     var body: some View {
         NavigationStack {
@@ -71,10 +78,29 @@ struct SOSWizardView: View {
             } message: {
                 Text(successMessage)
             }
+            .alert("⚠️ Chưa có vị trí", isPresented: $showLocationRequiredAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Hệ thống chưa lấy được vị trí GPS. Vui lòng đợi hoặc kiểm tra quyền truy cập vị trí trong Cài đặt.")
+            }
             .onAppear {
                 // Enable battery monitoring sớm để có thời gian cập nhật
                 UIDevice.current.isBatteryMonitoringEnabled = true
                 setupAutoInfo()
+                // Bắt đầu cập nhật vị trí liên tục
+                locationManager.startContinuousUpdates()
+            }
+            .onDisappear {
+                // Dừng cập nhật vị trí khi đóng form
+                locationManager.stopContinuousUpdates()
+            }
+            .onChange(of: locationManager.currentLocation) { _, newLocation in
+                // Tự động cập nhật autoInfo khi vị trí thay đổi
+                updateAutoInfoWithLocation(newLocation)
+            }
+            .onChange(of: networkMonitor.isConnected) { _, _ in
+                // Cập nhật khi trạng thái mạng thay đổi
+                updateAutoInfoWithLocation(locationManager.currentLocation)
             }
         }
     }
@@ -115,7 +141,8 @@ struct SOSWizardView: View {
                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
                     .shadow(color: .black.opacity(0.25), radius: 0, x: 3, y: 3)
                 }
-                .disabled(isSending)
+                .disabled(isSending || !locationManager.hasValidLocation)
+                .opacity(locationManager.hasValidLocation ? 1.0 : 0.5)
             } else {
                 Button { formData.goToNextStep() } label: {
                     HStack {
@@ -148,37 +175,41 @@ struct SOSWizardView: View {
     }
     
     private func setupAutoInfo() {
-        let baseInfo = AutoCollectedInfo(
-            deviceId: bridgefyManager.currentUserId?.uuidString ?? UUID().uuidString,
+        let location = locationManager.currentLocation
+        formData.autoInfo = AutoCollectedInfo(
+            deviceId: bridgefyManager.currentUserId?.uuidString
+                ?? UIDevice.current.identifierForVendor?.uuidString
+                ?? UUID().uuidString,
             userId: AuthSessionStore.shared.session?.userId,
             userName: UserProfile.shared.currentUser?.name,
             userPhone: UserProfile.shared.currentUser?.phoneNumber,
             timestamp: Date(),
-            latitude: nil,
-            longitude: nil,
-            accuracy: nil,
+            latitude: location?.coordinate.latitude,
+            longitude: location?.coordinate.longitude,
+            accuracy: location?.horizontalAccuracy,
             isOnline: networkMonitor.isConnected,
             batteryLevel: getBatteryLevel()
         )
-        formData.autoInfo = baseInfo
-
-        bridgefyManager.locationManager.requestLocation { location in
-            DispatchQueue.main.async {
-                let accuracy = location?.horizontalAccuracy
-                self.formData.autoInfo = AutoCollectedInfo(
-                    deviceId: baseInfo.deviceId,
-                    userId: baseInfo.userId,
-                    userName: baseInfo.userName,
-                    userPhone: baseInfo.userPhone,
-                    timestamp: Date(),
-                    latitude: location?.coordinate.latitude,
-                    longitude: location?.coordinate.longitude,
-                    accuracy: accuracy,
-                    isOnline: self.networkMonitor.isConnected,
-                    batteryLevel: self.getBatteryLevel()
-                )
-            }
+    }
+    
+    /// Cập nhật autoInfo mỗi khi vị trí hoặc mạng thay đổi
+    private func updateAutoInfoWithLocation(_ location: CLLocation?) {
+        guard let info = formData.autoInfo else {
+            setupAutoInfo()
+            return
         }
+        formData.autoInfo = AutoCollectedInfo(
+            deviceId: info.deviceId,
+            userId: info.userId,
+            userName: info.userName,
+            userPhone: info.userPhone,
+            timestamp: Date(),
+            latitude: location?.coordinate.latitude ?? info.latitude,
+            longitude: location?.coordinate.longitude ?? info.longitude,
+            accuracy: location?.horizontalAccuracy ?? info.accuracy,
+            isOnline: networkMonitor.isConnected,
+            batteryLevel: getBatteryLevel()
+        )
     }
     
     private func getBatteryLevel() -> Int? {
@@ -197,6 +228,11 @@ struct SOSWizardView: View {
     }
     
     private func sendSOS() {
+        // Bắt buộc phải có vị trí
+        guard formData.autoInfo?.latitude != nil, formData.autoInfo?.longitude != nil else {
+            showLocationRequiredAlert = true
+            return
+        }
         guard formData.canSendMinimalSOS else { return }
         isSending = true
         

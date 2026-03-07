@@ -669,8 +669,9 @@ struct InjuredPersonSelectionSection: View {
                 )
             }
             
-            // Checkbox: những người còn lại ổn định
-            if !formData.rescueData.injuredPersonIds.isEmpty {
+            // Checkbox: những người còn lại ổn định (chỉ hiện khi còn người chưa bị thương)
+            if !formData.rescueData.injuredPersonIds.isEmpty &&
+               formData.rescueData.injuredPersonIds.count < formData.rescueData.people.count {
                 Button {
                     formData.rescueData.othersAreStable.toggle()
                 } label: {
@@ -697,6 +698,10 @@ struct InjuredPersonSelectionSection: View {
             formData.rescueData.injuredPersonIds.insert(person.id)
             // Mở form y tế ngay
             selectedPersonForMedical = person
+        }
+        // Reset nếu tất cả đều bị thương
+        if formData.rescueData.injuredPersonIds.count >= formData.rescueData.people.count {
+            formData.rescueData.othersAreStable = false
         }
     }
 }
@@ -845,6 +850,7 @@ struct PersonMedicalFormSheet: View {
     @Bindable var formData: SOSFormData
     let onDismiss: () -> Void
     
+    @State private var localName: String = ""
     @State private var localMedicalIssues: Set<MedicalIssue> = []
     @State private var localOtherDescription: String = ""
     @State private var localSeverity: MedicalSeverity = .moderate
@@ -858,39 +864,57 @@ struct PersonMedicalFormSheet: View {
                         Text(person.type.icon)
                             .font(.system(size: 48))
                         
-                        Text("Tình trạng của \(person.displayName)")
+                        Text("Tình trạng của")
                             .font(.title3.bold())
                             .foregroundColor(.primary)
+                        
+                        TextField(person.displayName, text: $localName)
+                            .font(.title3)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(.systemGray4), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 40)
                     }
                     .padding(.top, 20)
                     
-                    // Medical issues selection
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Vấn đề y tế")
-                            .font(DS.Typography.headline)
-                        
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                            ForEach(MedicalIssue.allCases) { issue in
-                                MedicalIssueCheckboxLight(
-                                    issue: issue,
-                                    isSelected: localMedicalIssues.contains(issue)
-                                ) {
-                                    if localMedicalIssues.contains(issue) {
-                                        localMedicalIssues.remove(issue)
-                                    } else {
-                                        localMedicalIssues.insert(issue)
+                    // Medical issues selection — grouped by category
+                    let grouped = MedicalIssue.groupedIssues(for: person.type)
+                    ForEach(grouped, id: \.category) { group in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(group.category.title)
+                                .font(DS.Typography.headline)
+                            
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                ForEach(group.issues) { issue in
+                                    MedicalIssueCheckboxLight(
+                                        issue: issue,
+                                        isSelected: localMedicalIssues.contains(issue)
+                                    ) {
+                                        if localMedicalIssues.contains(issue) {
+                                            localMedicalIssues.remove(issue)
+                                        } else {
+                                            localMedicalIssues.insert(issue)
+                                        }
                                     }
                                 }
                             }
+                            
+                            // Other description — chỉ hiện ở nhóm "Khác"
+                            if group.category == .other && localMedicalIssues.contains(.other) {
+                                TextField("Mô tả vấn đề khác...", text: $localOtherDescription)
+                                    .textFieldStyle(.roundedBorder)
+                            }
                         }
-                        
-                        // Other description
-                        if localMedicalIssues.contains(.other) {
-                            TextField("Mô tả vấn đề khác...", text: $localOtherDescription)
-                                .textFieldStyle(.roundedBorder)
-                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                     
                     Divider()
                     
@@ -937,6 +961,9 @@ struct PersonMedicalFormSheet: View {
     }
     
     private func loadExistingData() {
+        // Load custom name from person
+        localName = person.customName
+        
         if let existing = formData.rescueData.medicalInfoByPerson[person.id] {
             localMedicalIssues = existing.medicalIssues
             localOtherDescription = existing.otherDescription
@@ -945,6 +972,12 @@ struct PersonMedicalFormSheet: View {
     }
     
     private func saveMedicalInfo() {
+        // Lưu tên tùy chỉnh vào person
+        let trimmedName = localName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let idx = formData.rescueData.people.firstIndex(where: { $0.id == person.id }) {
+            formData.rescueData.people[idx].customName = trimmedName
+        }
+        
         let medicalInfo = PersonMedicalInfo(
             personId: person.id,
             medicalIssues: localMedicalIssues,
@@ -1218,6 +1251,19 @@ struct Step4ReviewView: View {
                                     if let medicalInfo = formData.rescueData.medicalInfoByPerson[person.id] {
                                         InjuredPersonReviewCard(person: person, medicalInfo: medicalInfo)
                                     }
+                                }
+                                
+                                // Những người còn lại ổn định
+                                if formData.rescueData.othersAreStable &&
+                                   formData.rescueData.injuredPersonIds.count < formData.rescueData.people.count {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Những người còn lại ổn định")
+                                            .font(DS.Typography.caption)
+                                            .foregroundColor(DS.Colors.textSecondary)
+                                    }
+                                    .padding(.top, 4)
                                 }
                             }
                         }
