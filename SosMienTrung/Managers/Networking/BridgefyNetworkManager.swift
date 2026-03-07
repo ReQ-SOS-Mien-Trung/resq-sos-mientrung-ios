@@ -24,6 +24,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     private let sosRelayService = SOSRelayService.shared
     private var processedSOSPacketIds: Set<String> = []  // Avoid reprocessing
     
+    /// SOS packets chờ broadcast khi Bridgefy sẵn sàng (BT bật)
+    private var pendingSOSBroadcasts: [(sosPacket: SOSPacket, message: String, timestamp: Date)] = []
+    
     /// Get current Bridgefy user ID
     var currentUserId: UUID? {
         bridgefy?.currentUserId
@@ -401,16 +404,29 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             ServerRequestGateway.shared.submitSOSEnhanced(enhancedPacket)
         }
 
-        // Broadcast qua mesh nếu Bridgefy đang chạy
-        if bridgefy != nil {
+        // Broadcast qua mesh nếu Bridgefy đang chạy VÀ có currentUserId
+        let meshMessage = formData.toSOSMessage()
+        if bridgefy != nil && bridgefy?.currentUserId != nil {
             await MainActor.run {
-                broadcastSOSPacket(sosPacket, originalMessage: formData.toSOSMessage(), timestamp: timestamp)
+                broadcastSOSPacket(sosPacket, originalMessage: meshMessage, timestamp: timestamp)
                 if !serverReached {
                     // Ghi nhận đã phát qua mesh (nhờ người khác relay)
                     SOSStorageManager.shared.updateStatusWithEvent(
                         id: packetId,
                         status: .relayed,
                         event: SOSSendEvent(type: .sentViaMesh, note: "Phát qua Mesh Network để nhờ relay lên server")
+                    )
+                }
+            }
+        } else {
+            // Bridgefy chưa sẵn sàng (BT tắt) → lưu lại để broadcast khi BT bật
+            pendingSOSBroadcasts.append((sosPacket: sosPacket, message: meshMessage, timestamp: timestamp))
+            print("📦 [SOS] Bridgefy chưa sẵn sàng – lưu SOS để broadcast khi BT bật")
+            if !serverReached {
+                await MainActor.run {
+                    SOSStorageManager.shared.addSendEvent(
+                        id: packetId,
+                        event: SOSSendEvent(type: .pendingRetry, note: "Bluetooth chưa bật, chờ broadcast qua Mesh khi BT sẵn sàng")
                     )
                 }
             }
@@ -490,10 +506,54 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         print("✅ Bridgefy STARTED with userId: \(userId)")
         MeshManager.shared.updateMyDeviceId(userId.uuidString)
         MeshManager.shared.start()
+        // Khi Bridgefy SDK sẵn sàng (kể cả khi BT bật lại sau khi tắt),
+        // kích hoạt retry ngay lập tức để gửi lại các SOS đang chờ qua mesh
+        ServerRequestGateway.shared.triggerRetry(reason: .peerUpdate)
         // Đăng ký mapping serverUserId → bridgefyDeviceId ngay khi Bridgefy sẵn sàng
         if let serverUserId = AuthSessionStore.shared.session?.userId {
             updateIdentityMapping(userId: serverUserId, newPeerId: userId)
             print("🔗 Registered identity mapping: serverUserId=\(serverUserId) → bridgefyId=\(userId)")
+        }
+        // Re-broadcast các SOS packet đang chờ (đã gửi khi BT tắt)
+        rebroadcastPendingSOS()
+    }
+    
+    /// Broadcast lại các SOS đã lưu khi Bridgefy chưa sẵn sàng
+    private func rebroadcastPendingSOS() {
+        guard !pendingSOSBroadcasts.isEmpty else { return }
+        guard bridgefy?.currentUserId != nil else {
+            print("⚠️ [SOS] rebroadcastPendingSOS: currentUserId vẫn nil, bỏ qua")
+            return
+        }
+        
+        let pending = pendingSOSBroadcasts
+        pendingSOSBroadcasts.removeAll()
+        
+        // Lọc bỏ các SOS đã được server xác nhận (đã upload thành công khi có mạng trước đó)
+        let gateway = ServerRequestGateway.shared
+        let needBroadcast = pending.filter { !gateway.isServerConfirmed($0.sosPacket.packetId) }
+        let alreadyConfirmed = pending.count - needBroadcast.count
+        
+        if alreadyConfirmed > 0 {
+            print("✅ [SOS] Bỏ qua \(alreadyConfirmed) SOS đã được server xác nhận, không cần broadcast qua mesh")
+        }
+        
+        guard !needBroadcast.isEmpty else {
+            print("✅ [SOS] Tất cả SOS pending đã được server xác nhận, không cần re-broadcast")
+            return
+        }
+        
+        print("📡 [SOS] Re-broadcasting \(needBroadcast.count) pending SOS packet(s) via mesh...")
+        for item in needBroadcast {
+            broadcastSOSPacket(item.sosPacket, originalMessage: item.message, timestamp: item.timestamp)
+            // Cập nhật status: đã phát qua mesh
+            DispatchQueue.main.async {
+                SOSStorageManager.shared.updateStatusWithEvent(
+                    id: item.sosPacket.packetId,
+                    status: .relayed,
+                    event: SOSSendEvent(type: .sentViaMesh, note: "Phát qua Mesh Network sau khi BT bật lại")
+                )
+            }
         }
     }
 
@@ -512,7 +572,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func bridgefyDidStop() {
-        print("⚠️ Bridgefy did stop")
+        print("⚠️ Bridgefy did stop (BT disabled or SDK stopped)")
+        // KHÔNG nil bridgefy ở đây — SDK tự theo dõi CoreBluetooth state
+        // và tự fire bridgefyDidStart lại khi BT được bật trở lại
     }
 
     func bridgefyDidFailToStop(with error: BridgefyError) {

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 final class ServerRequestGateway: ObservableObject {
     static let shared = ServerRequestGateway()
@@ -22,6 +23,8 @@ final class ServerRequestGateway: ObservableObject {
         var nextRetryAt: Date
         var lastReceiveTransport: TransportSource?
         var isLocalOrigin: Bool
+        var isUploading: Bool = false
+        var uploadEverAttempted: Bool = false  // da tung goi HTTP upload chua
     }
 
     private let networkMonitor = NetworkMonitor.shared
@@ -121,14 +124,34 @@ final class ServerRequestGateway: ObservableObject {
 
     func triggerRetry(reason: TriggerReason) {
         stateQueue.async {
+            // Khi ket noi duoc khoi phuc -> reset backoff de retry tuc thi
+            switch reason {
+            case .networkChange, .peerUpdate:
+                let now = Date()
+                for key in self.pending.keys {
+                    guard var entry = self.pending[key], !entry.isUploading else { continue }
+                    entry.nextRetryAt = now
+                    // Neu chua tung gui HTTP -> reset attempt ve 0
+                    if !entry.uploadEverAttempted {
+                        entry.attempt = 0
+                    }
+                    self.pending[key] = entry
+                }
+                print("[Gateway] Connectivity event (\(reason)) - reset backoff for \(self.pending.count) pending requests")
+            case .meshHeartbeat, .manual:
+                break
+            }
             self.retryPendingIfPossible(reason: reason)
         }
     }
 
     // MARK: - Private
 
+    /// Device ID ổn định: ưu tiên Bridgefy UUID, fallback sang vendor ID (giống sendStructuredSOS)
     private var myDeviceId: String {
-        BridgefyNetworkManager.shared.currentUserId?.uuidString ?? MeshManager.shared.myDeviceId
+        BridgefyNetworkManager.shared.currentUserId?.uuidString
+            ?? UIDevice.current.identifierForVendor?.uuidString
+            ?? MeshManager.shared.myDeviceId
     }
 
     private func submit(_ envelope: ServerRequestEnvelope) {
@@ -159,26 +182,45 @@ final class ServerRequestGateway: ObservableObject {
     }
 
     private func uploadIfPossible(_ envelope: ServerRequestEnvelope, ackTransport: TransportSource?) {
+        // Tránh gửi cùng một request song song
+        guard var entry = pending[envelope.requestId], !entry.isUploading else {
+            print("[Gateway] ⏭ Skip duplicate upload for \(envelope.requestId) – already in-flight")
+            return
+        }
+        entry.isUploading = true
+        entry.uploadEverAttempted = true
+        pending[envelope.requestId] = entry
+
+        // Capture isLocalOrigin trước khi vào Task (myDeviceId có thể thay đổi sau khi BT bật)
+        let isLocalOrigin = entry.isLocalOrigin
+
         Task {
-            let success = await self.performUpload(for: envelope)
+            let success = await self.performUpload(for: envelope, isLocalOrigin: isLocalOrigin)
             self.stateQueue.async {
-                self.handleUploadResult(for: envelope, success: success, ackTransport: ackTransport)
+                // Reset cờ trước khi xử lý kết quả
+                if var e = self.pending[envelope.requestId] {
+                    e.isUploading = false
+                    self.pending[envelope.requestId] = e
+                }
+                self.handleUploadResult(for: envelope, success: success, ackTransport: ackTransport, isLocalOrigin: isLocalOrigin)
             }
         }
     }
 
-    private func handleUploadResult(for envelope: ServerRequestEnvelope, success: Bool, ackTransport: TransportSource?) {
+    private func handleUploadResult(for envelope: ServerRequestEnvelope, success: Bool, ackTransport: TransportSource?, isLocalOrigin: Bool) {
         if success {
             completed.insert(envelope.requestId)
             let confirmedId = envelope.requestId
             DispatchQueue.main.async { self.confirmedIds.insert(confirmedId) }
             pending.removeValue(forKey: envelope.requestId)
 
-            if let ackTransport = ackTransport, envelope.originDeviceId != myDeviceId {
+            // Gửi ACK ngược lại nếu đây là packet relay (không phải của mình)
+            if let ackTransport = ackTransport, !isLocalOrigin {
                 sendAck(for: envelope, via: ackTransport)
             }
 
-            if envelope.originDeviceId == myDeviceId {
+            // Cập nhật status nếu đây là SOS của mình
+            if isLocalOrigin {
                 DispatchQueue.main.async {
                     // Gateway retry thành công: đã gửi lên server
                     SOSStorageManager.shared.updateStatusWithEvent(
@@ -194,9 +236,10 @@ final class ServerRequestGateway: ObservableObject {
         scheduleRetry(for: envelope)
     }
 
-    private func performUpload(for envelope: ServerRequestEnvelope) async -> Bool {
+    private func performUpload(for envelope: ServerRequestEnvelope, isLocalOrigin: Bool) async -> Bool {
         // Nếu packet không phải từ thiết bị này → relay, truyền userId gốc để BE biết
-        let isRelay = envelope.originDeviceId != myDeviceId
+        // Dùng isLocalOrigin thay vì so sánh myDeviceId (vì myDeviceId có thể thay đổi sau khi BT bật)
+        let isRelay = !isLocalOrigin
         let originalUserId: String? = isRelay ? envelope.sosPacket?.senderInfo?.userId
             ?? envelope.sosEnhanced?.senderInfo?.userId
             : nil
@@ -303,22 +346,30 @@ final class ServerRequestGateway: ObservableObject {
     }
 
     private func nextRetryDate(for attempt: Int) -> Date {
-        let baseDelay = max(2.0, pow(2.0, Double(attempt)))
+        // Tối thiểu 10 giây sau khi thất bại (lớn hơn timeout request 15s là vô nghĩa nếu < 15s)
+        // Dùng exponential: 10, 20, 40, 60, 60, ... (giây)
+        let baseDelay = max(10.0, pow(2.0, Double(attempt + 2)))
         let delay = min(baseDelay, 60.0)
         return Date().addingTimeInterval(delay)
     }
 
     private func retryPendingIfPossible(reason: TriggerReason) {
         let now = Date()
-        let entries = pending.values.filter { $0.nextRetryAt <= now }
+        // Chỉ retry các request đã đến thời điểm và không đang upload
+        let entries = pending.values.filter { $0.nextRetryAt <= now && !$0.isUploading }
         guard !entries.isEmpty else { return }
 
         for entry in entries {
             if networkMonitor.isConnected {
+                print("[Gateway] 🔄 Retry attempt \(entry.attempt) for \(entry.envelope.requestId)")
                 uploadIfPossible(entry.envelope, ackTransport: entry.lastReceiveTransport)
             } else {
+                // Chi relay qua mesh, KHONG tang attempt (chua thuc su gui HTTP)
                 relayIfNeeded(entry.envelope, excluding: entry.lastReceiveTransport)
-                scheduleRetry(for: entry.envelope)
+                // Cho 10s co dinh roi thu relay lai
+                guard var e = pending[entry.envelope.requestId] else { continue }
+                e.nextRetryAt = Date().addingTimeInterval(10.0)
+                pending[entry.envelope.requestId] = e
             }
         }
     }
