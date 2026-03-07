@@ -11,18 +11,8 @@ final class APIService {
     private let session: URLSession
 
     private init() {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://192.168.1.26:8080/api"
-        #if targetEnvironment(simulator)
-        if let url = URL(string: configured),
-           let host = url.host,
-           host != "localhost" && host != "127.0.0.1" {
-            self.baseURL = configured.replacingOccurrences(of: host, with: "localhost")
-        } else {
-            self.baseURL = configured
-        }
-        #else
+        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "https://resq.somee.com"
         self.baseURL = configured
-        #endif
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30

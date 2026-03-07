@@ -62,20 +62,8 @@ final class AuthService {
     private let session: URLSession
 
     private init(session: URLSession? = nil) {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "http://192.168.1.26:8080/api"
-        #if targetEnvironment(simulator)
-        // Simulator shares Mac loopback — replace any LAN/hotspot IP with localhost
-        let urlString: String
-        if let url = URL(string: configured),
-           let host = url.host,
-           host != "localhost" && host != "127.0.0.1" {
-            urlString = configured.replacingOccurrences(of: host, with: "localhost")
-        } else {
-            urlString = configured
-        }
-        #else
+        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "https://resq.somee.com"
         let urlString = configured
-        #endif
         self.baseURL = URL(string: urlString)!
         print("[AuthService] baseURL = \(urlString)")
         
