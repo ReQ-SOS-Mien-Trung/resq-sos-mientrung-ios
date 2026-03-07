@@ -14,6 +14,9 @@ struct SetupProfileView: View {
     @State private var name = ""
     @State private var phoneNumber = ""
     @State private var password = ""
+    @State private var rescuerUsername = ""
+    @State private var rescuerPassword = ""
+    @State private var confirmPassword = ""
     @State private var showPassword = false
     @State private var authMode: AuthMode = .register
     @State private var isLoading = false
@@ -27,7 +30,7 @@ struct SetupProfileView: View {
     @FocusState private var focusedField: Field?
     
     enum Field {
-        case name, phone, password
+        case name, phone, password, confirmPassword, rescuerUsername, rescuerPassword
     }
 
     enum AuthMode: String, CaseIterable, Identifiable {
@@ -68,58 +71,102 @@ struct SetupProfileView: View {
                                 }
                             }
                             .pickerStyle(.segmented)
+                            .onChange(of: authMode) { _, newMode in
+                                if newMode == .register { isRescuerMode = false }
+                            }
                         }
 
-                        // Rescuer mode toggle
-                        HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: "shield.lefthalf.filled")
-                                .foregroundColor(isRescuerMode ? DS.Colors.warning : DS.Colors.textTertiary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Lính cứu trợ")
-                                    .font(DS.Typography.subheadline.bold())
-                                    .foregroundColor(DS.Colors.text)
-                                Text("Đăng nhập với tư cách Rescuer")
-                                    .font(DS.Typography.caption)
-                                    .foregroundColor(DS.Colors.textSecondary)
-                            }
-                            Spacer()
-                            Toggle("", isOn: $isRescuerMode)
-                                .labelsHidden()
-                                .tint(DS.Colors.warning)
-                                .onChange(of: isRescuerMode) { _, on in
-                                    if on { authMode = .login }
-                                }
-                        }
-                        .padding(DS.Spacing.sm)
-                        .background(
-                            isRescuerMode
-                                ? DS.Colors.warning.opacity(0.08)
-                                : DS.Colors.surface
-                        )
-                        .overlay(Rectangle().stroke(
-                            isRescuerMode ? DS.Colors.warning : DS.Colors.border,
-                            lineWidth: DS.Border.medium
-                        ))
-                        
-                        // Form
-                        if isRescuerMode {
-                            // Rescuer: không cần nhập gì, chỉ hiện thông tin
+                        // Rescuer mode toggle (chỉ hiện ở trang Đăng nhập)
+                        if authMode == .login {
                             HStack(spacing: DS.Spacing.sm) {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .foregroundColor(DS.Colors.warning)
+                                Image(systemName: "shield.lefthalf.filled")
+                                    .foregroundColor(isRescuerMode ? DS.Colors.warning : DS.Colors.textTertiary)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Tài khoản: rescuer")
+                                    Text("Lính cứu trợ")
                                         .font(DS.Typography.subheadline.bold())
                                         .foregroundColor(DS.Colors.text)
-                                    Text("Đăng nhập một chạm, không cần đăng ký")
+                                    Text("Đăng nhập với tư cách Rescuer")
                                         .font(DS.Typography.caption)
                                         .foregroundColor(DS.Colors.textSecondary)
                                 }
+                                Spacer()
+                                Toggle("", isOn: $isRescuerMode)
+                                    .labelsHidden()
+                                    .tint(DS.Colors.warning)
+                                    .onChange(of: isRescuerMode) { _, on in
+                                        if on { authMode = .login }
+                                    }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(DS.Spacing.sm)
-                            .background(DS.Colors.warning.opacity(0.06))
-                            .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.4), lineWidth: DS.Border.thin))
+                            .background(
+                                isRescuerMode
+                                    ? DS.Colors.warning.opacity(0.08)
+                                    : DS.Colors.surface
+                            )
+                            .overlay(Rectangle().stroke(
+                                isRescuerMode ? DS.Colors.warning : DS.Colors.border,
+                                lineWidth: DS.Border.medium
+                            ))
+                        }
+                        
+                        // Form
+                        if isRescuerMode {
+                            // Rescuer: nhập tài khoản và mật khẩu
+                            VStack(spacing: DS.Spacing.md) {
+                                // Username field
+                                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                                    Text("TÀI KHOẢN")
+                                        .font(DS.Typography.caption).tracking(1)
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                    
+                                    HStack {
+                                        Image(systemName: "person.fill")
+                                            .foregroundColor(DS.Colors.warning)
+                                            .frame(width: 20)
+                                        TextField("Nhập tài khoản...", text: $rescuerUsername)
+                                            .textContentType(.username)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+                                            .foregroundColor(DS.Colors.text)
+                                            .focused($focusedField, equals: .rescuerUsername)
+                                    }
+                                    .padding(DS.Spacing.sm)
+                                    .background(DS.Colors.surface)
+                                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                                }
+
+                                // Password field
+                                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                                    Text("MẬT KHẨU")
+                                        .font(DS.Typography.caption).tracking(1)
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                    
+                                    HStack {
+                                        Image(systemName: "lock.fill")
+                                            .foregroundColor(DS.Colors.accent)
+                                            .frame(width: 20)
+                                        
+                                        Group {
+                                            if showPassword {
+                                                TextField("Nhập mật khẩu...", text: $rescuerPassword)
+                                            } else {
+                                                SecureField("Nhập mật khẩu...", text: $rescuerPassword)
+                                            }
+                                        }
+                                        .textContentType(.password)
+                                        .foregroundColor(DS.Colors.text)
+                                        .focused($focusedField, equals: .rescuerPassword)
+                                        
+                                        Button { showPassword.toggle() } label: {
+                                            Image(systemName: showPassword ? "eye.slash" : "eye")
+                                                .foregroundColor(DS.Colors.textSecondary)
+                                        }
+                                    }
+                                    .padding(DS.Spacing.sm)
+                                    .background(DS.Colors.surface)
+                                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                                }
+                            }
                         } else {
                             VStack(spacing: DS.Spacing.md) {
                             // Phone field
@@ -128,19 +175,45 @@ struct SetupProfileView: View {
                                     .font(DS.Typography.caption).tracking(1)
                                     .foregroundColor(DS.Colors.textSecondary)
                                 
-                                HStack {
+                                HStack(spacing: 0) {
                                     Image(systemName: "phone.fill")
                                         .foregroundColor(DS.Colors.success)
                                         .frame(width: 20)
-                                    TextField("Nhập số điện thoại...", text: $phoneNumber)
+                                        .padding(.trailing, DS.Spacing.xs)
+                                    
+                                    Text("+84")
+                                        .font(DS.Typography.body.monospacedDigit())
+                                        .foregroundColor(DS.Colors.text)
+                                    
+                                    Divider()
+                                        .frame(height: 20)
+                                        .padding(.horizontal, DS.Spacing.xs)
+                                    
+                                    TextField("9 chữ số...", text: $phoneNumber)
                                         .textContentType(.telephoneNumber)
                                         .keyboardType(.phonePad)
                                         .foregroundColor(DS.Colors.text)
                                         .focused($focusedField, equals: .phone)
+                                        .onChange(of: phoneNumber) { _, newValue in
+                                            // Chỉ cho nhập số, tối đa 10 ký tự
+                                            let filtered = newValue.filter { $0.isNumber }
+                                            let trimmed = String(filtered.prefix(10))
+                                            if trimmed != newValue { phoneNumber = trimmed }
+                                        }
                                 }
                                 .padding(DS.Spacing.sm)
                                 .background(DS.Colors.surface)
-                                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                                .overlay(Rectangle().stroke(
+                                    phoneValidationColor,
+                                    lineWidth: DS.Border.medium
+                                ))
+                                
+                                // Validation hint
+                                if !phoneNumber.isEmpty && !isPhoneValid {
+                                    Text("Nhập 9-10 chữ số (VD: 901234567)")
+                                        .font(DS.Typography.caption)
+                                        .foregroundColor(DS.Colors.accent)
+                                }
                             }
 
                             // Password field
@@ -181,7 +254,65 @@ struct SetupProfileView: View {
                                 }
                                 .padding(DS.Spacing.sm)
                                 .background(DS.Colors.surface)
-                                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                                .overlay(Rectangle().stroke(
+                                    pinValidationColor,
+                                    lineWidth: DS.Border.medium
+                                ))
+                                
+                                // PIN validation hints
+                                if !password.isEmpty {
+                                    if password.count < 6 {
+                                        Text("Cần nhập đủ 6 chữ số")
+                                            .font(DS.Typography.caption)
+                                            .foregroundColor(DS.Colors.textSecondary)
+                                    } else if isWeakPIN(password) {
+                                        Text("⚠️ Mã PIN quá đơn giản, vui lòng chọn mã khác")
+                                            .font(DS.Typography.caption)
+                                            .foregroundColor(DS.Colors.accent)
+                                    }
+                                }
+                            }
+
+                            // Confirm PIN field (chỉ hiện khi đăng ký)
+                            if authMode == .register {
+                                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                                    Text("NHẬP LẠI MÃ PIN")
+                                        .font(DS.Typography.caption).tracking(1)
+                                        .foregroundColor(DS.Colors.textSecondary)
+
+                                    HStack {
+                                        Image(systemName: "lock.rotation")
+                                            .foregroundColor(DS.Colors.accent)
+                                            .frame(width: 20)
+
+                                        SecureField("Nhập lại 6 chữ số...", text: $confirmPassword)
+                                            .keyboardType(.numberPad)
+                                            .textContentType(.oneTimeCode)
+                                            .foregroundColor(DS.Colors.text)
+                                            .focused($focusedField, equals: .confirmPassword)
+                                            .onChange(of: confirmPassword) { _, newValue in
+                                                let filtered = newValue.filter { $0.isNumber }
+                                                if filtered.count > 6 {
+                                                    confirmPassword = String(filtered.prefix(6))
+                                                } else if filtered != newValue {
+                                                    confirmPassword = filtered
+                                                }
+                                            }
+                                    }
+                                    .padding(DS.Spacing.sm)
+                                    .background(DS.Colors.surface)
+                                    .overlay(Rectangle().stroke(
+                                        confirmPinValidationColor,
+                                        lineWidth: DS.Border.medium
+                                    ))
+
+                                    // Confirm PIN hint
+                                    if !confirmPassword.isEmpty && confirmPassword.count == 6 && confirmPassword != password {
+                                        Text("Mã PIN không khớp")
+                                            .font(DS.Typography.caption)
+                                            .foregroundColor(DS.Colors.accent)
+                                    }
+                                }
                             }
                         }
                         } // end else (normal form fields)
@@ -198,11 +329,11 @@ struct SetupProfileView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, DS.Spacing.md)
-                                .background(isLoading ? DS.Colors.textTertiary : DS.Colors.warning)
+                                .background(isFormValid && !isLoading ? DS.Colors.warning : DS.Colors.textTertiary)
                                 .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
                                 .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
                             }
-                            .disabled(isLoading)
+                            .disabled(!isFormValid || isLoading)
                         } else {
                             Button { submit() } label: {
                                 HStack(spacing: DS.Spacing.sm) {
@@ -279,37 +410,101 @@ struct SetupProfileView: View {
         )
     }
     
+    // MARK: - Validation helpers
+    
+    /// Danh sách PIN yếu bị chặn
+    private static let weakPINs: Set<String> = [
+        "000000", "111111", "222222", "333333", "444444",
+        "555555", "666666", "777777", "888888", "999999",
+        "123456", "654321", "123123", "112233"
+    ]
+    
+    private func isWeakPIN(_ pin: String) -> Bool {
+        Self.weakPINs.contains(pin)
+    }
+    
+    /// Chuẩn hoá số điện thoại thành +84...
+    private func normalizedPhone(_ raw: String) -> String {
+        let digits = raw.filter { $0.isNumber }
+        if digits.hasPrefix("0") {
+            return "+84" + digits.dropFirst()
+        }
+        return "+84" + digits
+    }
+    
+    private var isPhoneValid: Bool {
+        let digits = phoneNumber.filter { $0.isNumber }
+        // 9 digits (without leading 0) or 10 digits (with leading 0)
+        return digits.count >= 9 && digits.count <= 10
+    }
+    
+    private var isPINValid: Bool {
+        password.count == 6 && !isWeakPIN(password)
+    }
+    
+    private var phoneValidationColor: Color {
+        if phoneNumber.isEmpty { return DS.Colors.border }
+        return isPhoneValid ? DS.Colors.success : DS.Colors.accent
+    }
+    
+    private var pinValidationColor: Color {
+        if password.isEmpty { return DS.Colors.border }
+        if password.count < 6 { return DS.Colors.border }
+        return isPINValid ? DS.Colors.success : DS.Colors.accent
+    }
+    
+    private var confirmPinValidationColor: Color {
+        if confirmPassword.isEmpty { return DS.Colors.border }
+        if confirmPassword.count < 6 { return DS.Colors.border }
+        return confirmPassword == password ? DS.Colors.success : DS.Colors.accent
+    }
+    
     private var isFormValid: Bool {
-        if isRescuerMode { return true }
-        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
-        let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
-        // Phone >= 9 digits, PIN must be exactly 6 digits
-        return !trimmedPhone.isEmpty && trimmedPhone.count >= 9 && trimmedPassword.count == 6
+        if isRescuerMode {
+            let trimmedUser = rescuerUsername.trimmingCharacters(in: .whitespaces)
+            let trimmedPass = rescuerPassword.trimmingCharacters(in: .whitespaces)
+            return !trimmedUser.isEmpty && !trimmedPass.isEmpty
+        }
+        if authMode == .register {
+            return isPhoneValid && isPINValid && confirmPassword == password
+        }
+        return isPhoneValid && isPINValid
     }
 
     private func submit() {
-        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
-        let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
-
-        guard trimmedPhone.count >= 9 else {
-            errorMessage = "Số điện thoại không hợp lệ"
+        guard isPhoneValid else {
+            errorMessage = "Số điện thoại không hợp lệ (cần 9-10 chữ số)"
             showError = true
             return
         }
 
-        guard trimmedPassword.count == 6 else {
+        guard password.count == 6 else {
             errorMessage = "Mã PIN phải đúng 6 chữ số"
             showError = true
             return
         }
 
+        guard !isWeakPIN(password) else {
+            errorMessage = "Mã PIN quá đơn giản (\(password)), vui lòng chọn mã khác"
+            showError = true
+            return
+        }
+
+        if authMode == .register && confirmPassword != password {
+            errorMessage = "Mã PIN nhập lại không khớp"
+            showError = true
+            return
+        }
+
+        // Auto-convert: 0901234567 → +84901234567
+        let formattedPhone = normalizedPhone(phoneNumber)
+
         if authMode == .register {
             isLoading = true
-            AuthService.shared.register(phone: trimmedPhone, password: trimmedPassword) { result in
+            AuthService.shared.register(phone: formattedPhone, password: password) { result in
                 isLoading = false
                 switch result {
                 case .success:
-                    // Registration successful - prompt user to login
                     successMessage = "Đăng ký thành công! Vui lòng đăng nhập để tiếp tục."
                     showSuccess = true
                 case .failure(let error):
@@ -318,13 +513,13 @@ struct SetupProfileView: View {
             }
         } else {
             isLoading = true
-            AuthService.shared.login(phone: trimmedPhone, password: trimmedPassword) { result in
+            AuthService.shared.login(phone: formattedPhone, password: password) { result in
                 isLoading = false
                 switch result {
                 case .success(let response):
                     AuthSessionStore.shared.save(from: response)
-                    let displayName = response.displayName ?? trimmedPhone
-                    userProfile.saveUser(name: displayName, phoneNumber: trimmedPhone)
+                    let displayName = response.displayName ?? formattedPhone
+                    userProfile.saveUser(name: displayName, phoneNumber: formattedPhone)
                     isSetupComplete = true
                 case .failure(let error):
                     handleError(error)
@@ -334,8 +529,22 @@ struct SetupProfileView: View {
     }
 
     private func submitRescuer() {
+        let trimmedUser = rescuerUsername.trimmingCharacters(in: .whitespaces)
+        let trimmedPass = rescuerPassword.trimmingCharacters(in: .whitespaces)
+
+        guard !trimmedUser.isEmpty else {
+            errorMessage = "Vui lòng nhập tài khoản"
+            showError = true
+            return
+        }
+        guard !trimmedPass.isEmpty else {
+            errorMessage = "Vui lòng nhập mật khẩu"
+            showError = true
+            return
+        }
+
         isLoading = true
-        AuthService.shared.login(username: "rescuer", phone: nil, password: "Rescuer@123") { result in
+        AuthService.shared.login(username: trimmedUser, phone: nil, password: trimmedPass) { result in
             isLoading = false
             switch result {
             case .success(let response):
