@@ -52,6 +52,7 @@ struct SOSPacketEnhanced: Codable {
         let medicalIssues: [String]?
         let otherMedicalDescription: String?
         let othersAreStable: Bool?
+        let injuredPersons: [InjuredPersonData]?
         
         // Common
         let canMove: Bool?
@@ -67,9 +68,28 @@ struct SOSPacketEnhanced: Codable {
             case medicalIssues = "medical_issues"
             case otherMedicalDescription = "other_medical_description"
             case othersAreStable = "others_are_stable"
+            case injuredPersons = "injured_persons"
             case canMove = "can_move"
             case peopleCount = "people_count"
             case additionalDescription = "additional_description"
+        }
+    }
+    
+    struct InjuredPersonData: Codable {
+        let personType: String
+        let index: Int
+        let name: String
+        let customName: String?
+        let medicalIssues: [String]
+        let severity: String
+        
+        enum CodingKeys: String, CodingKey {
+            case personType = "person_type"
+            case index
+            case name
+            case customName = "custom_name"
+            case medicalIssues = "medical_issues"
+            case severity
         }
     }
     
@@ -165,6 +185,26 @@ struct SOSPacketEnhanced: Codable {
             canMove = formData.rescueData.situation != .cannotMove
         }
         
+        // Build per-person injured data
+        var injuredPersons: [InjuredPersonData]? = nil
+        if formData.needsRescueStep && !formData.rescueData.injuredPersonIds.isEmpty {
+            var persons: [InjuredPersonData] = []
+            for personId in formData.rescueData.injuredPersonIds {
+                if let person = formData.rescueData.people.first(where: { $0.id == personId }),
+                   let info = formData.rescueData.medicalInfoByPerson[personId] {
+                    persons.append(InjuredPersonData(
+                        personType: person.type.rawValue,
+                        index: person.index,
+                        name: person.displayName,
+                        customName: person.customName.isEmpty ? nil : person.customName,
+                        medicalIssues: info.medicalIssues.map { $0.rawValue },
+                        severity: info.severity.rawValue
+                    ))
+                }
+            }
+            injuredPersons = persons.isEmpty ? nil : persons
+        }
+        
         self.structuredData = StructuredData(
             supplies: supplies,
             otherSupplyDescription: otherSupplyDescription,
@@ -174,6 +214,7 @@ struct SOSPacketEnhanced: Codable {
             medicalIssues: medicalIssues,
             otherMedicalDescription: otherMedicalDescription,
             othersAreStable: othersAreStable,
+            injuredPersons: injuredPersons,
             canMove: canMove,
             peopleCount: peopleCount,
             additionalDescription: formData.additionalDescription.isEmpty ? nil : formData.additionalDescription
@@ -238,6 +279,16 @@ struct SOSPacketEnhanced: Codable {
                 othersAreStable: sd.othersAreStable,
                 canMove: sd.canMove,
                 needMedical: sd.hasInjured,
+                injuredPersons: sd.injuredPersons?.map {
+                    SOSInjuredPerson(
+                        personType: $0.personType,
+                        index: $0.index,
+                        name: $0.name,
+                        customName: $0.customName,
+                        medicalIssues: $0.medicalIssues,
+                        severity: $0.severity
+                    )
+                },
                 supplies: sd.supplies,
                 otherSupplyDescription: sd.otherSupplyDescription,
                 peopleCount: sd.peopleCount.map { SOSPeopleCount(adult: $0.adults, child: $0.children, elderly: $0.elderly) },

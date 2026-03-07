@@ -28,20 +28,49 @@ struct SOSPeopleCount: Codable {
     var total: Int { adult + child + elderly }
 }
 
+// MARK: - Injured Person Data
+struct SOSInjuredPerson: Codable {
+    let personType: String
+    let index: Int
+    let name: String
+    let customName: String?
+    let medicalIssues: [String]
+    let severity: String
+    
+    enum CodingKeys: String, CodingKey {
+        case personType = "person_type"
+        case index
+        case name
+        case customName = "custom_name"
+        case medicalIssues = "medical_issues"
+        case severity
+    }
+    
+    init(personType: String, index: Int, name: String, customName: String? = nil, medicalIssues: [String] = [], severity: String = "MODERATE") {
+        self.personType = personType
+        self.index = index
+        self.name = name
+        self.customName = customName
+        self.medicalIssues = medicalIssues
+        self.severity = severity
+    }
+}
+
 // MARK: - Structured Data (unified rescue + relief)
 struct SOSStructuredData: Codable {
     // === RESCUE fields ===
-    let situation: String?              // "trapped", "flooding", "collapsed", "fire", "landslide", etc.
-    let otherSituationDescription: String? // Mô tả khi situation = "OTHER"
+    let situation: String?
+    let otherSituationDescription: String?
     let hasInjured: Bool?
-    let medicalIssues: [String]?        // ["bleeding", "fracture", "unconscious", "breathing_difficulty", "burns"]
-    let otherMedicalDescription: String? // Mô tả khi medical issues include "OTHER"
+    let medicalIssues: [String]?
+    let otherMedicalDescription: String?
     let othersAreStable: Bool?
     let canMove: Bool?
     let needMedical: Bool?
+    let injuredPersons: [SOSInjuredPerson]?
     
     // === RELIEF fields ===
-    let supplies: [String]?             // ["food", "water", "medicine", "clothing", "shelter"]
+    let supplies: [String]?
     let otherSupplyDescription: String?
     
     // === COMMON fields ===
@@ -57,6 +86,7 @@ struct SOSStructuredData: Codable {
         case othersAreStable = "others_are_stable"
         case canMove = "can_move"
         case needMedical = "need_medical"
+        case injuredPersons = "injured_persons"
         case supplies
         case otherSupplyDescription = "other_supply_description"
         case peopleCount = "people_count"
@@ -72,6 +102,7 @@ struct SOSStructuredData: Codable {
         othersAreStable: Bool? = nil,
         canMove: Bool? = nil,
         needMedical: Bool? = nil,
+        injuredPersons: [SOSInjuredPerson]? = nil,
         supplies: [String]? = nil,
         otherSupplyDescription: String? = nil,
         peopleCount: SOSPeopleCount? = nil,
@@ -85,6 +116,7 @@ struct SOSStructuredData: Codable {
         self.othersAreStable = othersAreStable
         self.canMove = canMove
         self.needMedical = needMedical
+        self.injuredPersons = injuredPersons
         self.supplies = supplies
         self.otherSupplyDescription = otherSupplyDescription
         self.peopleCount = peopleCount
