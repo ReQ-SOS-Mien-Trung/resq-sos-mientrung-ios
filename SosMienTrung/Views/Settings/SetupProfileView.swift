@@ -10,6 +10,7 @@ import MultipeerConnectivity
 
 struct SetupProfileView: View {
     @ObservedObject var userProfile = UserProfile.shared
+    @StateObject private var phoneAuth = PhoneAuthManager.shared
     
     @State private var name = ""
     @State private var phoneNumber = ""
@@ -26,11 +27,13 @@ struct SetupProfileView: View {
     @State private var successMessage = ""
     @State private var showIdentityHandover = false
     @State private var isRescuerMode = false
+    @State private var showOTPSheet = false
+    @State private var otpCode = ""
     @Binding var isSetupComplete: Bool
     @FocusState private var focusedField: Field?
     
     enum Field {
-        case name, phone, password, confirmPassword, rescuerUsername, rescuerPassword
+        case name, phone, password, confirmPassword, rescuerUsername, rescuerPassword, otp
     }
 
     enum AuthMode: String, CaseIterable, Identifiable {
@@ -71,7 +74,7 @@ struct SetupProfileView: View {
                                 }
                             }
                             .pickerStyle(.segmented)
-                            .onChange(of: authMode) { _, newMode in
+                            .onChange(of: authMode) { newMode in
                                 if newMode == .register { isRescuerMode = false }
                             }
                         }
@@ -93,7 +96,7 @@ struct SetupProfileView: View {
                                 Toggle("", isOn: $isRescuerMode)
                                     .labelsHidden()
                                     .tint(DS.Colors.warning)
-                                    .onChange(of: isRescuerMode) { _, on in
+                                    .onChange(of: isRescuerMode) { on in
                                         if on { authMode = .login }
                                     }
                             }
@@ -194,7 +197,7 @@ struct SetupProfileView: View {
                                         .keyboardType(.phonePad)
                                         .foregroundColor(DS.Colors.text)
                                         .focused($focusedField, equals: .phone)
-                                        .onChange(of: phoneNumber) { _, newValue in
+                                        .onChange(of: phoneNumber) { newValue in
                                             // Chỉ cho nhập số, tối đa 10 ký tự
                                             let filtered = newValue.filter { $0.isNumber }
                                             let trimmed = String(filtered.prefix(10))
@@ -217,6 +220,7 @@ struct SetupProfileView: View {
                             }
 
                             // Password field
+                            if authMode == .register || authMode == .login {
                             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                                 Text("MÃ PIN (6 CHỮ SỐ)")
                                     .font(DS.Typography.caption).tracking(1)
@@ -238,7 +242,7 @@ struct SetupProfileView: View {
                                     .textContentType(.oneTimeCode)
                                     .foregroundColor(DS.Colors.text)
                                     .focused($focusedField, equals: .password)
-                                    .onChange(of: password) { _, newValue in
+                                    .onChange(of: password) { newValue in
                                         let filtered = newValue.filter { $0.isNumber }
                                         if filtered.count > 6 {
                                             password = String(filtered.prefix(6))
@@ -273,7 +277,7 @@ struct SetupProfileView: View {
                                 }
                             }
 
-                            // Confirm PIN field (chỉ hiện khi đăng ký)
+                            // Confirm PIN field (chỉ khi đăng ký)
                             if authMode == .register {
                                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                                     Text("NHẬP LẠI MÃ PIN")
@@ -290,7 +294,7 @@ struct SetupProfileView: View {
                                             .textContentType(.oneTimeCode)
                                             .foregroundColor(DS.Colors.text)
                                             .focused($focusedField, equals: .confirmPassword)
-                                            .onChange(of: confirmPassword) { _, newValue in
+                                            .onChange(of: confirmPassword) { newValue in
                                                 let filtered = newValue.filter { $0.isNumber }
                                                 if filtered.count > 6 {
                                                     confirmPassword = String(filtered.prefix(6))
@@ -313,8 +317,11 @@ struct SetupProfileView: View {
                                             .foregroundColor(DS.Colors.accent)
                                     }
                                 }
+                            } // end if register (confirm PIN)
                             }
                         }
+
+
                         } // end else (normal form fields)
                         
                         // Submit button
@@ -334,11 +341,12 @@ struct SetupProfileView: View {
                                 .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
                             }
                             .disabled(!isFormValid || isLoading)
-                        } else {
-                            Button { submit() } label: {
+                        } else if authMode == .register {
+                            Button { sendOTP() } label: {
                                 HStack(spacing: DS.Spacing.sm) {
                                     if isLoading { ProgressView().tint(.white) }
-                                    Text(authMode == .register ? "TẠO TÀI KHOẢN MỚI" : "ĐĂNG NHẬP")
+                                    Image(systemName: "ellipsis.bubble.fill")
+                                    Text("GỬI MÃ XÁC MINH")
                                         .font(DS.Typography.headline).tracking(2)
                                 }
                                 .foregroundColor(.white)
@@ -349,6 +357,48 @@ struct SetupProfileView: View {
                                 .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
                             }
                             .disabled(!isFormValid || isLoading)
+                        } else {
+                            // Đăng nhập: PIN là chính, SMS OTP là tuỳ chọn
+                            VStack(spacing: DS.Spacing.sm) {
+                                Button { loginWithPIN() } label: {
+                                    HStack(spacing: DS.Spacing.sm) {
+                                        if isLoading { ProgressView().tint(.white) }
+                                        Image(systemName: "lock.fill")
+                                        Text("ĐĂNG NHẬP")
+                                            .font(DS.Typography.headline).tracking(2)
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, DS.Spacing.md)
+                                    .background(isFormValid && !isLoading ? DS.Colors.accent : DS.Colors.textTertiary)
+                                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                                    .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+                                }
+                                .disabled(!isFormValid || isLoading)
+
+                                HStack {
+                                    EditorialDivider()
+                                    Text("hoặc")
+                                        .font(DS.Typography.caption)
+                                        .foregroundColor(DS.Colors.textTertiary)
+                                        .padding(.horizontal, DS.Spacing.sm)
+                                    EditorialDivider()
+                                }
+
+                                Button { sendOTP() } label: {
+                                    HStack(spacing: DS.Spacing.sm) {
+                                        Image(systemName: "ellipsis.bubble.fill")
+                                        Text("ĐĂNG NHẬP BẰNG SMS")
+                                            .font(DS.Typography.subheadline).tracking(1)
+                                    }
+                                    .foregroundColor(DS.Colors.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, DS.Spacing.sm)
+                                    .background(DS.Colors.surface)
+                                    .overlay(Rectangle().stroke(DS.Colors.accent, lineWidth: DS.Border.medium))
+                                }
+                                .disabled(!isPhoneValid || isLoading)
+                            }
                         }
                     }
                     .padding(DS.Spacing.lg)
@@ -402,6 +452,9 @@ struct SetupProfileView: View {
         }
         .fullScreenCover(isPresented: $showIdentityHandover) {
             SetupIdentityHandoverView(isSetupComplete: $isSetupComplete)
+        }
+        .sheet(isPresented: $showOTPSheet) {
+            otpVerificationSheet
         }
         .simultaneousGesture(
             TapGesture().onEnded {
@@ -468,43 +521,214 @@ struct SetupProfileView: View {
         if authMode == .register {
             return isPhoneValid && isPINValid && confirmPassword == password
         }
-        return isPhoneValid && isPINValid
+        // Đăng nhập bằng PIN: cần phone + PIN hợp lệ
+        return isPhoneValid && password.count == 6
     }
 
-    private func submit() {
+    // MARK: - OTP Verification Sheet
+    
+    private var otpVerificationSheet: some View {
+        NavigationStack {
+            VStack(spacing: DS.Spacing.lg) {
+                VStack(spacing: DS.Spacing.sm) {
+                    Image(systemName: "ellipsis.bubble.fill")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(DS.Colors.accent)
+                    
+                    Text("Xác minh OTP")
+                        .font(DS.Typography.largeTitle)
+                        .foregroundColor(DS.Colors.text)
+                    
+                    Text("Nhập mã 6 số đã gửi đến \(normalizedPhone(phoneNumber))")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                
+                // OTP input
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    Text("MÃ OTP")
+                        .font(DS.Typography.caption).tracking(1)
+                        .foregroundColor(DS.Colors.textSecondary)
+                    
+                    HStack {
+                        Image(systemName: "number")
+                            .foregroundColor(DS.Colors.accent)
+                            .frame(width: 20)
+                        
+                        TextField("6 chữ số...", text: $otpCode)
+                            .keyboardType(.numberPad)
+                            .textContentType(.oneTimeCode)
+                            .foregroundColor(DS.Colors.text)
+                            .focused($focusedField, equals: .otp)
+                            .onChange(of: otpCode) { newValue in
+                                let filtered = newValue.filter { $0.isNumber }
+                                if filtered.count > 6 {
+                                    otpCode = String(filtered.prefix(6))
+                                } else if filtered != newValue {
+                                    otpCode = filtered
+                                }
+                            }
+                    }
+                    .padding(DS.Spacing.sm)
+                    .background(DS.Colors.surface)
+                    .overlay(Rectangle().stroke(
+                        otpCode.count == 6 ? DS.Colors.success : DS.Colors.border,
+                        lineWidth: DS.Border.medium
+                    ))
+                }
+                
+                // Error from PhoneAuthManager
+                if let error = phoneAuth.errorMessage {
+                    Text(error)
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.accent)
+                        .multilineTextAlignment(.center)
+                }
+                
+                // Verify button
+                Button {
+                    Task { await verifyOTPAndSubmit() }
+                } label: {
+                    HStack(spacing: DS.Spacing.sm) {
+                        if phoneAuth.isLoading { ProgressView().tint(.white) }
+                        Text("XÁC NHẬN")
+                            .font(DS.Typography.headline).tracking(2)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.Spacing.md)
+                    .background(otpCode.count == 6 && !phoneAuth.isLoading ? DS.Colors.accent : DS.Colors.textTertiary)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                    .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+                }
+                .disabled(otpCode.count != 6 || phoneAuth.isLoading)
+                
+                // Resend OTP
+                HStack {
+                    if phoneAuth.resendCooldown > 0 {
+                        Text("Gửi lại sau \(phoneAuth.resendCooldown)s")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                    } else {
+                        Button("Gửi lại mã OTP") {
+                            Task {
+                                await phoneAuth.resendOTP(to: normalizedPhone(phoneNumber))
+                            }
+                        }
+                        .font(DS.Typography.subheadline.bold())
+                        .foregroundColor(DS.Colors.accent)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(DS.Spacing.lg)
+            .background(DS.Colors.background.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Huỷ") {
+                        showOTPSheet = false
+                        otpCode = ""
+                        phoneAuth.reset()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    // MARK: - Login with PIN
+    
+    private func loginWithPIN() {
         guard isPhoneValid else {
             errorMessage = "Số điện thoại không hợp lệ (cần 9-10 chữ số)"
             showError = true
             return
         }
-
         guard password.count == 6 else {
             errorMessage = "Mã PIN phải đúng 6 chữ số"
             showError = true
             return
         }
 
-        guard !isWeakPIN(password) else {
-            errorMessage = "Mã PIN quá đơn giản (\(password)), vui lòng chọn mã khác"
-            showError = true
-            return
-        }
-
-        if authMode == .register && confirmPassword != password {
-            errorMessage = "Mã PIN nhập lại không khớp"
-            showError = true
-            return
-        }
-
-        // Auto-convert: 0901234567 → +84901234567
         let formattedPhone = normalizedPhone(phoneNumber)
+        isLoading = true
+        AuthService.shared.login(phone: formattedPhone, password: password) { result in
+            isLoading = false
+            switch result {
+            case .success(let response):
+                AuthSessionStore.shared.save(from: response)
+                let displayName = response.displayName ?? formattedPhone
+                userProfile.saveUser(name: displayName, phoneNumber: formattedPhone)
+                isSetupComplete = true
+            case .failure(let error):
+                handleError(error)
+            }
+        }
+    }
+
+    // MARK: - Send OTP
+    
+    private func sendOTP() {
+        guard isPhoneValid else {
+            errorMessage = "Số điện thoại không hợp lệ (cần 9-10 chữ số)"
+            showError = true
+            return
+        }
 
         if authMode == .register {
+            guard password.count == 6 else {
+                errorMessage = "Mã PIN phải đúng 6 chữ số"
+                showError = true
+                return
+            }
+            guard !isWeakPIN(password) else {
+                errorMessage = "Mã PIN quá đơn giản, vui lòng chọn mã khác"
+                showError = true
+                return
+            }
+            guard confirmPassword == password else {
+                errorMessage = "Mã PIN nhập lại không khớp"
+                showError = true
+                return
+            }
+        }
+
+        let formattedPhone = normalizedPhone(phoneNumber)
+        
+        Task {
+            print("📱 Sending OTP to: \(formattedPhone)")
+            await phoneAuth.sendOTP(to: formattedPhone)
+            print("📱 OTP sent: \(phoneAuth.otpSent), error: \(phoneAuth.errorMessage ?? "none")")
+            if phoneAuth.otpSent {
+                otpCode = ""
+                showOTPSheet = true
+            } else if let error = phoneAuth.errorMessage {
+                errorMessage = error
+                showError = true
+            }
+        }
+    }
+    
+    // MARK: - Verify OTP & Submit to Backend
+    
+    private func verifyOTPAndSubmit() async {
+        await phoneAuth.verifyOTP(otpCode)
+        
+        guard let idToken = phoneAuth.firebaseIdToken else { return }
+        
+        let formattedPhone = normalizedPhone(phoneNumber)
+        
+        if authMode == .register {
+            // Đăng ký: gửi phone + password + firebaseIdToken
             isLoading = true
-            AuthService.shared.register(phone: formattedPhone, password: password) { result in
+            AuthService.shared.register(phone: formattedPhone, password: password, firebaseIdToken: idToken) { result in
                 isLoading = false
                 switch result {
                 case .success:
+                    showOTPSheet = false
+                    phoneAuth.reset()
                     successMessage = "Đăng ký thành công! Vui lòng đăng nhập để tiếp tục."
                     showSuccess = true
                 case .failure(let error):
@@ -512,11 +736,14 @@ struct SetupProfileView: View {
                 }
             }
         } else {
+            // Đăng nhập: gửi firebaseIdToken lên endpoint firebase-phone-login
             isLoading = true
-            AuthService.shared.login(phone: formattedPhone, password: password) { result in
+            AuthService.shared.firebasePhoneLogin(idToken: idToken) { result in
                 isLoading = false
                 switch result {
                 case .success(let response):
+                    showOTPSheet = false
+                    phoneAuth.reset()
                     AuthSessionStore.shared.save(from: response)
                     let displayName = response.displayName ?? formattedPhone
                     userProfile.saveUser(name: displayName, phoneNumber: formattedPhone)
