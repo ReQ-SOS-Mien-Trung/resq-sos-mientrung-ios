@@ -4,6 +4,7 @@ import Foundation
 struct RegisterRequest: Codable {
     let phone: String?
     let password: String?
+    let firebaseIdToken: String?
 }
 
 struct RegisterResponse: Codable {
@@ -11,6 +12,34 @@ struct RegisterResponse: Codable {
     let phone: String?
     let roleId: Int
     let createdAt: Date
+}
+
+/// Request cho đăng nhập bằng Firebase Phone OTP
+struct FirebasePhoneLoginRequest: Codable {
+    let idToken: String
+}
+
+/// Response cho đăng nhập bằng Firebase Phone OTP
+struct FirebasePhoneLoginResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresIn: Int
+    let tokenType: String
+    let userId: String
+    let phone: String?
+    let firstName: String?
+    let lastName: String?
+    let roleId: Int?
+    let isNewUser: Bool
+    let isOnboarded: Bool
+
+    var displayName: String? {
+        let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
+        if !parts.isEmpty { return parts.joined(separator: " ") }
+        return phone
+    }
+
+    var isRescuer: Bool { roleId == 3 }
 }
 
 /// Error response from server
@@ -103,9 +132,15 @@ final class AuthService {
         }
     }
 
-    func register(phone: String?, password: String?, completion: @escaping (Result<RegisterResponse, Error>) -> Void) {
-        let payload = RegisterRequest(phone: phone, password: password)
+    func register(phone: String?, password: String?, firebaseIdToken: String? = nil, completion: @escaping (Result<RegisterResponse, Error>) -> Void) {
+        let payload = RegisterRequest(phone: phone, password: password, firebaseIdToken: firebaseIdToken)
         request(path: "/identity/auth/register", body: payload, completion: completion)
+    }
+
+    /// Đăng nhập bằng Firebase Phone OTP
+    func firebasePhoneLogin(idToken: String, completion: @escaping (Result<FirebasePhoneLoginResponse, Error>) -> Void) {
+        let payload = FirebasePhoneLoginRequest(idToken: idToken)
+        request(path: "/identity/auth/firebase-phone-login", body: payload, completion: completion)
     }
 
     func login(username: String? = nil, phone: String? = nil, password: String?, completion: @escaping (Result<LoginResponse, Error>) -> Void) {

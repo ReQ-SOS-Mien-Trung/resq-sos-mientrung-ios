@@ -1,11 +1,34 @@
 import UIKit
+import FirebaseCore
+import FirebaseAuth
 
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
+class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Bridgefy sẽ được khởi động bởi BridgefyNetworkManager.shared
+        FirebaseApp.configure()
+        // Đăng ký nhận remote notifications (bắt buộc cho Firebase Phone Auth)
+        application.registerForRemoteNotifications()
         print("✅ App did finish launching")
         return true
+    }
+
+    // MARK: - APNs cho Firebase Phone Auth
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+    }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        if Auth.auth().canHandleNotification(userInfo) {
+            completionHandler(.noData)
+            return
+        }
+        completionHandler(.noData)
+    }
+
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if Auth.auth().canHandle(url) {
+            return true
+        }
+        return false
     }
 }

@@ -80,5 +80,14 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-737045977409-ios-7e2bec70777a85574a69c0</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
