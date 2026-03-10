@@ -38,8 +38,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     private var lastDistanceForHaptics: Float?
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
     private let qualityEstimator = MeasurementQualityEstimator()
-    @available(iOS 17.0, *)
-    private var convergenceByPeer: [MCPeerID: NIAlgorithmConvergence] = [:]
+    private var convergenceByPeer: [MCPeerID: Any] = [:]
 
     #if targetEnvironment(simulator)
     private let hapticsAvailable = false
@@ -302,7 +301,7 @@ extension NearbyInteractionManager: NISessionDelegate {
 
                 // Compute view state với logic Apple (updates all published properties)
                 if #available(iOS 17.0, *) {
-                    self.computeViewState(with: self.convergenceByPeer[peer], nearbyObject: object)
+                    self.computeViewState(with: self.convergenceByPeer[peer] as? NIAlgorithmConvergence, nearbyObject: object)
                 } else {
                     // iOS < 17: không có Camera Assistance
                     if let distance = object.distance {
@@ -318,26 +317,6 @@ extension NearbyInteractionManager: NISessionDelegate {
                 }
                 
                 self.statusMessage = "Tracking \(peer.displayName)"
-            }
-        }
-    }
-
-    @available(iOS 17.0, *)
-    func session(_ session: NISession, didUpdateAlgorithmConvergence convergence: NIAlgorithmConvergence, for object: NINearbyObject?) {
-        guard let object,
-              let tokenData = tokenData(object.discoveryToken),
-              let peer = peerByTokenData[tokenData] else {
-            return
-        }
-        
-        // Lưu convergence context
-        convergenceByPeer[peer] = convergence
-        print("🧭 Convergence updated: \(convergence)")
-        
-        // Recompute view state với convergence context mới (giống Apple)
-        DispatchQueue.main.async {
-            if peer == self.trackedPeer {
-                self.computeViewState(with: convergence, nearbyObject: object)
             }
         }
     }

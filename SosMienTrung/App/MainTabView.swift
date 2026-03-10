@@ -75,7 +75,7 @@ struct MainTabView: View {
             UITabBar.appearance().standardAppearance = tabBarAppearance
             UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
         }
-        .onChange(of: multipeerSession.connectedPeers) { oldValue, newValue in
+        .onChange(of: multipeerSession.connectedPeers) { newValue in
             if newValue.count == 1, selectedPeer == nil {
                 selectedPeer = newValue.first
                 nearbyManager.setActivePeer(newValue.first)

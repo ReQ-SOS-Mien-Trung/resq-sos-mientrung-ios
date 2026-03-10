@@ -65,7 +65,7 @@ struct ChatView: View {
                         }
                         .padding()
                     }
-                    .onChange(of: generalMessages.count) {
+                    .onChange(of: generalMessages.count) { _ in
                         if let lastMessage = generalMessages.last {
                             withAnimation {
                                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
@@ -206,24 +206,22 @@ struct LocationDetailMapView: View {
     let longitude: Double
     let title: String
     
-    @State private var cameraPosition: MapCameraPosition
+    @State private var region: MKCoordinateRegion
     
     init(latitude: Double, longitude: Double, title: String) {
         self.latitude = latitude
         self.longitude = longitude
         self.title = title
         
-        let region = MKCoordinateRegion(
+        _region = State(initialValue: MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
             span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        )
-        _cameraPosition = State(initialValue: .region(region))
+        ))
     }
     
     var body: some View {
-        let annotation = makeAnnotation()
-        Map(position: $cameraPosition) {
-            Annotation(annotation.title ?? "SOS", coordinate: annotation.coordinate) {
+        Map(coordinateRegion: $region, annotationItems: [makeAnnotation()]) { item in
+            MapAnnotation(coordinate: item.coordinate) {
                 VStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.title)

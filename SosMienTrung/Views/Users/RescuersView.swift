@@ -77,7 +77,7 @@ struct RescuersView: View {
                 Toggle("", isOn: $isRescueModeActive)
                     .labelsHidden()
                     .tint(DS.Colors.success)
-                    .onChange(of: isRescueModeActive) { _, newValue in
+                    .onChange(of: isRescueModeActive) { newValue in
                         savedRescueMode = newValue
                         if newValue { startRescueMode() } else { stopRescueMode() }
                     }

@@ -47,12 +47,12 @@ struct ChatBotView: View {
                         }
                         .padding(.vertical, DS.Spacing.sm)
                     }
-                    .onChange(of: scrollToId) { _, newId in
+                    .onChange(of: scrollToId) { newId in
                         if let id = newId {
                             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) }
                         }
                     }
-                    .onChange(of: service.isProcessing) { _, processing in
+                    .onChange(of: service.isProcessing) { processing in
                         if processing {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("processing", anchor: .bottom) }

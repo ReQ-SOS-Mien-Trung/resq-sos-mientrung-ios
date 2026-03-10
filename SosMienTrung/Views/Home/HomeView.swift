@@ -229,6 +229,8 @@ struct HomeGridButton: View {
     }
 }
 
+#if swift(>=5.9)
+@available(iOS 17, *)
 #Preview {
     @Previewable @State var selectedPeer: MCPeerID? = nil
     let nearbyManager = NearbyInteractionManager()
@@ -239,3 +241,4 @@ struct HomeGridButton: View {
         selectedPeer: $selectedPeer
     )
 }
+#endif

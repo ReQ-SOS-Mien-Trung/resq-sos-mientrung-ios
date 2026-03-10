@@ -20,11 +20,22 @@ actor FoundationModel {
     }
 
 #if canImport(FoundationModels)
-    @available(iOS 26.0, *)
-    private let systemModel = SystemLanguageModel.default
+    private var _systemModel: Any?
+    private var _session: Any?
 
     @available(iOS 26.0, *)
-    private var session: LanguageModelSession?
+    private var systemModel: SystemLanguageModel {
+        if _systemModel == nil {
+            _systemModel = SystemLanguageModel.default
+        }
+        return _systemModel as! SystemLanguageModel
+    }
+
+    @available(iOS 26.0, *)
+    private var session: LanguageModelSession? {
+        get { _session as? LanguageModelSession }
+        set { _session = newValue }
+    }
 #endif
     
     // Knowledge Base Structure

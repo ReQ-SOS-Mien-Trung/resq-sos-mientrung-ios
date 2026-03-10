@@ -174,10 +174,16 @@ struct WaterEjectView: View {
                                 .fill(Color.blue.opacity(0.3))
                                 .frame(width: 100, height: 100)
                             
-                            Image(systemName: "speaker.wave.3.fill")
-                                .font(.system(size: 45))
-                                .foregroundColor(.blue)
-                                .symbolEffect(.variableColor.iterative, options: .repeating, value: waterEjectManager.isPlaying)
+                            if #available(iOS 17, *) {
+                                Image(systemName: "speaker.wave.3.fill")
+                                    .font(.system(size: 45))
+                                    .foregroundColor(.blue)
+                                    .symbolEffect(.variableColor.iterative, options: .repeating, value: waterEjectManager.isPlaying)
+                            } else {
+                                Image(systemName: "speaker.wave.3.fill")
+                                    .font(.system(size: 45))
+                                    .foregroundColor(.blue)
+                            }
                         }
                     }
                     

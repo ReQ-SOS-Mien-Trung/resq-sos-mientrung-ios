@@ -56,12 +56,12 @@ struct ContentView: View {
                     ServerRequestGateway.shared.start()
                 }
             }
-            .onChange(of: userProfile.currentUser) { _, newUser in
+            .onChange(of: userProfile.currentUser) { newUser in
                 if newUser == nil {
                     isSetupComplete = false
                 }
             }
-            .onChange(of: authSession.session) { _, newSession in
+            .onChange(of: authSession.session) { newSession in
                 // Session bị xóa (logout hoặc hết hạn) → về màn hình đăng nhập
                 if newSession == nil {
                     isSetupComplete = false
@@ -72,13 +72,13 @@ struct ContentView: View {
     var body: some View {
         configuredView
             .preferredColorScheme(appearance.shouldUseDarkColors ? .dark : nil)
-            .onChange(of: isSetupComplete) { _, newValue in
+            .onChange(of: isSetupComplete) { newValue in
                 if newValue {
                     bridgefyManager.start()
                     ServerRequestGateway.shared.start()
                 }
             }
-            .onChange(of: multipeerSession.connectedPeers) { _, peers in
+            .onChange(of: multipeerSession.connectedPeers) { peers in
                 if peers.count == 1, selectedPeer == nil {
                     selectedPeer = peers.first
                     nearbyManager.setActivePeer(peers.first)
