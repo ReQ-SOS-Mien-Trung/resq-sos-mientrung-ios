@@ -14,11 +14,12 @@ struct SOSWizardView: View {
     @ObservedObject var locationManager: LocationManager
     @Environment(\.dismiss) var dismiss
     
-    @State private var formData = SOSFormData()
+    @StateObject private var formData = SOSFormData()
     @State private var isSending = false
     @State private var showSuccess = false
     @State private var sentToServer = false
     @State private var showLocationRequiredAlert = false
+    @State private var showTermsSheet = false
     
     init(bridgefyManager: BridgefyNetworkManager) {
         self.bridgefyManager = bridgefyManager
@@ -94,11 +95,11 @@ struct SOSWizardView: View {
                 // Dừng cập nhật vị trí khi đóng form
                 locationManager.stopContinuousUpdates()
             }
-            .onChange(of: locationManager.currentLocation) { _, newLocation in
+            .onChange(of: locationManager.currentLocation) { newLocation in
                 // Tự động cập nhật autoInfo khi vị trí thay đổi
                 updateAutoInfoWithLocation(newLocation)
             }
-            .onChange(of: networkMonitor.isConnected) { _, _ in
+            .onChange(of: networkMonitor.isConnected) { _ in
                 // Cập nhật khi trạng thái mạng thay đổi
                 updateAutoInfoWithLocation(locationManager.currentLocation)
             }
@@ -108,60 +109,100 @@ struct SOSWizardView: View {
     // MARK: - Bottom Navigation
     
     private var bottomNavigation: some View {
-        HStack(spacing: DS.Spacing.md) {
-            if formData.currentStep != .autoInfo {
-                Button { formData.goToPreviousStep() } label: {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                        Text("Quay lại")
-                    }
-                    .font(DS.Typography.subheadline)
-                    .foregroundColor(DS.Colors.text)
-                    .padding(.horizontal, DS.Spacing.md)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(DS.Colors.surface)
-                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
-                }
+        VStack(spacing: 0) {
+            // Disclaimer - visible on relief step
+            if formData.currentStep == .relief {
+                reliefDisclaimer
             }
-            Spacer()
-            if formData.currentStep == .review {
-                Button { sendSOS() } label: {
-                    HStack {
-                        if isSending {
-                            ProgressView().tint(.white)
-                        } else {
-                            Image(systemName: "paperplane.fill")
-                            Text("GỬI SOS").font(DS.Typography.headline).tracking(2)
+            
+            HStack(spacing: DS.Spacing.md) {
+                if formData.currentStep != .autoInfo {
+                    Button { formData.goToPreviousStep() } label: {
+                        HStack {
+                            Image(systemName: "chevron.left")
+                            Text("Quay lại")
                         }
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+                        .padding(.horizontal, DS.Spacing.md)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(DS.Colors.surface)
+                        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                     }
-                    .foregroundColor(DS.Colors.text)
-                    .padding(.horizontal, DS.Spacing.xl)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(DS.Colors.danger)
-                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
-                    .shadow(color: .black.opacity(0.25), radius: 0, x: 3, y: 3)
                 }
-                .disabled(isSending || !locationManager.hasValidLocation)
-                .opacity(locationManager.hasValidLocation ? 1.0 : 0.5)
-            } else {
-                Button { formData.goToNextStep() } label: {
-                    HStack {
-                        Text("Tiếp tục")
-                        Image(systemName: "chevron.right")
+                Spacer()
+                if formData.currentStep == .review {
+                    Button { sendSOS() } label: {
+                        HStack {
+                            if isSending {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                Text("GỬI SOS").font(DS.Typography.headline).tracking(2)
+                            }
+                        }
+                        .foregroundColor(DS.Colors.text)
+                        .padding(.horizontal, DS.Spacing.xl)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(DS.Colors.danger)
+                        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                        .shadow(color: .black.opacity(0.25), radius: 0, x: 3, y: 3)
                     }
-                    .font(DS.Typography.headline)
-                    .foregroundColor(DS.Colors.text)
-                    .padding(.horizontal, DS.Spacing.lg)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(formData.canProceedToNextStep ? DS.Colors.accent : DS.Colors.textTertiary)
-                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                    .disabled(isSending || !locationManager.hasValidLocation)
+                    .opacity(locationManager.hasValidLocation ? 1.0 : 0.5)
+                } else {
+                    Button { formData.goToNextStep() } label: {
+                        HStack {
+                            Text("Tiếp tục")
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
+                        .padding(.horizontal, DS.Spacing.lg)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(formData.canProceedToNextStep ? DS.Colors.accent : DS.Colors.textTertiary)
+                        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                    }
+                    .disabled(!formData.canProceedToNextStep)
                 }
-                .disabled(!formData.canProceedToNextStep)
             }
+            .padding(DS.Spacing.md)
         }
-        .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
         .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
+        .sheet(isPresented: $showTermsSheet) {
+            SOSTermsSheet()
+        }
+    }
+    
+    // MARK: - Relief Disclaimer
+    
+    private var reliefDisclaimer: some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Thông tin bạn cung cấp sẽ được sử dụng để ưu tiên và điều phối cứu trợ. Việc cung cấp thông tin không chính xác hoặc sai sự thật có thể làm ảnh hưởng đến các nạn nhân khác đang cần hỗ trợ khẩn cấp.")
+                        .font(.caption2)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Button {
+                        showTermsSheet = true
+                    } label: {
+                        Text("Điều khoản")
+                            .font(.caption2.bold())
+                            .underline()
+                            .foregroundColor(DS.Colors.accent)
+                    }
+                }
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+        }
     }
     
     // MARK: - Helpers
@@ -277,6 +318,41 @@ struct SOSProgressBar: View {
             Text("Bước \(currentStep.stepNumber + 1): \(currentStep.title)")
                 .font(DS.Typography.caption).tracking(1)
                 .foregroundColor(DS.Colors.textSecondary)
+        }
+    }
+}
+
+// MARK: - Terms Sheet
+
+struct SOSTermsSheet: View {
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Điều khoản sử dụng dịch vụ SOS")
+                        .font(.title2.bold())
+                        .foregroundColor(DS.Colors.text)
+                    
+                    Text("Nội dung điều khoản sẽ được cập nhật sau.")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(DS.Colors.background)
+            .navigationTitle("Điều khoản")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Đóng") {
+                        dismiss()
+                    }
+                    .foregroundColor(DS.Colors.text)
+                }
+            }
         }
     }
 }

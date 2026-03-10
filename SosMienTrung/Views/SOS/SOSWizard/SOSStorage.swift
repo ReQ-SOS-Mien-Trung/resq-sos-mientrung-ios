@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import Combine
 
 /// SOS đã lưu với đầy đủ thông tin
 struct SavedSOS: Codable, Identifiable, Equatable {
@@ -270,6 +271,7 @@ struct SavedRescueData: Codable, Equatable {
     var medicalIssues: [MedicalIssue]
     var otherMedicalDescription: String
     var othersAreStable: Bool
+    var people: [Person]
     
     init(from rescueData: RescueData) {
         self.situation = rescueData.situation
@@ -281,6 +283,7 @@ struct SavedRescueData: Codable, Equatable {
         self.medicalIssues = Array(rescueData.medicalIssues)
         self.otherMedicalDescription = rescueData.otherMedicalDescription
         self.othersAreStable = rescueData.othersAreStable
+        self.people = rescueData.people
     }
     
     func toRescueData() -> RescueData {
@@ -294,7 +297,10 @@ struct SavedRescueData: Codable, Equatable {
         data.medicalIssues = Set(medicalIssues)
         data.otherMedicalDescription = otherMedicalDescription
         data.othersAreStable = othersAreStable
-        data.generatePeople()
+        data.people = people
+        if data.people.isEmpty {
+            data.generatePeople()
+        }
         return data
     }
 }
@@ -352,12 +358,11 @@ struct SOSServerResponse: Codable {
 
 // MARK: - SOS Storage Manager
 
-@Observable
-final class SOSStorageManager {
-    static let shared = SOSStorageManager()
+final class SOSStorageManager: ObservableObject {
+    nonisolated static let shared = SOSStorageManager()
     
     private var currentUserId: String?
-    private(set) var savedSOSList: [SavedSOS] = []
+    @Published private(set) var savedSOSList: [SavedSOS] = []
     
     private init() {
         // Nếu app restart và user đã đăng nhập trước đó

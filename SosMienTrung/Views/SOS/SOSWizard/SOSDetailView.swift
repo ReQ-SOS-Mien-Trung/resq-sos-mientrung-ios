@@ -125,8 +125,10 @@ struct SOSDetailView: View {
     
     // MARK: - Status Header
     
+    @ObservedObject private var sosStorage = SOSStorageManager.shared
+    
     private var currentSOS: SavedSOS {
-        SOSStorageManager.shared.getSOS(id: savedSOS.id) ?? savedSOS
+        sosStorage.getSOS(id: savedSOS.id) ?? savedSOS
     }
     
     private var statusHeader: some View {
@@ -254,9 +256,15 @@ struct SOSDetailView: View {
             
             if let lat = savedSOS.latitude, let lon = savedSOS.longitude {
                 // Mini map
-                Map {
-                    Marker("SOS", coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon))
-                        .tint(.red)
+                Map(coordinateRegion: .constant(MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                )), annotationItems: [LocationAnnotation(
+                    coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    title: "SOS",
+                    userId: UUID()
+                )]) { item in
+                    MapMarker(coordinate: item.coordinate, tint: .red)
                 }
                 .frame(height: 150)
                 
@@ -348,38 +356,20 @@ struct SOSDetailView: View {
                         .font(.subheadline.bold())
                         .foregroundColor(DS.Colors.danger)
                     
-                    // Medical issues
-                    if !rescue.medicalIssues.isEmpty {
-                        let issues = rescue.medicalIssues.map { $0.title }.joined(separator: ", ")
-                        DetailRow(icon: "🏥", title: "Vấn đề y tế", value: issues)
+                    // 2-column grid of injured persons
+                    let injuredInfos = rescue.injuredPersonIds.compactMap { personId in
+                        rescue.medicalInfoByPerson[personId]
                     }
                     
-                    // Individual medical info
-                    ForEach(Array(rescue.medicalInfoByPerson.values), id: \.personId) { info in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(personLabel(info.personId))
-                                    .font(.caption.bold())
-                                    .foregroundColor(DS.Colors.text)
-                                
-                                Text(info.severity.title)
-                                    .font(.caption2.bold())
-                                    .foregroundColor(DS.Colors.text)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(severityColor(info.severity))
-                                    
-                            }
-                            
-                            if !info.medicalIssues.isEmpty {
-                                Text(info.medicalIssues.map { $0.title }.joined(separator: ", "))
-                                    .font(DS.Typography.caption)
-                                    .foregroundColor(DS.Colors.textSecondary)
-                            }
+                    let columns = [
+                        GridItem(.flexible(), spacing: 10),
+                        GridItem(.flexible(), spacing: 10)
+                    ]
+                    
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(injuredInfos, id: \.personId) { info in
+                            injuredPersonCard(info: info, rescue: rescue)
                         }
-                        .padding(8)
-                        .background(Color.red.opacity(0.2))
-                        
                     }
                 }
             }
@@ -425,6 +415,85 @@ struct SOSDetailView: View {
                 if !relief.otherSupplyDescription.isEmpty {
                     DetailRow(icon: "📝", title: "Khác", value: relief.otherSupplyDescription)
                 }
+                
+                // Supply detail answers
+                if relief.supplies.contains(.water) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("💧 Nước uống")
+                            .font(.caption.bold())
+                            .foregroundColor(.blue)
+                        if let d = relief.waterDuration {
+                            DetailRow(icon: "⏱", title: "Duy trì thêm", value: d.title)
+                        }
+                        if let r = relief.waterRemaining {
+                            DetailRow(icon: "🪣", title: "Lượng còn lại", value: r.title)
+                        }
+                    }
+                }
+                
+                if relief.supplies.contains(.food) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("🍚 Thực phẩm")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                        if let d = relief.foodDuration {
+                            DetailRow(icon: "⏱", title: "Duy trì thêm", value: d.title)
+                        }
+                        if let s = relief.specialDietNeed, s != .none {
+                            DetailRow(icon: "🍽", title: "Chế độ ăn đặc biệt", value: s.title)
+                        }
+                    }
+                }
+                
+                if relief.supplies.contains(.medicine) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("💊 Thuốc men")
+                            .font(.caption.bold())
+                            .foregroundColor(.red)
+                        if let urgent = relief.needsUrgentMedicine {
+                            DetailRow(icon: "🚑", title: "Cần thuốc khẩn cấp", value: urgent ? "Có" : "Không")
+                        }
+                        if !relief.medicineConditions.isEmpty {
+                            let conditions = relief.medicineConditions.map { $0.title }.joined(separator: ", ")
+                            DetailRow(icon: "🏥", title: "Tình trạng", value: conditions)
+                        }
+                        if !relief.medicineOtherDescription.isEmpty {
+                            DetailRow(icon: "📝", title: "Mô tả thêm", value: relief.medicineOtherDescription)
+                        }
+                    }
+                }
+                
+                if relief.supplies.contains(.blanket) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("🛏️ Chăn / Giữ ấm")
+                            .font(.caption.bold())
+                            .foregroundColor(.purple)
+                        if let cold = relief.isColdOrWet {
+                            DetailRow(icon: "🌧", title: "Lạnh / ướt", value: cold ? "Có" : "Không")
+                        }
+                        if let b = relief.blanketAvailability {
+                            DetailRow(icon: "🛌", title: "Chăn / đồ giữ ấm", value: b.title)
+                        }
+                    }
+                }
+                
+                if relief.supplies.contains(.clothes) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("👕 Quần áo")
+                            .font(.caption.bold())
+                            .foregroundColor(.teal)
+                        if let c = relief.clothingStatus {
+                            DetailRow(icon: "👔", title: "Tình trạng", value: c.title)
+                        }
+                    }
+                }
+                
+                Divider()
                 
                 // People count
                 DetailRow(icon: "👥", title: "Số người", value: "\(relief.peopleCount.total)")
@@ -512,16 +581,65 @@ struct SOSDetailView: View {
     
     // MARK: - Helpers
     
-    private func severityColor(_ severity: MedicalSeverity) -> Color {
-        switch severity {
-        case .critical: return .red
-        case .moderate: return .orange
-        case .mild: return .yellow
+    /// Card hiển thị thông tin người bị thương trong grid
+    private func injuredPersonCard(info: PersonMedicalInfo, rescue: SavedRescueData) -> some View {
+        let person = rescue.people.first(where: { $0.id == info.personId })
+        let name = person?.displayName ?? personLabel(info.personId)
+        let personTypeIcon = person?.type.icon ?? "🧑"
+        let personTypeTitle = person?.type.title ?? ""
+        
+        return VStack(alignment: .leading, spacing: 6) {
+            // Header: icon + name
+            HStack(spacing: 6) {
+                Text(personTypeIcon)
+                    .font(.title3)
+                Text(name)
+                    .font(.caption.bold())
+                    .foregroundColor(DS.Colors.text)
+                    .lineLimit(1)
+            }
+            
+            // Person type
+            Text(personTypeTitle)
+                .font(.caption2)
+                .foregroundColor(DS.Colors.textSecondary)
+            
+            // Medical issues
+            if !info.medicalIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(info.medicalIssues), id: \.self) { issue in
+                        HStack(spacing: 4) {
+                            Text(issue.icon)
+                                .font(.caption2)
+                            Text(issue.title)
+                                .font(.caption2)
+                                .foregroundColor(DS.Colors.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.08))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.red.opacity(0.2), lineWidth: 1)
+        )
     }
     
-    /// Chuyển personId ("adult_1", "child_2", "elderly_1") thành nhãn tiếng Việt
+    /// Chuyển personId ("adult_1", "child_2", "elderly_1") thành nhãn hiển thị
+    /// Ưu tiên hiển thị tên (customName) nếu có, ngược lại hiển thị loại + số thứ tự
     private func personLabel(_ personId: String) -> String {
+        // Tìm person trong rescueData để lấy customName
+        if let rescue = savedSOS.rescueData,
+           let person = rescue.people.first(where: { $0.id == personId }) {
+            return person.displayName
+        }
+        
+        // Fallback: parse từ personId
         let parts = personId.split(separator: "_")
         guard parts.count == 2, let index = parts.last.flatMap({ Int($0) }) else {
             return "Người \(personId)"
@@ -679,7 +797,7 @@ struct SOSEditView: View {
 // MARK: - SOS Wizard Content (Reusable)
 
 struct SOSWizardContent: View {
-    @Bindable var formData: SOSFormData
+    @ObservedObject var formData: SOSFormData
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @Binding var isSending: Bool
     var onSend: () -> Void

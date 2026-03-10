@@ -44,6 +44,7 @@ struct SOSPacketEnhanced: Codable {
         // Relief data
         let supplies: [String]?
         let otherSupplyDescription: String?
+        let supplyDetails: SupplyDetailData?
         
         // Rescue data
         let situation: String?
@@ -62,6 +63,7 @@ struct SOSPacketEnhanced: Codable {
         enum CodingKeys: String, CodingKey {
             case supplies
             case otherSupplyDescription = "other_supply_description"
+            case supplyDetails = "supply_details"
             case situation
             case otherSituationDescription = "other_situation_description"
             case hasInjured = "has_injured"
@@ -72,6 +74,37 @@ struct SOSPacketEnhanced: Codable {
             case canMove = "can_move"
             case peopleCount = "people_count"
             case additionalDescription = "additional_description"
+        }
+    }
+    
+    struct SupplyDetailData: Codable {
+        // Water
+        let waterDuration: String?
+        let waterRemaining: String?
+        // Food
+        let foodDuration: String?
+        let specialDietNeed: String?
+        // Medicine
+        let needsUrgentMedicine: Bool?
+        let medicineConditions: [String]?
+        let medicineOtherDescription: String?
+        // Blanket
+        let isColdOrWet: Bool?
+        let blanketAvailability: String?
+        // Clothes
+        let clothingStatus: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case waterDuration = "water_duration"
+            case waterRemaining = "water_remaining"
+            case foodDuration = "food_duration"
+            case specialDietNeed = "special_diet_need"
+            case needsUrgentMedicine = "needs_urgent_medicine"
+            case medicineConditions = "medicine_conditions"
+            case medicineOtherDescription = "medicine_other_description"
+            case isColdOrWet = "is_cold_or_wet"
+            case blanketAvailability = "blanket_availability"
+            case clothingStatus = "clothing_status"
         }
     }
     
@@ -164,9 +197,32 @@ struct SOSPacketEnhanced: Codable {
         )
         
         // Relief data - nếu có chọn relief
+        var supplyDetails: SupplyDetailData? = nil
         if formData.needsReliefStep {
             supplies = formData.reliefData.supplies.map { $0.rawValue }
             otherSupplyDescription = formData.reliefData.otherSupplyDescription.isEmpty ? nil : formData.reliefData.otherSupplyDescription
+            
+            let relief = formData.reliefData
+            let hasSomeDetail = relief.waterDuration != nil || relief.waterRemaining != nil ||
+                relief.foodDuration != nil || relief.specialDietNeed != nil ||
+                relief.needsUrgentMedicine != nil || !relief.medicineConditions.isEmpty ||
+                relief.isColdOrWet != nil || relief.blanketAvailability != nil ||
+                relief.clothingStatus != nil
+            
+            if hasSomeDetail {
+                supplyDetails = SupplyDetailData(
+                    waterDuration: relief.waterDuration?.rawValue,
+                    waterRemaining: relief.waterRemaining?.rawValue,
+                    foodDuration: relief.foodDuration?.rawValue,
+                    specialDietNeed: relief.specialDietNeed?.rawValue,
+                    needsUrgentMedicine: relief.needsUrgentMedicine,
+                    medicineConditions: relief.medicineConditions.isEmpty ? nil : relief.medicineConditions.map { $0.rawValue },
+                    medicineOtherDescription: relief.medicineOtherDescription.isEmpty ? nil : relief.medicineOtherDescription,
+                    isColdOrWet: relief.isColdOrWet,
+                    blanketAvailability: relief.blanketAvailability?.rawValue,
+                    clothingStatus: relief.clothingStatus?.rawValue
+                )
+            }
         }
         
         // Rescue data - nếu có chọn rescue
@@ -198,7 +254,7 @@ struct SOSPacketEnhanced: Codable {
                         name: person.displayName,
                         customName: person.customName.isEmpty ? nil : person.customName,
                         medicalIssues: info.medicalIssues.map { $0.rawValue },
-                        severity: info.severity.rawValue
+                        severity: "NONE"
                     ))
                 }
             }
@@ -208,6 +264,7 @@ struct SOSPacketEnhanced: Codable {
         self.structuredData = StructuredData(
             supplies: supplies,
             otherSupplyDescription: otherSupplyDescription,
+            supplyDetails: supplyDetails,
             situation: situation,
             otherSituationDescription: otherSituationDescription,
             hasInjured: hasInjured,

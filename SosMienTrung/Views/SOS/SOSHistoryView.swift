@@ -10,6 +10,7 @@ import SwiftUI
 struct SOSHistoryView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @ObservedObject var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var sosStorage = SOSStorageManager.shared
 
     @State private var showSOSForm = false
     @State private var selectedSOS: SavedSOS?
@@ -17,7 +18,7 @@ struct SOSHistoryView: View {
     
     // SOS từ storage
     private var savedSOSList: [SavedSOS] {
-        SOSStorageManager.shared.savedSOSList
+        sosStorage.savedSOSList
     }
     
     // Lọc ra các tin nhắn SOS từ messages (fallback)
@@ -29,7 +30,7 @@ struct SOSHistoryView: View {
     
     // SOS do mình gửi (từ storage)
     private var mySOS: [SavedSOS] {
-        SOSStorageManager.shared.mySOS
+        sosStorage.mySOS
     }
     
     // SOS nhận được từ người khác (từ messages)
