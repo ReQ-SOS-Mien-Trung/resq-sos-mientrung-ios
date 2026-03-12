@@ -8,8 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0165CD94A6DBDC49F2AFB479 /* Pods_SosMienTrung.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D2774B2A7B9E28145D8CC0A /* Pods_SosMienTrung.framework */; };
-		FB000001AAAA000100000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FB000001AAAA000100000002 /* FirebaseAuth */; };
-		FB000001AAAA000100000003 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB000001AAAA000100000004 /* FirebaseAnalytics */; };
+		CC000001DDDD000100000001 /* SignalRClient in Frameworks */ = {isa = PBXBuildFile; productRef = CC000001DDDD000100000002 /* SignalRClient */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,8 +75,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0165CD94A6DBDC49F2AFB479 /* Pods_SosMienTrung.framework in Frameworks */,
-				FB000001AAAA000100000001 /* FirebaseAuth in Frameworks */,
-				FB000001AAAA000100000003 /* FirebaseAnalytics in Frameworks */,
+				CC000001DDDD000100000001 /* SignalRClient in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -149,6 +147,7 @@
 				3BE85A432EE35F1F007BF228 /* Frameworks */,
 				3BE85A442EE35F1F007BF228 /* Resources */,
 				73787C291394CB8C5BEFF247 /* [CP] Embed Pods Frameworks */,
+				43363EA81119C13D1D0DCC6F /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -159,8 +158,7 @@
 			);
 			name = SosMienTrung;
 			packageProductDependencies = (
-				FB000001AAAA000100000002 /* FirebaseAuth */,
-				FB000001AAAA000100000004 /* FirebaseAnalytics */,
+				CC000001DDDD000100000002 /* SignalRClient */,
 			);
 			productName = SosMienTrung;
 			productReference = 3BE85A462EE35F1F007BF228 /* SosMienTrung.app */;
@@ -241,7 +239,7 @@
 			mainGroup = 3BE85A3D2EE35F1F007BF228;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FB000001AAAA000100000005 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				CC000001DDDD000100000003 /* XCRemoteSwiftPackageReference "SignalR-Client-Swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3BE85A472EE35F1F007BF228 /* Products */;
@@ -280,6 +278,27 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		43363EA81119C13D1D0DCC6F /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SosMienTrung/Pods-SosMienTrung-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		73787C291394CB8C5BEFF247 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -684,26 +703,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		FB000001AAAA000100000005 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		CC000001DDDD000100000003 /* XCRemoteSwiftPackageReference "SignalR-Client-Swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			repositoryURL = "https://github.com/moozzyk/SignalR-Client-Swift";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 11.0.0;
+				minimumVersion = 0.8.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		FB000001AAAA000100000002 /* FirebaseAuth */ = {
+		CC000001DDDD000100000002 /* SignalRClient */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FB000001AAAA000100000005 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAuth;
-		};
-		FB000001AAAA000100000004 /* FirebaseAnalytics */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = FB000001AAAA000100000005 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAnalytics;
+			package = CC000001DDDD000100000003 /* XCRemoteSwiftPackageReference "SignalR-Client-Swift" */;
+			productName = SignalRClient;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

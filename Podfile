@@ -3,6 +3,10 @@ use_frameworks!
 
 target 'SosMienTrung' do
   pod 'BridgefySDK'
+  pod 'FirebaseCore'
+  pod 'FirebaseAuth'
+  pod 'FirebaseAnalytics'
+  pod 'RecaptchaEnterprise'
 end
 
 post_install do |installer|
