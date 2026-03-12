@@ -62,9 +62,20 @@ class AppearanceManager: ObservableObject {
     /// True when user selected "Tối" in theme picker
     @Published var isDarkTheme: Bool = false
 
-    /// Master flag: OLED-dark colours whenever battery-saving OR dark theme is on
+    /// True when user selected "Sáng" in theme picker (forces light regardless of system)
+    @Published var isLightThemeForced: Bool = false
+
+    /// Drives DS.Colors (legacy — colors are now adaptive so this is only used for computedColorScheme)
     var shouldUseDarkColors: Bool {
         batterySavingMode || isDarkTheme
+    }
+
+    /// The `preferredColorScheme` to apply at the root view.
+    /// DS.Colors use adaptive UIColor providers, so they respond to whatever scheme is active.
+    var computedColorScheme: ColorScheme? {
+        if isLightThemeForced { return .light }
+        if batterySavingMode || isDarkTheme { return .dark }
+        return nil   // follow system — adaptive colors handle dark/light automatically
     }
 
     // MARK: - Compat properties → DS tokens
@@ -86,6 +97,10 @@ class AppearanceManager: ObservableObject {
 
     private init() {
         self.batterySavingMode = UserDefaults.standard.bool(forKey: "batterySavingMode")
+        let themeRaw = UserDefaults.standard.string(forKey: "appTheme") ?? AppTheme.system.rawValue
+        let savedTheme = AppTheme(rawValue: themeRaw) ?? .system
+        self.isDarkTheme = (savedTheme == .dark)
+        self.isLightThemeForced = (savedTheme == .light)
     }
 
     func resetToDefaults() {

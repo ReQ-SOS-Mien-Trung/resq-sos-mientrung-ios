@@ -66,6 +66,7 @@ final class PhoneAuthManager: ObservableObject {
                 .credential(withVerificationID: verificationID, verificationCode: code)
             let authResult = try await Auth.auth().signIn(with: credential)
             let idToken = try await authResult.user.getIDToken()
+            print("🔑 Firebase ID Token: \(idToken)")
             self.firebaseIdToken = idToken
             otpVerified = true
         } catch {
@@ -116,12 +117,19 @@ final class PhoneAuthManager: ObservableObject {
 
     private func mapFirebaseError(_ error: Error) -> String {
         let nsError = error as NSError
-        // Kiểm tra lỗi backend 503 (SMS service chưa sẵn sàng)
+
+        // Firebase backend error 503: parse inner error code for more specific messages
         if nsError.code == 17999,
            let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
            let responseDict = underlying.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any],
-           let code = responseDict["code"] as? Int, code == 503 {
-            return "Dịch vụ SMS tạm thời không khả dụng, vui lòng thử lại sau"
+           let httpCode = responseDict["code"] as? Int, httpCode == 503 {
+            let innerMessage = (responseDict["message"] as? String) ?? ""
+            print("🔴 Firebase 503 inner message: \(innerMessage)")
+            // Error code 39 = Backend không thể xử lý yêu cầu (APNs/reCAPTCHA issue, KHÔNG phải quota)
+            if innerMessage.contains("39") {
+                return "Lỗi xác thực thiết bị (Error 39). Vui lòng kiểm tra:\n• Chạy trên thiết bị thật (không phải Simulator)\n• APNs đã được cấu hình đúng\n• Thử lại sau vài phút"
+            }
+            return "Dịch vụ SMS tạm thời không khả dụng (503), vui lòng thử lại sau"
         }
         switch AuthErrorCode(rawValue: nsError.code) {
         case .invalidVerificationCode:
