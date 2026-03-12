@@ -53,6 +53,7 @@ class SettingsManager: ObservableObject {
         didSet {
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "appTheme")
             AppearanceManager.shared.isDarkTheme = (selectedTheme == .dark)
+            AppearanceManager.shared.isLightThemeForced = (selectedTheme == .light)
         }
     }
     
@@ -81,8 +82,10 @@ class SettingsManager: ObservableObject {
         self.batterySavingMode = savedBatterySaving
         // Sync với AppearanceManager khi khởi tạo - defer to avoid publishing during view update
         DispatchQueue.main.async {
+            let theme = AppTheme(rawValue: themeRaw) ?? .system
             AppearanceManager.shared.batterySavingMode = savedBatterySaving
-            AppearanceManager.shared.isDarkTheme = (AppTheme(rawValue: themeRaw) ?? .system) == .dark
+            AppearanceManager.shared.isDarkTheme = (theme == .dark)
+            AppearanceManager.shared.isLightThemeForced = (theme == .light)
         }
     }
 }

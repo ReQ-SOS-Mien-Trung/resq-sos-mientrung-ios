@@ -9,12 +9,25 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Đăng ký nhận remote notifications (bắt buộc cho Firebase Phone Auth)
         application.registerForRemoteNotifications()
         print("✅ App did finish launching")
+        print("✅ Remote notifications registered: \(application.isRegisteredForRemoteNotifications)")
+        
+        // Log Firebase config
+        if let app = FirebaseApp.app() {
+            print("✅ Firebase configured: \(app.options.googleAppID)")
+            print("✅ Firebase API key: \(app.options.apiKey?.prefix(10) ?? "nil")...")
+        }
         return true
     }
 
     // MARK: - APNs cho Firebase Phone Auth
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
+        print("✅ APNs token received: \(tokenString.prefix(20))...")
         Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("🔴 APNs registration FAILED: \(error.localizedDescription)")
     }
 
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {

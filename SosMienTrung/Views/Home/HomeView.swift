@@ -24,6 +24,8 @@ struct HomeView: View {
     @State private var showMapDisabledAlert = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
+    @State private var showCoordinatorChat = false
+    @State private var showSOSSignal = false
 
     @State private var weatherInfo = "TP Hồ Chí Minh - Có Mây"
 
@@ -41,6 +43,9 @@ struct HomeView: View {
 
                     // MARK: - SOS CTA Button
                     sosCTAButton
+
+                    // MARK: - Coordinator Chat Button
+                    coordinatorChatButton
 
                     // MARK: - Main grid
                     Text("BẢN ĐỒ & CỨU HỘ").sectionHeader()
@@ -74,6 +79,9 @@ struct HomeView: View {
         .sheet(isPresented: $showWaterEject) {
             WaterEjectView()
         }
+        .fullScreenCover(isPresented: $showSOSSignal) {
+            SOSSignalView()
+        }
         .fullScreenCover(isPresented: $showRescuersView) {
             NavigationStack {
                 RescuersView(
@@ -87,6 +95,9 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showCoordinatorChat) {
+            CoordinatorChatMainView()
         }
     }
 
@@ -120,6 +131,35 @@ struct HomeView: View {
             shadow: DS.Shadow.small,
             backgroundColor: DS.Colors.background
         )
+    }
+
+    // MARK: - Coordinator Chat Button
+    private var coordinatorChatButton: some View {
+        Button {
+            showCoordinatorChat = true
+        } label: {
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "headphones.circle.fill")
+                    .font(.system(size: 20, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CHAT VỚI TỔNG ĐÀI VIÊN")
+                        .font(DS.Typography.headline)
+                        .tracking(1.5)
+                    Text("Kết nối trực tiếp với Coordinator hỗ trợ")
+                        .font(DS.Typography.caption)
+                        .opacity(0.85)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Spacing.md)
+            .padding(.horizontal, DS.Spacing.md)
+            .background(DS.Colors.info)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+        }
     }
 
     // MARK: - SOS CTA
@@ -211,6 +251,14 @@ struct HomeView: View {
                 accentColor: DS.Colors.success
             ) {
                 showChatBot = true
+            }
+
+            ResQGridButton(
+                icon: "light.beacon.max.fill",
+                title: "Flash\nSOS",
+                accentColor: DS.Colors.danger
+            ) {
+                showSOSSignal = true
             }
         }
     }

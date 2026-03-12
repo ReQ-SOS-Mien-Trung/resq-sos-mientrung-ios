@@ -71,7 +71,7 @@ struct ContentView: View {
 
     var body: some View {
         configuredView
-            .preferredColorScheme(appearance.shouldUseDarkColors ? .dark : nil)
+            .preferredColorScheme(appearance.computedColorScheme)
             .onChange(of: isSetupComplete) { newValue in
                 if newValue {
                     bridgefyManager.start()

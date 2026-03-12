@@ -11,79 +11,85 @@ import SwiftUI
 // MARK: - Design Tokens Namespace
 enum DS {
 
-    // MARK: - Dark / Battery Saving Check
-    /// Returns `true` when battery-saving OR dark theme is active.
-    private static var isDarkMode: Bool {
-        AppearanceManager.shared.shouldUseDarkColors
-    }
-
     // MARK: - Colors
+    // All colors use UIColor's dynamic provider so they respond to color-scheme changes
+    // automatically at draw time — no need for views to observe AppearanceManager.
     enum Colors {
-        /// Brand primary — ResQ Orange #FF5722  (dimmed in battery-saving)
+        // MARK: Private helpers
+        private static func adaptive(light: UIColor, dark: UIColor) -> Color {
+            Color(UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+        }
+
+        /// Brand primary — ResQ Orange #FF5722  (dimmed in dark mode)
         static var accent: Color {
-            isDarkMode ? Color(hex: "BF4119") : Color(hex: "FF5722")
+            adaptive(light: UIColor(hex: "FF5722"), dark: UIColor(hex: "BF4119"))
         }
 
         /// Danger / SOS red
         static var danger: Color {
-            isDarkMode ? Color(hex: "B03030") : Color(hex: "E53E3E")
+            adaptive(light: UIColor(hex: "E53E3E"), dark: UIColor(hex: "B03030"))
         }
 
         /// Info blue (chat, links)
         static var info: Color {
-            isDarkMode ? Color(hex: "0B7EAF") : Color(hex: "0EA5E9")
+            adaptive(light: UIColor(hex: "0EA5E9"), dark: UIColor(hex: "0B7EAF"))
         }
 
         /// Success green
         static var success: Color {
-            isDarkMode ? Color(hex: "117B38") : Color(hex: "16A34A")
+            adaptive(light: UIColor(hex: "16A34A"), dark: UIColor(hex: "117B38"))
         }
 
         /// Warning yellow-orange
         static var warning: Color {
-            isDarkMode ? Color(hex: "C07E09") : Color(hex: "F59E0B")
+            adaptive(light: UIColor(hex: "F59E0B"), dark: UIColor(hex: "C07E09"))
         }
 
-        // MARK: Semantic — battery-saving overrides to OLED black
         /// Primary background
         static var background: Color {
-            isDarkMode ? Color(hex: "000000") : Color(hex: "FCFCFC")
+            adaptive(light: UIColor(hex: "FCFCFC"), dark: UIColor(hex: "000000"))
         }
 
         /// Grouped / card surface
         static var surface: Color {
-            isDarkMode ? Color(hex: "111111") : Color(UIColor.secondarySystemGroupedBackground)
+            Color(UIColor { $0.userInterfaceStyle == .dark
+                ? UIColor(hex: "111111")
+                : .secondarySystemGroupedBackground
+            })
         }
 
         /// Primary text
         static var text: Color {
-            isDarkMode ? .white : Color(UIColor.label)
+            Color(UIColor { $0.userInterfaceStyle == .dark ? .white : .label })
         }
 
         /// Secondary text
         static var textSecondary: Color {
-            isDarkMode ? Color(hex: "AAAAAA") : Color(UIColor.secondaryLabel)
+            Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: "AAAAAA") : .secondaryLabel })
         }
 
         /// Muted / tertiary text
         static var textMuted: Color {
-            isDarkMode ? Color(hex: "777777") : Color(UIColor.tertiaryLabel)
+            Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: "777777") : .tertiaryLabel })
         }
         static var textTertiary: Color { textMuted }
 
         /// Divider / separator
         static var divider: Color {
-            isDarkMode ? Color(hex: "333333") : Color(UIColor.separator)
+            Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: "333333") : .separator })
         }
 
         /// Border — strong
         static var border: Color {
-            isDarkMode ? Color(hex: "444444") : Color(hex: "D1D5DB")
+            adaptive(light: UIColor(hex: "D1D5DB"), dark: UIColor(hex: "444444"))
         }
 
         /// Border — subtle
         static var borderSubtle: Color {
-            isDarkMode ? Color.white.opacity(0.08) : Color(UIColor.label).opacity(0.1)
+            Color(UIColor { $0.userInterfaceStyle == .dark
+                ? UIColor.white.withAlphaComponent(0.08)
+                : UIColor.label.withAlphaComponent(0.1)
+            })
         }
 
         /// Overlay / scrim
@@ -188,6 +194,25 @@ extension Color {
             blue: Double(b) / 255,
             opacity: Double(a) / 255
         )
+    }
+}
+
+// MARK: - UIColor(hex:) Extension — used by DS.Colors adaptive providers
+extension UIColor {
+    convenience init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let r, g, b: UInt64
+        switch hex.count {
+        case 3:
+            (r, g, b) = ((int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6:
+            (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (0, 0, 0)
+        }
+        self.init(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
     }
 }
 
