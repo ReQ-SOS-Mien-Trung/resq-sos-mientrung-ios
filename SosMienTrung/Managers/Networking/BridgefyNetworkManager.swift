@@ -506,16 +506,20 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         print("✅ Bridgefy STARTED with userId: \(userId)")
         MeshManager.shared.updateMyDeviceId(userId.uuidString)
         MeshManager.shared.start()
-        // Khi Bridgefy SDK sẵn sàng (kể cả khi BT bật lại sau khi tắt),
-        // kích hoạt retry ngay lập tức để gửi lại các SOS đang chờ qua mesh
-        ServerRequestGateway.shared.triggerRetry(reason: .peerUpdate)
         // Đăng ký mapping serverUserId → bridgefyDeviceId ngay khi Bridgefy sẵn sàng
         if let serverUserId = AuthSessionStore.shared.session?.userId {
             updateIdentityMapping(userId: serverUserId, newPeerId: userId)
             print("🔗 Registered identity mapping: serverUserId=\(serverUserId) → bridgefyId=\(userId)")
         }
-        // Re-broadcast các SOS packet đang chờ (đã gửi khi BT tắt)
-        rebroadcastPendingSOS()
+        
+        // Delay 1.5s để SDK khởi tạo xong các list bên trong (VD: propagationList)
+        // và đảm bảo các thao tác push lên lưới không bị dồn dập ngay lúc khởi động.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            // Kích hoạt retry để gửi lại các SOS đang chờ qua mesh
+            ServerRequestGateway.shared.triggerRetry(reason: .peerUpdate)
+            // Re-broadcast các SOS packet đang chờ (đã gửi khi BT tắt)
+            self?.rebroadcastPendingSOS()
+        }
     }
     
     /// Broadcast lại các SOS đã lưu khi Bridgefy chưa sẵn sàng
@@ -791,53 +795,56 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func sendMeshData(_ data: Data, to peerId: String?) {
-        guard let bridgefy, let sender = bridgefy.currentUserId else {
-            print("[Mesh] Bridgefy not started or missing userId.")
-            return
-        }
-
-        do {
-            if let peerId = peerId, let peerUUID = UUID(uuidString: peerId) {
-                _ = try bridgefy.send(data, using: .p2p(userId: peerUUID))
-                print("[Mesh] Sent mesh packet to \(peerId).")
-            } else {
-                _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
-                print("[Mesh] Broadcast mesh packet.")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {
+                print("[Mesh] Bridgefy not started or missing userId.")
+                return
             }
-        } catch {
-            print("[Mesh] Failed to send mesh packet: \(error.localizedDescription)")
+            do {
+                if let peerId = peerId, let peerUUID = UUID(uuidString: peerId) {
+                    _ = try bridgefy.send(data, using: .p2p(userId: peerUUID))
+                    print("[Mesh] Sent mesh packet to \(peerId).")
+                } else {
+                    _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+                    print("[Mesh] Broadcast mesh packet.")
+                }
+            } catch {
+                print("[Mesh] Failed to send mesh packet: \(error.localizedDescription)")
+            }
         }
     }
 
     func sendServerRequest(_ request: ServerRequestEnvelope) {
-        guard let bridgefy, let sender = bridgefy.currentUserId else {
-            print("[ServerRequest] Bridgefy not started or missing userId.")
-            return
-        }
-
-        let payload = MeshPayload(serverRequest: request)
-        do {
-            let data = try JSONEncoder().encode(payload)
-            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
-            print("[ServerRequest] Broadcast request: \(request.requestId)")
-        } catch {
-            print("[ServerRequest] Failed to send request: \(error.localizedDescription)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {
+                print("[ServerRequest] Bridgefy not started or missing userId.")
+                return
+            }
+            let payload = MeshPayload(serverRequest: request)
+            do {
+                let data = try JSONEncoder().encode(payload)
+                _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+                print("[ServerRequest] Broadcast request: \(request.requestId)")
+            } catch {
+                print("[ServerRequest] Failed to send request: \(error.localizedDescription)")
+            }
         }
     }
 
     func sendServerAck(_ ack: ServerRequestAck) {
-        guard let bridgefy, let sender = bridgefy.currentUserId else {
-            print("[ServerRequest] Bridgefy not started or missing userId.")
-            return
-        }
-
-        let payload = MeshPayload(serverAck: ack)
-        do {
-            let data = try JSONEncoder().encode(payload)
-            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
-            print("[ServerRequest] Broadcast ack: \(ack.requestId)")
-        } catch {
-            print("[ServerRequest] Failed to send ack: \(error.localizedDescription)")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {
+                print("[ServerRequest] Bridgefy not started or missing userId.")
+                return
+            }
+            let payload = MeshPayload(serverAck: ack)
+            do {
+                let data = try JSONEncoder().encode(payload)
+                _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+                print("[ServerRequest] Broadcast ack: \(ack.requestId)")
+            } catch {
+                print("[ServerRequest] Failed to send ack: \(error.localizedDescription)")
+            }
         }
     }
 

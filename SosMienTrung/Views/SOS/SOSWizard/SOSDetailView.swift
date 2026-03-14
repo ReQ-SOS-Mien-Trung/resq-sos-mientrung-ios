@@ -191,21 +191,22 @@ struct SOSDetailView: View {
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(history.enumerated()), id: \.element.id) { index, event in
+                        let isLast = index == history.count - 1
+                        let visualState = timelineVisualState(for: event, isPast: !isLast)
+
                         HStack(alignment: .top, spacing: 12) {
                             // Timeline đường dọc
                             VStack(spacing: 0) {
-                                Circle()
-                                    .fill(event.type.color)
-                                    .frame(width: 10, height: 10)
-                                    .padding(.top, 5)
+                                timelineMarker(for: visualState, isLast: isLast)
                                 if index < history.count - 1 {
                                     Rectangle()
-                                        .fill(DS.Colors.border)
+                                        .fill(timelineConnectorColor(current: visualState))
                                         .frame(width: 2)
                                         .frame(minHeight: 30)
                                 }
                             }
-                            .frame(width: 10)
+                            .frame(width: 40) // Tăng width để chứa đủ được vòng Ripple
+
                             
                             // Nội dung sự kiện
                             VStack(alignment: .leading, spacing: 3) {
@@ -225,7 +226,7 @@ struct SOSDetailView: View {
                                 if let note = event.note {
                                     Text(note)
                                         .font(.caption2)
-                                        .foregroundColor(DS.Colors.textSecondary)
+                                        .foregroundColor(noteColor(for: visualState))
                                         .italic()
                                 }
                             }
@@ -239,6 +240,93 @@ struct SOSDetailView: View {
         }
         .padding()
         .background(DS.Colors.surface)
+    }
+
+    private enum TimelineVisualState {
+        case success
+        case failure
+        case inProgress
+        case pastInProgress
+    }
+
+    private func timelineVisualState(for event: SOSSendEvent, isPast: Bool) -> TimelineVisualState {
+        switch event.type {
+        case .created, .sentViaNetwork, .sentViaMesh, .serverAcknowledged:
+            return .success
+        case .pendingRetry:
+            let note = event.note?.lowercased() ?? ""
+            let isFailure = note.contains("thất bại") || note.contains("loi") || note.contains("lỗi") || note.contains("failed")
+            if isFailure {
+                return .failure
+            }
+            return isPast ? .pastInProgress : .inProgress
+        }
+    }
+
+    @ViewBuilder
+    private func timelineMarker(for state: TimelineVisualState, isLast: Bool) -> some View {
+        ZStack {
+            if isLast {
+                RippleCircle(color: timelineConnectorColor(current: state))
+            }
+            
+            Circle()
+                .fill(markerBackgroundColor(for: state))
+                .frame(width: 22, height: 22)
+
+            switch state {
+            case .success:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.green)
+            case .failure:
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.red)
+            case .inProgress:
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.blue)
+            case .pastInProgress:
+                Image(systemName: "clock") // Icon cho trạng thái cũ đang chờ
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func markerBackgroundColor(for state: TimelineVisualState) -> Color {
+        switch state {
+        case .success:
+            return Color.green.opacity(0.18)
+        case .failure:
+            return Color.red.opacity(0.18)
+        case .inProgress, .pastInProgress:
+            return Color.blue.opacity(0.18)
+        }
+    }
+
+    private func timelineConnectorColor(current: TimelineVisualState) -> Color {
+        switch current {
+        case .success:
+            return .green
+        case .failure:
+            return .red
+        case .inProgress, .pastInProgress:
+            return .blue
+        }
+    }
+
+    private func noteColor(for state: TimelineVisualState) -> Color {
+        switch state {
+        case .success:
+            return DS.Colors.textSecondary
+        case .failure:
+            return .red
+        case .inProgress, .pastInProgress:
+            return .blue
+        }
     }
     
     // MARK: - Location Card
@@ -893,6 +981,25 @@ struct SOSWizardContent: View {
                 .background(Color.black.opacity(0.3))
             }
         }
+    }
+}
+
+// MARK: - Ripple Effect
+struct RippleCircle: View {
+    let color: Color
+    @State private var isAnimating = false
+    
+    var body: some View {
+        Circle()
+            .stroke(color.opacity(0.6), lineWidth: 2)
+            .scaleEffect(isAnimating ? 1.8 : 1.0)
+            .opacity(isAnimating ? 0 : 1)
+            .frame(width: 22, height: 22)
+            .onAppear {
+                withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
+            }
     }
 }
 

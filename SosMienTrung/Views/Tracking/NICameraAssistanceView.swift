@@ -18,13 +18,11 @@ struct NICameraAssistanceView: UIViewRepresentable {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     
     func makeUIView(context: Context) -> ARView {
-        let arView = ARView(frame: .zero)
-        
-        // QUAN TRỌNG: Gắn ARSession vào NISession TRƯỚC khi chạy configuration
-        // Nếu gắn SAU thì NISession sẽ invalid
-        nearbyManager.attachARSession(arView.session)
-        
-        // Configure ARWorldTracking AFTER attaching to NISession
+        // TẠO ARView VỚI automaticallyConfigureSession: false
+        // Điều này ngăn ARView tự chạy AR configuration riêng (gây conflict với NISession)
+        let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
+
+        // BƯỚC 1: Configure ARWorldTracking
         let configuration = ARWorldTrackingConfiguration()
         configuration.worldAlignment = .gravity
         configuration.isCollaborationEnabled = false
@@ -32,16 +30,21 @@ struct NICameraAssistanceView: UIViewRepresentable {
         configuration.initialWorldMap = nil
         configuration.environmentTexturing = .automatic
         configuration.isLightEstimationEnabled = true
-        
+
+        // BƯỚC 2: Chạy ARSession TRƯỚC để nó có currentFrame hợp lệ
         arView.session.run(configuration)
-        
+
+        // BƯỚC 3: Gắn ARSession vào NISession SAU khi đã chạy
+        // Thứ tự quan trọng: ARSession phải đang chạy khi gắn vào NISession
+        nearbyManager.attachARSession(arView.session)
+
         context.coordinator.findingMode = findingMode
         context.coordinator.arView = arView
         context.coordinator.nearbyManager = nearbyManager
-        
+
         // Subscribe to worldTransform changes để update AR liên tục
         context.coordinator.startObserving()
-        
+
         return arView
     }
     
@@ -51,9 +54,12 @@ struct NICameraAssistanceView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: ARView, coordinator: Coordinator) {
-        // Pause ARKit when SwiftUI tears down the view to avoid ARSession deallocation warnings
+        // Pause ARSession trước
         uiView.session.pause()
         coordinator.stopObserving()
+        // Quan trọng: detach và recreate NISession để tránh stale ARSession reference
+        // khi view được tạo lại (ví dụ user quay lại màn hình)
+        coordinator.nearbyManager?.detachARSession()
     }
     
     func makeCoordinator() -> Coordinator {
@@ -250,7 +256,7 @@ struct NICameraAssistanceView: UIViewRepresentable {
                 switch findingMode {
                 case .exhibit:
                     placeSpheresInView(arView, worldTransform)
-                case .visitor:
+                case .rescuer:
                     placeTextInView(arView, worldTransform, name: peerName, distance: distance)
                 }
                 lastWorldTransform = worldTransform

@@ -180,6 +180,7 @@ struct SOSPacket: Codable {
     let packetId: String                    // UUID v4
     let originId: String                    // Original sender's ID (for mesh routing)
     let ts: Int64                           // Unix timestamp
+    var createdAt: String                   // ISO8601 date string
     let location: SOSLocation               // { lat, lng, accuracy }
     let sosType: String?                    // "RESCUE", "RELIEF", or "BOTH"
     let msg: String                         // Short message
@@ -191,6 +192,7 @@ struct SOSPacket: Codable {
         case packetId = "packet_id"
         case originId = "origin_id"
         case ts
+        case createdAt = "created_at"
         case location
         case sosType = "sos_type"
         case msg
@@ -217,6 +219,7 @@ struct SOSPacket: Codable {
         self.packetId = packetId
         self.originId = originId
         self.ts = Int64(timestamp.timeIntervalSince1970)
+        self.createdAt = ISO8601DateFormatter().string(from: timestamp)
         self.location = SOSLocation(lat: latitude, lng: longitude, accuracy: accuracy)
         self.sosType = nil
         self.msg = message
@@ -243,6 +246,7 @@ struct SOSPacket: Codable {
         self.packetId = packetId
         self.originId = originId
         self.ts = Int64(timestamp.timeIntervalSince1970)
+        self.createdAt = ISO8601DateFormatter().string(from: timestamp)
         self.location = SOSLocation(lat: latitude, lng: longitude, accuracy: accuracy)
         self.sosType = sosType
         self.msg = message

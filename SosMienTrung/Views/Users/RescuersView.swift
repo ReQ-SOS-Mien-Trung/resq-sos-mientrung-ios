@@ -34,13 +34,9 @@ struct RescuersView: View {
             if isRescueModeActive {
                 peerList
                 if let peer = selectedPeer ?? multipeerSession.connectedPeers.first {
-                    TrackingView(peer: peer, nearbyManager: nearbyManager, findingMode: .visitor)
+                    TrackingView(peer: peer, nearbyManager: nearbyManager, findingMode: .rescuer)
                 } else {
-                    Text("Đang tìm kiếm người cần cứu hộ...")
-                        .font(DS.Typography.subheadline)
-                        .foregroundColor(DS.Colors.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
+                    waitingForVictimView
                 }
             } else {
                 inactiveView
@@ -53,7 +49,7 @@ struct RescuersView: View {
             if isRescueModeActive { startRescueMode() }
         }
         .onDisappear {
-            if !isRescueModeActive { stopRescueMode() }
+            stopRescueMode()
         }
     }
 
@@ -101,6 +97,25 @@ struct RescuersView: View {
         .padding(.top, DS.Spacing.sm)
     }
 
+    // MARK: - Waiting for Victim View
+    private var waitingForVictimView: some View {
+        VStack(spacing: DS.Spacing.md) {
+            ProgressView()
+                .tint(DS.Colors.success)
+                .scaleEffect(1.4)
+                .padding(.bottom, DS.Spacing.xs)
+            Text("Đang quét tín hiệu UWB...")
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
+            Text("Yêu cầu người cần cứu hộ bật\n\"Chế độ chờ cứu\" trên thiết bị của họ")
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 48)
+        .padding(.horizontal, DS.Spacing.md)
+    }
     private var inactiveView: some View {
         VStack(spacing: DS.Spacing.md) {
             Image(systemName: "figure.wave")
@@ -114,7 +129,11 @@ struct RescuersView: View {
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
-                withAnimation { isRescueModeActive = true; savedRescueMode = true; startRescueMode() }
+                withAnimation {
+                    isRescueModeActive = true
+                    savedRescueMode = true
+                    startRescueMode()
+                }
             } label: {
                 HStack {
                     Image(systemName: "power")
@@ -183,17 +202,18 @@ struct RescuersView: View {
     }
     
     // MARK: - Rescue Mode Control
-    
+
     private func startRescueMode() {
-        // Start scanning for nearby peers
-        multipeerSession.startBrowsing()
-        multipeerSession.startAdvertising()
+        // Set role trước khi scan — quan trọng!
+        nearbyManager.configureAsRescuer()
+        // Rescuer CHỈ browse — tìm victim đang advertise
+        // KHÔNG advertise — tránh dual-invitation conflict
+        multipeerSession.startAsRescuer()
     }
-    
+
     private func stopRescueMode() {
-        // Stop scanning
         selectedPeer = nil
-        multipeerSession.stopBrowsing()
-        multipeerSession.stopAdvertising()
+        nearbyManager.userRole = .victim
+        multipeerSession.stopAll()
     }
 }

@@ -78,11 +78,8 @@ struct ContentView: View {
                     ServerRequestGateway.shared.start()
                 }
             }
-            .onChange(of: multipeerSession.connectedPeers) { peers in
-                if peers.count == 1, selectedPeer == nil {
-                    selectedPeer = peers.first
-                    nearbyManager.setActivePeer(peers.first)
-                }
-            }
+            // NOTE: setActivePeer() không được gọi khi peer kết nối — thời điểm đó token chưa
+            // được trao đổi xong. RescuersView sẽ tự động chọn peer sau khi
+            // receivedPeerDiscoveryToken() được gọi (xảy ra sau .connected event)
     }
 }

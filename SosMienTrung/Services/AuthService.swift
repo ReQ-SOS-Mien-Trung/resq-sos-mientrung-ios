@@ -91,10 +91,8 @@ final class AuthService {
     private let session: URLSession
 
     private init(session: URLSession? = nil) {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "https://resq.somee.com"
-        let urlString = configured
-        self.baseURL = URL(string: urlString)!
-        print("[AuthService] baseURL = \(urlString)")
+        self.baseURL = AppConfig.baseURL
+        print("[AuthService] baseURL = \(AppConfig.baseURLString)")
         
         if let session = session {
             self.session = session

@@ -24,6 +24,7 @@ struct HomeView: View {
     @State private var showMapDisabledAlert = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
+    @State private var showVictimStandby = false
     @State private var showCoordinatorChat = false
     @State private var showSOSSignal = false
 
@@ -92,6 +93,19 @@ struct HomeView: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Đóng") { showRescuersView = false }
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showVictimStandby) {
+            NavigationStack {
+                VictimStandbyView(
+                    nearbyManager: nearbyManager,
+                    multipeerSession: multipeerSession
+                )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Đóng") { showVictimStandby = false }
                     }
                 }
             }
@@ -214,10 +228,18 @@ struct HomeView: View {
 
             ResQGridButton(
                 icon: "antenna.radiowaves.left.and.right",
-                title: "Cứu hộ",
+                title: "Cứu hộ\n(Rescuer)",
                 accentColor: DS.Colors.accent
             ) {
                 showRescuersView = true
+            }
+
+            ResQGridButton(
+                icon: "figure.wave.circle.fill",
+                title: "Chờ cứu\n(Victim)",
+                accentColor: DS.Colors.danger
+            ) {
+                showVictimStandby = true
             }
         }
     }

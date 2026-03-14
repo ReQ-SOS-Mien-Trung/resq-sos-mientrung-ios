@@ -22,8 +22,7 @@ final class ConversationAPIService {
 
     init(token: String) {
         self.token = token
-        self.baseURL = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String
-            ?? "https://resq.somee.com"
+        self.baseURL = AppConfig.baseURLString
     }
 
     // MARK: - Bước 1: Lấy/tạo conversation

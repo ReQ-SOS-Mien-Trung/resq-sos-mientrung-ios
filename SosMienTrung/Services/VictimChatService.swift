@@ -15,8 +15,7 @@ final class VictimChatService: ObservableObject {
     private let baseURL: String
 
     init() {
-        self.baseURL = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String
-            ?? "https://resq.somee.com"
+        self.baseURL = AppConfig.baseURLString
     }
 
     // MARK: - Connect

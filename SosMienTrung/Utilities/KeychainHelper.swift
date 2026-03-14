@@ -34,3 +34,30 @@ struct KeychainHelper {
         SecItemDelete(query as CFDictionary)
     }
 }
+
+enum AppConfig {
+    private static let fallbackBaseURL = "http://localhost:8080"
+
+    static var baseURLString: String {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String else {
+            assertionFailure("Missing BASE_URL in Info.plist")
+            return fallbackBaseURL
+        }
+
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            assertionFailure("BASE_URL in Info.plist is empty")
+            return fallbackBaseURL
+        }
+
+        return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+    }
+
+    static var baseURL: URL {
+        guard let url = URL(string: baseURLString) else {
+            assertionFailure("BASE_URL is not a valid URL: \(baseURLString)")
+            return URL(string: fallbackBaseURL)!
+        }
+        return url
+    }
+}

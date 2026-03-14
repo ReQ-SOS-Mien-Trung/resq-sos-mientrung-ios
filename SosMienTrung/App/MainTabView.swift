@@ -75,12 +75,8 @@ struct MainTabView: View {
             UITabBar.appearance().standardAppearance = tabBarAppearance
             UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
         }
-        .onChange(of: multipeerSession.connectedPeers) { newValue in
-            if newValue.count == 1, selectedPeer == nil {
-                selectedPeer = newValue.first
-                nearbyManager.setActivePeer(newValue.first)
-            }
-        }
+        // setActivePeer được xử lý bởi RescuersView (sau khi token được trao đổi xong)
+        // Không gọi ở đây để tránh race condition với token exchange
     }
 }
 

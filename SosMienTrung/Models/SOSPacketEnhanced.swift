@@ -13,6 +13,7 @@ struct SOSPacketEnhanced: Codable {
     let packetId: String
     let originId: String
     let ts: Int64
+    let createdAt: String
     let loc: String
     let msg: String
     var hopCount: Int
@@ -28,6 +29,7 @@ struct SOSPacketEnhanced: Codable {
         case packetId = "packet_id"
         case originId = "origin_id"
         case ts
+        case createdAt = "created_at"
         case loc
         case msg
         case hopCount = "hop_count"
@@ -168,6 +170,7 @@ struct SOSPacketEnhanced: Codable {
         self.packetId = UUID().uuidString
         self.originId = originId
         self.ts = Int64(Date().timeIntervalSince1970)
+        self.createdAt = ISO8601DateFormatter().string(from: Date())
         self.loc = "\(latitude),\(longitude)"
         self.msg = formData.toSOSMessage()
         self.hopCount = 0
@@ -312,6 +315,7 @@ struct SOSPacketEnhanced: Codable {
         self.packetId = packetId
         self.originId = originId
         self.ts = Int64(timestamp.timeIntervalSince1970)
+        self.createdAt = ISO8601DateFormatter().string(from: timestamp)
         self.loc = "\(latitude),\(longitude)"
         self.msg = message
         self.hopCount = hopCount
@@ -370,7 +374,7 @@ struct SOSPacketEnhanced: Codable {
             sosSenderInfo = nil
         }
         
-        return SOSPacket(
+        var packet = SOSPacket(
             packetId: packetId,
             originId: originId,
             timestamp: Date(timeIntervalSince1970: TimeInterval(ts)),
@@ -384,6 +388,9 @@ struct SOSPacketEnhanced: Codable {
             hopCount: hopCount,
             path: path
         )
+        // Force the createdAt to match the original packet instead of current Date
+        packet.createdAt = self.createdAt
+        return packet
     }
     
     /// Relay packet

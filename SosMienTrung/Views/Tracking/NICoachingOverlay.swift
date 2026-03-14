@@ -12,36 +12,36 @@ import NearbyInteraction
 extension FindingMode {
     func moveMessage() -> String {
         switch self {
-        case .exhibit: 
+        case .exhibit:
             return "Di chuyển điện thoại lên xuống để xem vị trí."
-        case .visitor: 
+        case .rescuer:
             return "Di chuyển điện thoại lên xuống để tìm người khác."
         }
     }
 
     func guidanceWhenNoDistance() -> String {
         switch self {
-        case .exhibit: 
+        case .exhibit:
             return "Đang tìm kiếm..."
-        case .visitor: 
+        case .rescuer:
             return "Đang tìm người cần cứu..."
         }
     }
     
     func guidanceWhenNoAngle() -> String {
         switch self {
-        case .exhibit: 
+        case .exhibit:
             return "Di chuyển sang hai bên."
-        case .visitor: 
+        case .rescuer:
             return "Di chuyển đến vị trí khác."
         }
     }
     
     func guidanceWhenInGoodMeasurement() -> String {
         switch self {
-        case .exhibit: 
+        case .exhibit:
             return "Đi đến vị trí đó."
-        case .visitor: 
+        case .rescuer:
             return "Tiến đến gặp người cần cứu."
         }
     }

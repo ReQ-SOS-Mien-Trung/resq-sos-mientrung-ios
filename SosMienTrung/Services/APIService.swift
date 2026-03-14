@@ -11,8 +11,7 @@ final class APIService {
     private let session: URLSession
 
     private init() {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String ?? "https://resq.somee.com"
-        self.baseURL = configured
+        self.baseURL = AppConfig.baseURLString
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30

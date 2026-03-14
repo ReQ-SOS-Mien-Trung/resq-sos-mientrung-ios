@@ -108,14 +108,33 @@ final class ServerRequestGateway: ObservableObject {
             self.completed.insert(ack.requestId)
             let confirmedId = ack.requestId
             DispatchQueue.main.async { self.confirmedIds.insert(confirmedId) }
-            self.pending.removeValue(forKey: ack.requestId)
-            if ack.originDeviceId == self.myDeviceId {
+            // Xoá khỏi pending nhưng lưu biến entry để kiểm tra origin
+            let pendingEntry = self.pending.removeValue(forKey: ack.requestId)
+
+            // Xác định xem SOS packet này có phải do máy mình tạo ra không
+            let isLocalOrigin: Bool = {
+                // 1. Kiểm tra request đang pending (so khớp chính xác flags khi submit)
+                if let entry = pendingEntry {
+                    return entry.isLocalOrigin
+                }
+                // 2. Fallback: Nếu không còn trong pending (VD: app restart), tìm trong db
+                if let storedSOS = SOSStorageManager.shared.getSOS(id: ack.requestId) {
+                    return storedSOS.isMine
+                }
+                // 3. Last fallback: originDeviceId trả về có trùng với current device ID
+                return ack.originDeviceId == self.myDeviceId
+            }()
+
+            // Correlation logging for debugging
+            print("[Gateway][ACK] Received ACK for requestId=\(ack.requestId), ack.originDeviceId=\(ack.originDeviceId), localOriginMatch=\(isLocalOrigin)")
+
+            if isLocalOrigin {
                 DispatchQueue.main.async {
                     // Nhận ACK từ server qua relay: server đã xác nhận
                     SOSStorageManager.shared.updateStatusWithEvent(
                         id: ack.requestId,
                         status: .delivered,
-                        event: SOSSendEvent(type: .serverAcknowledged, note: "Server xác nhận qua Mesh relay")
+                        event: SOSSendEvent(type: .serverAcknowledged, note: "Server xác nhận qua Mesh relay (originId match)")
                     )
                 }
             }
