@@ -13,6 +13,10 @@ final class VictimChatService: ObservableObject {
 
     private var connection: HubConnection?
     private let baseURL: String
+    private var joinRetryCount = 0
+    private let maxJoinRetries = 8
+    private var hasJoinedConversation = false
+    private var isJoiningConversation = false
 
     init() {
         self.baseURL = AppConfig.baseURLString
@@ -23,6 +27,9 @@ final class VictimChatService: ObservableObject {
     func connect(token: String, conversationId: Int) {
         // Nếu đã kết nối thì không tạo mới
         guard connection == nil else { return }
+
+        hasJoinedConversation = false
+        isJoiningConversation = false
 
         guard let url = URL(string: "\(baseURL)/hubs/chat?access_token=\(token)") else {
             errorMessage = "URL hub không hợp lệ"
@@ -36,6 +43,7 @@ final class VictimChatService: ObservableObject {
 
         registerHandlers(conversationId: conversationId)
         connection?.start()
+        scheduleJoinRetry(conversationId: conversationId)
     }
 
     func disconnect(conversationId: Int) {
@@ -43,6 +51,9 @@ final class VictimChatService: ObservableObject {
         connection?.stop()
         connection = nil
         isConnected = false
+        joinRetryCount = 0
+        hasJoinedConversation = false
+        isJoiningConversation = false
     }
 
     // MARK: - Server → Client handlers
@@ -54,6 +65,9 @@ final class VictimChatService: ObservableObject {
         conn.on(method: "JoinedConversation") { [weak self] in
             Task { @MainActor [weak self] in
                 self?.isConnected = true
+                self?.joinRetryCount = 0
+                self?.isJoiningConversation = false
+                self?.hasJoinedConversation = true
             }
         }
 
@@ -63,8 +77,19 @@ final class VictimChatService: ObservableObject {
                 guard let self else { return }
                 // Xoá optimistic message (ID âm) trùng nội dung + sender
                 self.messages.removeAll { $0.id < 0 && $0.senderId == msg.senderId && $0.content == msg.content }
-                // Dedup theo server ID
-                guard !self.messages.contains(where: { $0.id == msg.id }) else { return }
+
+                // Dedup an toàn: ưu tiên theo ID dương, fallback theo payload đầy đủ.
+                let isDuplicate = self.messages.contains { existing in
+                    if msg.id > 0, existing.id == msg.id {
+                        return true
+                    }
+                    return existing.senderId == msg.senderId
+                        && existing.content == msg.content
+                        && existing.createdAt == msg.createdAt
+                        && existing.messageType == msg.messageType
+                }
+                guard !isDuplicate else { return }
+
                 self.messages.append(msg)
             }
         }
@@ -75,6 +100,14 @@ final class VictimChatService: ObservableObject {
                 guard let self else { return }
                 self.conversationStatus = .coordinatorActive
                 self.coordinatorName = payload.coordinatorId
+
+                guard !self.messages.contains(where: {
+                    $0.messageType == CoordinatorMessageType.systemMessage.rawValue
+                    && $0.content == payload.systemMessage
+                }) else {
+                    return
+                }
+
                 let systemMsg = CoordinatorChatMessage(
                     id: Int.random(in: 100_000...999_999),
                     conversationId: payload.conversationId,
@@ -112,11 +145,23 @@ final class VictimChatService: ObservableObject {
     // MARK: - Client → Server
 
     func joinConversation(conversationId: Int) {
+        guard !hasJoinedConversation, !isJoiningConversation else { return }
+        isJoiningConversation = true
+
         connection?.invoke(method: "JoinConversation", conversationId) { [weak self] error in
             if let error {
                 Task { @MainActor [weak self] in
                     self?.errorMessage = "Không thể join phòng chat: \(error.localizedDescription)"
+                    self?.isJoiningConversation = false
                 }
+                return
+            }
+
+            Task { @MainActor [weak self] in
+                self?.isConnected = true
+                self?.joinRetryCount = 0
+                self?.isJoiningConversation = false
+                self?.hasJoinedConversation = true
             }
         }
     }
@@ -128,6 +173,24 @@ final class VictimChatService: ObservableObject {
                     self?.errorMessage = "Gửi thất bại: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    private func scheduleJoinRetry(conversationId: Int) {
+        joinRetryCount = 0
+        retryJoinConversation(conversationId: conversationId)
+    }
+
+    private func retryJoinConversation(conversationId: Int) {
+        guard !isConnected else { return }
+        guard joinRetryCount < maxJoinRetries else { return }
+
+        joinRetryCount += 1
+        joinConversation(conversationId: conversationId)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self else { return }
+            self.retryJoinConversation(conversationId: conversationId)
         }
     }
 }

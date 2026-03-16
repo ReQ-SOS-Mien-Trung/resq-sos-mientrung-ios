@@ -71,22 +71,30 @@ struct CoordinatorChatRoomView: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(spacing: DS.Spacing.sm) {
-            ResQTextField(placeholder: "Nhập tin nhắn...", text: $vm.inputText)
-                .onSubmit { vm.sendMessage() }
-
-            Button(action: vm.sendMessage) {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundColor(canSend ? .white : DS.Colors.textTertiary)
-                    .frame(width: 40, height: 40)
-                    .background(canSend ? DS.Colors.accent : DS.Colors.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
-                    )
+        VStack(spacing: DS.Spacing.xs) {
+            HStack(spacing: DS.Spacing.xs) {
+                markdownButton(title: "B", token: "**")
+                markdownButton(title: "I", token: "*")
+                Spacer()
             }
-            .disabled(!canSend)
+
+            HStack(spacing: DS.Spacing.sm) {
+                ResQTextField(placeholder: "Nhập tin nhắn...", text: $vm.inputText)
+                    .onSubmit { vm.sendMessage() }
+
+                Button(action: vm.sendMessage) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundColor(canSend ? .white : DS.Colors.textTertiary)
+                        .frame(width: 40, height: 40)
+                        .background(canSend ? DS.Colors.accent : DS.Colors.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                        )
+                }
+                .disabled(!canSend)
+            }
         }
         .padding(DS.Spacing.sm)
         .background(DS.Colors.background)
@@ -95,6 +103,28 @@ struct CoordinatorChatRoomView: View {
 
     private var canSend: Bool {
         !vm.inputText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func markdownButton(title: String, token: String) -> some View {
+        Button {
+            let trimmed = vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                vm.inputText = "\(token)\(token)"
+            } else {
+                vm.inputText = "\(token)\(vm.inputText)\(token)"
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(DS.Colors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.xs)
+                        .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                )
+        }
     }
 }
 
@@ -110,11 +140,14 @@ struct CoordinatorMessageBubble: View {
     }
     private var isAI: Bool     { message.messageType == CoordinatorMessageType.aiMessage.rawValue }
     private var isSystem: Bool { message.messageType == CoordinatorMessageType.systemMessage.rawValue }
+    private var renderedContent: AttributedString {
+        (try? AttributedString(markdown: message.content)) ?? AttributedString(message.content)
+    }
 
     var body: some View {
         if isSystem {
             // System message: centered pill
-            Text(message.content)
+            Text(renderedContent)
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -133,7 +166,7 @@ struct CoordinatorMessageBubble: View {
                             .font(DS.Typography.caption)
                             .foregroundColor(isAI ? DS.Colors.info : DS.Colors.accent)
                     }
-                    Text(message.content)
+                    Text(renderedContent)
                         .font(DS.Typography.body)
                         .padding(DS.Spacing.sm)
                         .background(bubbleColor)
