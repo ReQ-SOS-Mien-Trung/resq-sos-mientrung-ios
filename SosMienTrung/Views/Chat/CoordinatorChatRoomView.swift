@@ -1,7 +1,9 @@
 import SwiftUI
+import Foundation
 
 struct CoordinatorChatRoomView: View {
     @ObservedObject var vm: VictimChatViewModel
+    @State private var showPreview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,10 +74,38 @@ struct CoordinatorChatRoomView: View {
 
     private var inputBar: some View {
         VStack(spacing: DS.Spacing.xs) {
-            HStack(spacing: DS.Spacing.xs) {
-                markdownButton(title: "B", token: "**")
-                markdownButton(title: "I", token: "*")
-                Spacer()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.Spacing.xs) {
+                    markdownWrapButton(title: "B", token: "**")
+                    markdownWrapButton(title: "I", token: "*")
+                    markdownSnippetButton(title: "Link", snippet: "[van ban](https://)")
+                    markdownSnippetButton(title: "Quote", snippet: "> ")
+                    markdownSnippetButton(title: "Code", snippet: "`code`")
+                    markdownSnippetButton(title: "Image", snippet: "![mo ta anh](https://)")
+
+                    Button {
+                        showPreview.toggle()
+                    } label: {
+                        Image(systemName: showPreview ? "eye.slash" : "eye")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(DS.Colors.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.Radius.xs)
+                                    .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                            )
+                    }
+                }
+            }
+
+            if showPreview && !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                MarkdownRichText(content: vm.inputText, textColor: DS.Colors.text)
+                    .font(DS.Typography.body)
+                    .padding(DS.Spacing.sm)
+                    .background(DS.Colors.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
             }
 
             HStack(spacing: DS.Spacing.sm) {
@@ -105,7 +135,7 @@ struct CoordinatorChatRoomView: View {
         !vm.inputText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private func markdownButton(title: String, token: String) -> some View {
+    private func markdownWrapButton(title: String, token: String) -> some View {
         Button {
             let trimmed = vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
@@ -116,6 +146,27 @@ struct CoordinatorChatRoomView: View {
         } label: {
             Text(title)
                 .font(.system(size: 12, weight: .bold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(DS.Colors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.xs)
+                        .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                )
+        }
+    }
+
+    private func markdownSnippetButton(title: String, snippet: String) -> some View {
+        Button {
+            if vm.inputText.isEmpty {
+                vm.inputText = snippet
+            } else {
+                vm.inputText += " \(snippet)"
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(DS.Colors.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
@@ -140,14 +191,10 @@ struct CoordinatorMessageBubble: View {
     }
     private var isAI: Bool     { message.messageType == CoordinatorMessageType.aiMessage.rawValue }
     private var isSystem: Bool { message.messageType == CoordinatorMessageType.systemMessage.rawValue }
-    private var renderedContent: AttributedString {
-        (try? AttributedString(markdown: message.content)) ?? AttributedString(message.content)
-    }
-
     var body: some View {
         if isSystem {
             // System message: centered pill
-            Text(renderedContent)
+            MarkdownRichText(content: message.content, textColor: DS.Colors.textSecondary)
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -166,7 +213,10 @@ struct CoordinatorMessageBubble: View {
                             .font(DS.Typography.caption)
                             .foregroundColor(isAI ? DS.Colors.info : DS.Colors.accent)
                     }
-                    Text(renderedContent)
+                    MarkdownRichText(
+                        content: message.content,
+                        textColor: isFromMe ? .white : DS.Colors.text
+                    )
                         .font(DS.Typography.body)
                         .padding(DS.Spacing.sm)
                         .background(bubbleColor)
@@ -183,5 +233,106 @@ struct CoordinatorMessageBubble: View {
         if isFromMe { return DS.Colors.accent }
         if isAI     { return DS.Colors.info.opacity(0.15) }
         return DS.Colors.surface
+    }
+}
+
+private struct MarkdownRichText: View {
+    let content: String
+    let textColor: Color
+
+    private var segments: [MarkdownSegment] {
+        MarkdownSegment.parse(content)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .text(let text):
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let attributed = (try? AttributedString(markdown: text)) ?? AttributedString(text)
+                        Text(attributed)
+                            .foregroundColor(textColor)
+                            .tint(textColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case .image(let url, let alt):
+                    VStack(alignment: .leading, spacing: 4) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, minHeight: 120)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            case .failure:
+                                Text("Khong tai duoc anh")
+                                    .foregroundColor(textColor.opacity(0.8))
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                        .frame(maxWidth: 240)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        if !alt.isEmpty {
+                            Text(alt)
+                                .font(.caption)
+                                .foregroundColor(textColor.opacity(0.8))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum MarkdownSegment {
+    case text(String)
+    case image(url: URL, alt: String)
+
+    static func parse(_ markdown: String) -> [MarkdownSegment] {
+        let pattern = #"!\[([^\]]*)\]\(([^\s\)]+)(?:\s+\"[^\"]*\")?\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return [.text(markdown)]
+        }
+
+        let nsString = markdown as NSString
+        let matches = regex.matches(in: markdown, range: NSRange(location: 0, length: nsString.length))
+
+        guard !matches.isEmpty else {
+            return [.text(markdown)]
+        }
+
+        var result: [MarkdownSegment] = []
+        var cursor = 0
+
+        for match in matches {
+            if match.range.location > cursor {
+                let prefix = nsString.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+                result.append(.text(prefix))
+            }
+
+            let alt = nsString.substring(with: match.range(at: 1))
+            let urlString = nsString.substring(with: match.range(at: 2))
+
+            if let url = URL(string: urlString), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                result.append(.image(url: url, alt: alt))
+            } else {
+                let full = nsString.substring(with: match.range)
+                result.append(.text(full))
+            }
+
+            cursor = match.range.location + match.range.length
+        }
+
+        if cursor < nsString.length {
+            let suffix = nsString.substring(with: NSRange(location: cursor, length: nsString.length - cursor))
+            result.append(.text(suffix))
+        }
+
+        return result
     }
 }
