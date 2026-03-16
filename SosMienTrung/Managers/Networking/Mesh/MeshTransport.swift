@@ -24,6 +24,7 @@ final class BridgefyTransport: MeshTransport {
             print("[Mesh] Failed to encode mesh envelope.")
             return
         }
-        BridgefyNetworkManager.shared.sendMeshData(data, to: peerId)
+        let suppressTransportLog = envelope.type == .heartbeat
+        BridgefyNetworkManager.shared.sendMeshData(data, to: peerId, suppressTransportLog: suppressTransportLog)
     }
 }

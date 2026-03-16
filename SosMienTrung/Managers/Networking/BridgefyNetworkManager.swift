@@ -26,6 +26,12 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     
     /// SOS packets chờ broadcast khi Bridgefy sẵn sàng (BT bật)
     private var pendingSOSBroadcasts: [(sosPacket: SOSPacket, message: String, timestamp: Date)] = []
+    private var suppressedSendLogIds: Set<UUID> = []
+    private let sendLogStateQueue = DispatchQueue(label: "bridgefy.sendlog.state")
+    private var pauseReasons: Set<String> = []
+    private let lifecycleQueue = DispatchQueue(label: "bridgefy.lifecycle.state")
+    private var isStartInProgress = false
+    private var pendingPauseAfterStart = false
     
     /// Get current Bridgefy user ID
     var currentUserId: UUID? {
@@ -37,6 +43,18 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         print("ℹ️ Bridgefy is not supported on the Simulator. Skipping start().")
         return
         #else
+
+        let (activePauseReasons, currentlyStarting) = lifecycleQueue.sync { (pauseReasons, isStartInProgress) }
+        if !activePauseReasons.isEmpty {
+            let reasons = activePauseReasons.sorted().joined(separator: ",")
+            print("⏸ Bridgefy start skipped (paused: \(reasons))")
+            return
+        }
+
+        if currentlyStarting {
+            print("⏳ Bridgefy start skipped (already starting)")
+            return
+        }
         
         // Check if identity was transferred - don't start if so
         if IdentityStore.shared.isTransferred {
@@ -58,6 +76,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             }
             let bridgefy = try Bridgefy(withApiKey: apiKey, delegate: self, verboseLogging: true)
             self.bridgefy = bridgefy
+            lifecycleQueue.sync {
+                isStartInProgress = true
+            }
             bridgefy.start()
             
             // Location will be requested on-demand (SOS / map)
@@ -70,6 +91,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
                 self.broadcastUserProfile()
             }
         } catch {
+            lifecycleQueue.sync {
+                isStartInProgress = false
+            }
             print("❌ Bridgefy init/start failed: \(error.localizedDescription)")
         }
         #endif
@@ -77,10 +101,73 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     
     /// Stop Bridgefy (used when identity is transferred)
     func stop() {
+        lifecycleQueue.sync {
+            pauseReasons.removeAll()
+            pendingPauseAfterStart = false
+            isStartInProgress = false
+        }
         bridgefy?.stop()
         bridgefy = nil
         isIdentityDisabled = true
         print("🛑 Bridgefy stopped")
+    }
+
+    func pause(reason: String) {
+        #if targetEnvironment(simulator)
+        return
+        #else
+        let (shouldSuspend, currentlyStarting) = lifecycleQueue.sync { () -> (Bool, Bool) in
+            let wasEmpty = pauseReasons.isEmpty
+            pauseReasons.insert(reason)
+            if isStartInProgress {
+                pendingPauseAfterStart = true
+            }
+            return (wasEmpty, isStartInProgress)
+        }
+
+        guard shouldSuspend else { return }
+        guard !isIdentityDisabled else { return }
+
+        if currentlyStarting {
+            print("⏳ Bridgefy pause deferred until start completes (reason: \(reason))")
+            return
+        }
+
+        bridgefy?.stop()
+        bridgefy = nil
+        MeshManager.shared.stop()
+        DispatchQueue.main.async {
+            self.connectedUsers.removeAll()
+            self.connectedUsersList.removeAll()
+        }
+        print("⏸ Bridgefy paused (reason: \(reason))")
+        #endif
+    }
+
+    func resume(reason: String) {
+        #if targetEnvironment(simulator)
+        return
+        #else
+        let shouldResume = lifecycleQueue.sync { () -> Bool in
+            pauseReasons.remove(reason)
+            if pauseReasons.isEmpty {
+                pendingPauseAfterStart = false
+            }
+            return pauseReasons.isEmpty
+        }
+
+        guard shouldResume else { return }
+        guard !isIdentityDisabled else {
+            print("ℹ️ Bridgefy resume ignored (identity is disabled)")
+            return
+        }
+
+        start()
+        #endif
+    }
+
+    var isPaused: Bool {
+        lifecycleQueue.sync { !pauseReasons.isEmpty }
     }
     
     // Broadcast own user profile to network
@@ -503,6 +590,18 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     // MARK: - BridgefyDelegate
 
     func bridgefyDidStart(with userId: UUID) {
+        let shouldPauseNow = lifecycleQueue.sync { () -> Bool in
+            isStartInProgress = false
+            return !pauseReasons.isEmpty || pendingPauseAfterStart
+        }
+
+        if shouldPauseNow {
+            bridgefy?.stop()
+            bridgefy = nil
+            print("⏸ Bridgefy paused immediately after start (pending NI pause)")
+            return
+        }
+
         print("✅ Bridgefy STARTED with userId: \(userId)")
         MeshManager.shared.updateMyDeviceId(userId.uuidString)
         MeshManager.shared.start()
@@ -572,16 +671,31 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func bridgefyDidFailToStart(with error: BridgefyError) {
+        lifecycleQueue.sync {
+            isStartInProgress = false
+        }
         print("❌ Bridgefy FAILED TO START: \(error)")
     }
 
     func bridgefyDidStop() {
-        print("⚠️ Bridgefy did stop (BT disabled or SDK stopped)")
+        lifecycleQueue.sync {
+            isStartInProgress = false
+            pendingPauseAfterStart = false
+        }
+        MeshManager.shared.stop()
+        if isPaused {
+            print("⏸ Bridgefy stopped (paused by app)")
+        } else {
+            print("⚠️ Bridgefy did stop (BT disabled or SDK stopped)")
+        }
         // KHÔNG nil bridgefy ở đây — SDK tự theo dõi CoreBluetooth state
         // và tự fire bridgefyDidStart lại khi BT được bật trở lại
     }
 
     func bridgefyDidFailToStop(with error: BridgefyError) {
+        lifecycleQueue.sync {
+            isStartInProgress = false
+        }
         print("❌ Bridgefy failed to stop: \(error)")
     }
 
@@ -627,6 +741,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     }
 
     func bridgefyDidSendMessage(with messageId: UUID) {
+        let shouldSuppress = sendLogStateQueue.sync { suppressedSendLogIds.remove(messageId) != nil }
+        if shouldSuppress {
+            return
+        }
         print("✅ Message sent successfully: \(messageId)")
     }
 
@@ -794,19 +912,38 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         connectedUsersList = Array(userProfiles.values).sorted { $0.name < $1.name }
     }
 
-    func sendMeshData(_ data: Data, to peerId: String?) {
+    func sendMeshData(_ data: Data, to peerId: String?, suppressTransportLog: Bool = false) {
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {
+            guard let self else { return }
+            if self.isPaused {
+                // NI mode intentionally pauses Bridgefy BLE.
+                return
+            }
+            guard let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {
                 print("[Mesh] Bridgefy not started or missing userId.")
                 return
             }
             do {
                 if let peerId = peerId, let peerUUID = UUID(uuidString: peerId) {
-                    _ = try bridgefy.send(data, using: .p2p(userId: peerUUID))
-                    print("[Mesh] Sent mesh packet to \(peerId).")
+                    let messageId = try bridgefy.send(data, using: .p2p(userId: peerUUID))
+                    if suppressTransportLog {
+                        self.sendLogStateQueue.async {
+                            self.suppressedSendLogIds.insert(messageId)
+                        }
+                    }
+                    if !suppressTransportLog {
+                        print("[Mesh] Sent mesh packet to \(peerId).")
+                    }
                 } else {
-                    _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
-                    print("[Mesh] Broadcast mesh packet.")
+                    let messageId = try bridgefy.send(data, using: .broadcast(senderId: sender))
+                    if suppressTransportLog {
+                        self.sendLogStateQueue.async {
+                            self.suppressedSendLogIds.insert(messageId)
+                        }
+                    }
+                    if !suppressTransportLog {
+                        print("[Mesh] Broadcast mesh packet.")
+                    }
                 }
             } catch {
                 print("[Mesh] Failed to send mesh packet: \(error.localizedDescription)")

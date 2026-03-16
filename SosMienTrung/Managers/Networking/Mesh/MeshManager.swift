@@ -5,6 +5,8 @@ import UIKit
 final class MeshManager {
     static let shared = MeshManager()
 
+    private let heartbeatLogEnabled = false
+
     private struct State {
         var myLevel: Int = 999
         var hasInternet: Bool = false
@@ -63,7 +65,9 @@ final class MeshManager {
     func processHeartbeat(payload: HeartbeatPayload, rssi: Int) {
         let now = Date().timeIntervalSince1970
         stateQueue.sync {
-            print("[Mesh] Heartbeat received from \(payload.senderId) level=\(payload.level) rssi=\(rssi).")
+            if heartbeatLogEnabled {
+                print("[Mesh] Heartbeat received from \(payload.senderId) level=\(payload.level) rssi=\(rssi).")
+            }
             if let neighbor = self.state.neighborTable[payload.senderId] {
                 neighbor.update(level: payload.level, rssi: rssi, lastSeen: now)
             } else {
@@ -172,7 +176,9 @@ final class MeshManager {
             level: level,
             battery: currentBatteryPercent()
         )
-        print("[Mesh] Heartbeat send: level=\(payload.level) battery=\(payload.battery).")
+        if heartbeatLogEnabled {
+            print("[Mesh] Heartbeat send: level=\(payload.level) battery=\(payload.battery).")
+        }
         transport.broadcastHeartbeat(payload)
     }
 

@@ -6,9 +6,8 @@
 //  Interaction token handshake.
 //
 //  Architecture:
-//    Rescuer → BROWSE only (tìm victim)
-//    Victim  → ADVERTISE only (chờ rescuer tìm)
-//  Không bao giờ cả browse lẫn advertise cùng lúc — tránh dual-invitation conflict.
+//    Symmetric NI discovery like Apple's sample:
+//    each device both ADVERTISES and BROWSES, then exchanges NI tokens.
 //
 
 import Foundation
@@ -21,22 +20,47 @@ import UIKit
 final class MultipeerSession: NSObject, ObservableObject {
     @Published var connectedPeers: [MCPeerID] = []
 
+    private struct DiscoveryConstants {
+        static let identityKey = "identity"
+        static let nodeIdKey = "nodeId"
+        static let serviceIdentity = "com.sosmientrung.nearbyinteraction"
+    }
+
     private let serviceType = "rescuefinder"
+    private let maxNumPeers = 1
+    private let localNodeId: String
     private let peerID = MCPeerID(displayName: UIDevice.current.name)
     private let session: MCSession
     private let advertiser: MCNearbyServiceAdvertiser
     private let browser: MCNearbyServiceBrowser
     private weak var nearbyManager: NearbyInteractionManager?
     private let logger = Logger(subsystem: "RescueFinder", category: "Multipeer")
+    private let sessionQueue = DispatchQueue(label: "SosMienTrung.multipeer.session", qos: .default)
+    private var currentConnectedPeers: [MCPeerID] = []
+    private var pendingPeerConnections: Set<MCPeerID> = []
+    private var tokenRetryCountByPeer: [MCPeerID: Int] = [:]
 
     /// Retry timer khi bị disconnect
     private var retryTimer: Timer?
     private var isCurrentlyBrowsing = false
     private var isCurrentlyAdvertising = false
+    private var isPeerDiscoveryActive = false
+    private var hasPausedCompetingStacks = false
+    private var pendingResumeWorkItem: DispatchWorkItem?
+    private let niWiFiPauseReason = "nearby-interaction-mode"
+    private let niBridgefyPauseReason = "nearby-interaction-mode"
 
     init(nearbyManager: NearbyInteractionManager) {
+        self.localNodeId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
         self.session = MCSession(peer: peerID, securityIdentity: nil, encryptionPreference: .required)
-        self.advertiser = MCNearbyServiceAdvertiser(peer: peerID, discoveryInfo: nil, serviceType: serviceType)
+        self.advertiser = MCNearbyServiceAdvertiser(
+            peer: peerID,
+            discoveryInfo: [
+                DiscoveryConstants.identityKey: DiscoveryConstants.serviceIdentity,
+                DiscoveryConstants.nodeIdKey: self.localNodeId
+            ],
+            serviceType: serviceType
+        )
         self.browser = MCNearbyServiceBrowser(peer: peerID, serviceType: serviceType)
         self.nearbyManager = nearbyManager
         super.init()
@@ -51,32 +75,43 @@ final class MultipeerSession: NSObject, ObservableObject {
         stopAll()
     }
 
-    // MARK: - Role-based Public Methods
+    // MARK: - Public Methods
 
-    /// Rescuer: CHỈ browse — tìm victim đang advertise
-    func startAsRescuer() {
-        stopAll()
-        // Tạm dừng WiFiDirectManager — 2 MCSession cùng kết nối 1 device gây conflict Bluetooth
-        WiFiDirectManager.shared.stop()
-        browser.startBrowsingForPeers()
-        isCurrentlyBrowsing = true
-        logger.info("🔍 Rescuer: started BROWSING for victims (WiFiDirect paused)")
-    }
+    /// Bắt đầu peer discovery theo mô hình đối xứng (browse + advertise cùng lúc).
+    func startPeerDiscovery() {
+        pendingResumeWorkItem?.cancel()
+        pendingResumeWorkItem = nil
 
-    /// Victim: CHỈ advertise — chờ rescuer browser tìm thấy
-    func startAsVictim() {
-        stopAll()
-        // Tạm dừng WiFiDirectManager — 2 MCSession cùng kết nối 1 device gây conflict Bluetooth
-        WiFiDirectManager.shared.stop()
+        if isPeerDiscoveryActive {
+            logger.info("⏩ Peer discovery already active, skip re-start")
+            return
+        }
+
+        isPeerDiscoveryActive = true
+        retryTimer?.invalidate()
+        retryTimer = nil
+
+        if !hasPausedCompetingStacks {
+            WiFiDirectManager.shared.pause(reason: niWiFiPauseReason)
+            BridgefyNetworkManager.shared.pause(reason: niBridgefyPauseReason)
+            hasPausedCompetingStacks = true
+        }
+
         advertiser.startAdvertisingPeer()
         isCurrentlyAdvertising = true
-        logger.info("📡 Victim: started ADVERTISING, waiting for rescuer (WiFiDirect paused)")
+
+        browser.startBrowsingForPeers()
+        isCurrentlyBrowsing = true
+        logger.info("🔄 Started symmetric NI peer discovery (browse + advertise)")
     }
 
     /// Dừng tất cả
-    func stopAll() {
+    func stopAll(resumeWiFiDirect: Bool = true) {
+        isPeerDiscoveryActive = false
         retryTimer?.invalidate()
         retryTimer = nil
+        currentConnectedPeers.removeAll()
+        pendingPeerConnections.removeAll()
 
         if isCurrentlyBrowsing {
             browser.stopBrowsingForPeers()
@@ -86,16 +121,40 @@ final class MultipeerSession: NSObject, ObservableObject {
             advertiser.stopAdvertisingPeer()
             isCurrentlyAdvertising = false
         }
-        // Khôi phục WiFiDirectManager khi không còn dùng NI
-        WiFiDirectManager.shared.start()
-        logger.info("⏹ Stopped all browsing/advertising (WiFiDirect resumed)")
+        if resumeWiFiDirect {
+            scheduleResumeCompetingStacks()
+            logger.info("⏹ Stopped all browsing/advertising (WiFiDirect resumed)")
+        } else {
+            logger.info("⏹ Stopped all browsing/advertising (WiFiDirect remains paused)")
+        }
     }
 
-    // Legacy methods — delegate sang role-based
-    func startAdvertising() { startAsVictim() }
+    private func scheduleResumeCompetingStacks() {
+        guard hasPausedCompetingStacks else { return }
+
+        pendingResumeWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard !self.isPeerDiscoveryActive else { return }
+            guard self.hasPausedCompetingStacks else { return }
+
+            WiFiDirectManager.shared.resume(reason: self.niWiFiPauseReason)
+            BridgefyNetworkManager.shared.resume(reason: self.niBridgefyPauseReason)
+            self.hasPausedCompetingStacks = false
+            self.logger.info("▶️ Resumed WiFiDirect/Bridgefy after NI cooldown")
+        }
+
+        pendingResumeWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+    }
+
+    // Legacy methods — delegate sang mode đối xứng
+    func startAdvertising() { startPeerDiscovery() }
     func stopAdvertising() { stopAll() }
-    func startBrowsing() { startAsRescuer() }
+    func startBrowsing() { startPeerDiscovery() }
     func stopBrowsing() { stopAll() }
+    func startAsRescuer() { startPeerDiscovery() }
+    func startAsVictim() { startPeerDiscovery() }
 
     func broadcastDiscoveryTokenToConnectedPeers() {
         guard !connectedPeers.isEmpty else { return }
@@ -103,14 +162,36 @@ final class MultipeerSession: NSObject, ObservableObject {
         connectedPeers.forEach { sendDiscoveryToken(to: $0) }
     }
 
+    func isConnected(to peer: MCPeerID) -> Bool {
+        sessionQueue.sync {
+            currentConnectedPeers.contains(peer) || session.connectedPeers.contains(peer)
+        }
+    }
+
     private func sendDiscoveryToken(to peer: MCPeerID) {
         guard let tokenData = nearbyManager?.discoveryTokenData else {
-            logger.error("❌ No discovery token available to send.")
+            let retryCount = (tokenRetryCountByPeer[peer] ?? 0) + 1
+            tokenRetryCountByPeer[peer] = retryCount
+            guard retryCount <= 8 else {
+                logger.error("❌ No discovery token available after retries for \(peer.displayName, privacy: .public)")
+                tokenRetryCountByPeer[peer] = 0
+                return
+            }
+            if retryCount == 4 {
+                nearbyManager?.prepareDiscoveryTokenIfNeeded()
+            }
+            logger.info("⏳ Discovery token not ready, retry \(retryCount) for \(peer.displayName, privacy: .public)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self else { return }
+                guard self.session.connectedPeers.contains(peer) else { return }
+                self.sendDiscoveryToken(to: peer)
+            }
             return
         }
 
         do {
             try session.send(tokenData, toPeers: [peer], with: .reliable)
+            tokenRetryCountByPeer[peer] = 0
             logger.info("✅ Sent NI discovery token to \(peer.displayName, privacy: .public)")
         } catch {
             logger.error("❌ Failed to send discovery token: \(error.localizedDescription, privacy: .public)")
@@ -120,6 +201,7 @@ final class MultipeerSession: NSObject, ObservableObject {
     // MARK: - Retry Logic
 
     private func scheduleRetry() {
+        guard isPeerDiscoveryActive else { return }
         retryTimer?.invalidate()
         retryTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
             guard let self else { return }
@@ -142,13 +224,53 @@ final class MultipeerSession: NSObject, ObservableObject {
             }
         }
     }
+
+    private func peerConnected(peerID: MCPeerID) {
+        pendingPeerConnections.remove(peerID)
+        guard !currentConnectedPeers.contains(peerID) else { return }
+        currentConnectedPeers.append(peerID)
+        if currentConnectedPeers.count >= maxNumPeers {
+            if isCurrentlyBrowsing {
+                browser.stopBrowsingForPeers()
+                isCurrentlyBrowsing = false
+            }
+            if isCurrentlyAdvertising {
+                advertiser.stopAdvertisingPeer()
+                isCurrentlyAdvertising = false
+            }
+            logger.info("⏸ Discovery suspended (max peers reached)")
+        }
+    }
+
+    private func peerDisconnected(peerID: MCPeerID) {
+        pendingPeerConnections.remove(peerID)
+        guard currentConnectedPeers.contains(peerID) else { return }
+        currentConnectedPeers.removeAll { $0 == peerID }
+        tokenRetryCountByPeer.removeValue(forKey: peerID)
+        guard isPeerDiscoveryActive else { return }
+        guard (isCurrentlyBrowsing || isCurrentlyAdvertising) == false else { return }
+        advertiser.startAdvertisingPeer()
+        isCurrentlyAdvertising = true
+        browser.startBrowsingForPeers()
+        isCurrentlyBrowsing = true
+        logger.info("▶️ Discovery resumed after disconnect")
+    }
 }
 
 // MARK: - Advertiser Delegate
 extension MultipeerSession: MCNearbyServiceAdvertiserDelegate {
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID, withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
-        logger.info("📨 Received invitation from \(peerID.displayName, privacy: .public) — accepting")
-        invitationHandler(true, session)
+        sessionQueue.sync {
+            let canAccept =
+                !self.pendingPeerConnections.contains(peerID) &&
+                self.session.connectedPeers.count < self.maxNumPeers &&
+                self.currentConnectedPeers.count < self.maxNumPeers
+            if canAccept {
+                self.pendingPeerConnections.insert(peerID)
+            }
+            invitationHandler(canAccept, canAccept ? self.session : nil)
+        }
+        logger.info("📨 Invitation from \(peerID.displayName, privacy: .public)")
     }
 
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
@@ -159,13 +281,42 @@ extension MultipeerSession: MCNearbyServiceAdvertiserDelegate {
 // MARK: - Browser Delegate
 extension MultipeerSession: MCNearbyServiceBrowserDelegate {
     func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String : String]?) {
-        // Chỉ invite nếu chưa connected
-        guard !session.connectedPeers.contains(peerID) else {
-            logger.info("⏩ Already connected to \(peerID.displayName, privacy: .public), skip invite")
+        guard let identity = info?[DiscoveryConstants.identityKey],
+              identity == DiscoveryConstants.serviceIdentity else {
             return
         }
-        logger.info("👀 Found peer \(peerID.displayName, privacy: .public) — sending invitation (timeout 30s)")
-        browser.invitePeer(peerID, to: session, withContext: nil, timeout: 30)
+        guard let remoteNodeId = info?[DiscoveryConstants.nodeIdKey] else {
+            return
+        }
+
+        // Deterministic inviter election prevents both sides sending invitations at once.
+        // Only the lexicographically smaller nodeId sends invite.
+        let shouldInvite: Bool
+        if localNodeId == remoteNodeId {
+            shouldInvite = self.peerID.displayName < peerID.displayName
+        } else {
+            shouldInvite = localNodeId < remoteNodeId
+        }
+
+        guard shouldInvite else {
+            logger.info("⏳ Found peer \(peerID.displayName, privacy: .public) — waiting for remote invite")
+            return
+        }
+
+        sessionQueue.sync {
+            guard !self.session.connectedPeers.contains(peerID) else {
+                return
+            }
+            guard !self.pendingPeerConnections.contains(peerID) else {
+                return
+            }
+            guard self.session.connectedPeers.count < self.maxNumPeers else {
+                return
+            }
+            self.pendingPeerConnections.insert(peerID)
+            logger.info("👀 Found peer \(peerID.displayName, privacy: .public) — sending invitation")
+            browser.invitePeer(peerID, to: self.session, withContext: nil, timeout: 15)
+        }
     }
 
     func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
@@ -184,22 +335,28 @@ extension MultipeerSession: MCSessionDelegate {
             self.connectedPeers = session.connectedPeers
         }
 
-        switch state {
-        case .connected:
-            logger.info("✅ CONNECTED to \(peerID.displayName, privacy: .public)")
-            retryTimer?.invalidate()
-            // Gửi NI discovery token ngay khi connected
-            sendDiscoveryToken(to: peerID)
-        case .notConnected:
-            logger.info("❌ DISCONNECTED from \(peerID.displayName, privacy: .public)")
-            // Auto-retry nếu vẫn đang hoạt động
-            if isCurrentlyBrowsing || isCurrentlyAdvertising {
-                scheduleRetry()
+        sessionQueue.sync {
+            switch state {
+            case .connected:
+                self.logger.info("✅ CONNECTED to \(peerID.displayName, privacy: .public)")
+                self.retryTimer?.invalidate()
+                self.peerConnected(peerID: peerID)
+                self.sendDiscoveryToken(to: peerID)
+            case .notConnected:
+                self.logger.info("❌ DISCONNECTED from \(peerID.displayName, privacy: .public)")
+                DispatchQueue.main.async {
+                    self.nearbyManager?.handleTransportDisconnect(from: peerID)
+                }
+                self.peerDisconnected(peerID: peerID)
+                if self.isCurrentlyBrowsing || self.isCurrentlyAdvertising {
+                    self.scheduleRetry()
+                }
+            case .connecting:
+                self.pendingPeerConnections.insert(peerID)
+                self.logger.info("🔄 CONNECTING to \(peerID.displayName, privacy: .public)")
+            @unknown default:
+                self.logger.error("Unknown session state")
             }
-        case .connecting:
-            logger.info("🔄 CONNECTING to \(peerID.displayName, privacy: .public)")
-        @unknown default:
-            logger.error("Unknown session state")
         }
     }
 

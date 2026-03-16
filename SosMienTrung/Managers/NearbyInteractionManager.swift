@@ -14,7 +14,7 @@ import UIKit
 import CoreHaptics
 import ARKit
 
-final class NearbyInteractionManager: NSObject, ObservableObject {
+final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDelegate {
     @Published var statusMessage: String = "Initializing UWB..."
     @Published var latestDistance: Float?
     @Published var latestDirection: simd_float3?
@@ -24,11 +24,6 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     @Published var currentWorldTransform: simd_float4x4?
     @Published var showCoachingOverlay: Bool = true
     @Published var showUpDownText: String?
-
-    /// Vai trò hiện tại của device trong phiên UWB
-    /// - `.rescuer`: chủ động tìm victim (cần AR + NISession run)
-    /// - `.victim`:  bị tìm (chỉ cần broadcast token, không cần AR)
-    @Published var userRole: UserRole = .victim
 
     /// Discovery token dạng Data — sàng lọc nil an toàn
     var discoveryTokenData: Data? {
@@ -50,9 +45,15 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     private var cameraAssistanceFailed = false
     /// ARSession đã thực sự được attach vào NISession hiện tại chưa
     private var isARSessionAttachedToNI = false
+    /// Chờ ARSession có frame đầu tiên rồi mới attach vào NISession
+    private var pendingARSessionAttachment = false
     /// Số lần restart liên tiếp — chặn infinite loop
     private var restartCount = 0
     private let maxRestarts = 2
+    /// Tránh restart khi invalidate do chính app chủ động gọi.
+    private var suppressNextInvalidationRestart = false
+    /// Chỉ auto-restart khi user đang ở mode rescue/victim active.
+    private var isModeActive = false
 
     #if targetEnvironment(simulator)
     private let hapticsAvailable = false
@@ -94,55 +95,164 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
     // Attach ARKit session — chỉ dùng bởi rescuer (NICameraAssistanceView)
     func attachARSession(_ arSession: ARSession) {
         self.arSession = arSession
-        session.setARSession(arSession)
-        isARSessionAttachedToNI = true
-        print("🔗 Attached ARSession to NISession for Camera Assistance")
+        guard !cameraAssistanceFailed else {
+            pendingARSessionAttachment = false
+            isARSessionAttachedToNI = false
+            print("🎥 Skipping ARSession attach because camera assistance is already disabled")
+            return
+        }
+
+        arSession.delegate = self
+        if attachARSessionIfReady(arSession, reason: "initial-attach") == false {
+            print("⏳ Waiting for first AR frame before enabling camera assistance")
+        }
     }
 
     /// Detach ARSession khi view bị dismantled
     func detachARSession() {
         print("🔌 Detaching ARSession from NISession")
+        let hadARLink = isARSessionAttachedToNI || pendingARSessionAttachment || arSession != nil
+        arSession?.delegate = nil
         arSession = nil
-        isARSessionAttachedToNI = false
-        // Invalidate và tạo lại NISession — đảm bảo không còn link tới ARSession cũ
+        pendingARSessionAttachment = false
+
+        guard hadARLink else {
+            isARSessionAttachedToNI = false
+            print("🔄 NISession already running without AR")
+            return
+        }
+
+        // NISession vẫn giữ reference đến ARSession cũ; recreate để tránh stale ARSession.
+        recreateSession(allowARReattach: false, reason: "ar-detach")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else { return }
+            guard self.isModeActive else { return }
+            if let peer = self.trackedPeer,
+               let token = self.tokensByPeer[peer] {
+                self.configureSession(for: peer, token: token)
+            }
+            self.multipeerSession?.broadcastDiscoveryTokenToConnectedPeers()
+        }
+
+        print("🔄 NISession switched to non-AR mode after detach")
+    }
+
+    private func attachARSessionIfReady(_ arSession: ARSession, reason: String) -> Bool {
+        guard !cameraAssistanceFailed else {
+            pendingARSessionAttachment = false
+            isARSessionAttachedToNI = false
+            return false
+        }
+        guard NISession.deviceCapabilities.supportsCameraAssistance else {
+            pendingARSessionAttachment = false
+            isARSessionAttachedToNI = false
+            print("🎥 Camera assistance not supported on this device")
+            return false
+        }
+        guard arSession.currentFrame != nil else {
+            pendingARSessionAttachment = true
+            isARSessionAttachedToNI = false
+            print("⏳ ARSession frame not ready (\(reason)); keeping NI in range-only mode")
+            return false
+        }
+
+        session.setARSession(arSession)
+        pendingARSessionAttachment = false
+        isARSessionAttachedToNI = true
+        print("🔗 Attached ARSession to NISession for Camera Assistance (\(reason))")
+        return true
+    }
+
+    private func recreateSession(allowARReattach: Bool, reason: String) {
+        suppressNextInvalidationRestart = true
         session.invalidate()
         session = NISession()
         session.delegate = self
-        if hapticsAvailable { feedbackGenerator.prepare() }
-        // Đợi token sẵn sàng rồi mới broadcast
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.multipeerSession?.broadcastDiscoveryTokenToConnectedPeers()
+
+        if allowARReattach, let arSession {
+            _ = attachARSessionIfReady(arSession, reason: reason)
+        } else {
+            pendingARSessionAttachment = false
+            isARSessionAttachedToNI = false
+            print("⚠️ Running without ARSession (range-only mode)")
         }
-        print("🔄 NISession recreated after ARSession detach")
+
+        if hapticsAvailable { feedbackGenerator.prepare() }
+    }
+
+    func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        guard let arSession, session === arSession else { return }
+        guard pendingARSessionAttachment else { return }
+        guard attachARSessionIfReady(arSession, reason: "live-frame") else { return }
+        guard isModeActive,
+              let peer = trackedPeer,
+              let token = tokensByPeer[peer],
+              multipeerSession?.isConnected(to: peer) == true else { return }
+
+        print("🔄 Re-running NI session after ARSession became ready")
+        configureSession(for: peer, token: token)
+    }
+
+    func session(_ session: ARSession, didFailWithError error: Error) {
+        print("❌ ARSession failed: \(error.localizedDescription)")
+        cameraAssistanceFailed = true
+        pendingARSessionAttachment = false
+        isARSessionAttachedToNI = false
+
+        guard isModeActive else { return }
+        guard let peer = trackedPeer, let token = tokensByPeer[peer] else { return }
+
+        statusMessage = "AR sensor unavailable. Using range-only tracking."
+        configureSession(for: peer, token: token)
     }
 
     func register(multipeerSession: MultipeerSession) {
         self.multipeerSession = multipeerSession
     }
 
-    // MARK: - Role Configuration
+    // MARK: - Session Configuration
 
-    /// Gọi bởi RescuersView khi bật chế độ cứu hộ — rescuer chủ động tìm victim
-    func configureAsRescuer() {
+    /// Nearby Interaction mode theo kiến trúc đối xứng: thiết bị nào cũng có thể tìm nhau.
+    func configureForPeerFinding() {
         guard isNearbyInteractionSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
-        userRole = .rescuer
-        statusMessage = "Searching for victims..."
-        print("🚨 Role set to RESCUER — will actively track victims")
+        isModeActive = true
+        statusMessage = "Searching for nearby devices..."
+        print("🔎 Nearby mode active (symmetric peer finding)")
+        prepareDiscoveryTokenIfNeeded()
     }
 
-    /// Gời khi victim bật chế độ chờ cứu — victim không cần AR, chỉ cần advertise token
+    /// Backward-compat wrapper.
+    func configureAsRescuer() {
+        configureForPeerFinding()
+    }
+
+    /// Backward-compat wrapper.
     func configureAsVictim() {
-        guard isNearbyInteractionSupported else {
-            statusMessage = "Nearby Interaction not supported on this device."
-            return
-        }
-        userRole = .victim
-        // Victim không gọi configureSession — chỉ đợi rescuer kết nối rồi sẽ respond token
-        statusMessage = "Waiting to be found by rescuers..."
-        print("🟣 Role set to VICTIM — broadcasting NI token passively")
+        configureForPeerFinding()
+    }
+
+    /// Dừng Nearby Interaction sạch sẽ khi rời flow tìm kiếm.
+    func deactivateNearbyMode() {
+        isModeActive = false
+        trackedPeer = nil
+        statusMessage = "Nearby Interaction is idle."
+        latestDistance = nil
+        latestDirection = nil
+        latestHorizontalAngle = nil
+        latestQuality = .unknown
+        currentWorldTransform = nil
+        showCoachingOverlay = true
+        showUpDownText = nil
+        convergenceByPeer.removeAll()
+        tokensByPeer.removeAll()
+        peerByTokenData.removeAll()
+        restartCount = 0
+        cameraAssistanceFailed = false
+        pendingARSessionAttachment = false
     }
 
     func setActivePeer(_ peer: MCPeerID?) {
@@ -167,12 +277,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             return
         }
 
-        // Chỉ rescuer mới chủ động chạy NISession
-        // Victim chỉ respond token và đợi, không tự configure session
-        guard userRole == .rescuer else {
-            statusMessage = "Victim mode: waiting for rescuer UWB ping..."
-            return
-        }
+        statusMessage = "Tracking \(peer.displayName)..."
 
         guard let token = tokensByPeer[peer] else {
             // Token chưa sẵn sàng — lưu peer lại, sẽ configure khi nhận được token
@@ -180,6 +285,22 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             return
         }
         configureSession(for: peer, token: token)
+    }
+
+    func handleTransportDisconnect(from peer: MCPeerID) {
+        if let token = tokensByPeer.removeValue(forKey: peer),
+           let data = tokenData(token) {
+            peerByTokenData.removeValue(forKey: data)
+        }
+        convergenceByPeer.removeValue(forKey: peer)
+
+        guard trackedPeer == peer else { return }
+
+        trackedPeer = nil
+        pendingARSessionAttachment = false
+        resetTrackingVisualState()
+        statusMessage = "Peer disconnected. Waiting to reconnect..."
+        recreateSession(allowARReattach: false, reason: "transport-disconnect")
     }
 
     func receivedPeerDiscoveryToken(_ token: NIDiscoveryToken, from peer: MCPeerID) {
@@ -194,19 +315,12 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             print("📡 Received discovery token from \(peer.displayName)")
         }
 
-        // Victim: không tự chạy NISession — chỉ giữ token để respond nếu rescuer init
-        // (Phía rescuer sẽ giao tiếp trước, victim respond khi được ping)
-        guard userRole == .rescuer else {
-            print("🟣 Victim: stored token from \(peer.displayName), waiting for rescuer to start session")
-            return
-        }
+        print("📡 Configure NI session with \(peer.displayName)")
 
-        // Rescuer: configure session
         if trackedPeer == nil {
             trackedPeer = peer
             configureSession(for: peer, token: token)
         } else if let active = trackedPeer, active == peer {
-            // Rescuer nhận lại token (có thể sau restart) — luôn configure lại
             configureSession(for: peer, token: token)
         }
     }
@@ -216,6 +330,16 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
+        guard multipeerSession?.isConnected(to: peer) ?? false else {
+            print("⏭ Skipping NI configure because transport is no longer connected to \(peer.displayName)")
+            return
+        }
+
+        #if !targetEnvironment(simulator)
+        if !cameraAssistanceFailed, !isARSessionAttachedToNI, let arSession {
+            _ = attachARSessionIfReady(arSession, reason: "configure")
+        }
+        #endif
 
         let configuration = NINearbyPeerConfiguration(peerToken: token)
 
@@ -236,17 +360,14 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         }
         #endif
 
-        // Extended Distance Measurement (EDM) – iOS 17+
+        // Extended Distance Measurement (EDM)
+        // Keep EDM disabled for broad device compatibility (including iPhone 11).
         if #available(iOS 17.0, *) {
             let localEDM = NISession.deviceCapabilities.supportsExtendedDistanceMeasurement
             let peerEDM = token.deviceCapabilities.supportsExtendedDistanceMeasurement
             print("🧪 EDM support → local=\(localEDM), peer=\(peerEDM)")
-            if localEDM && peerEDM {
-                configuration.isExtendedDistanceMeasurementEnabled = true
-                print("✅ EDM enabled in configuration")
-            } else {
-                print("ℹ️ EDM NOT enabled (fallback to classic ranging)")
-            }
+            configuration.isExtendedDistanceMeasurementEnabled = false
+            print("ℹ️ EDM disabled by app policy for compatibility")
         } else {
             print("ℹ️ EDM not available on this OS; using classic ranging")
         }
@@ -254,7 +375,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         session.run(configuration)
         statusMessage = "Tracking \(peer.displayName)"
         lastDistanceForHaptics = nil
-        print("▶️ NISession.run() for peer \(peer.displayName) [cameraAssist=\(!cameraAssistanceFailed)]")
+        print("▶️ NISession.run() for peer \(peer.displayName) [cameraAssist=\(configuration.isCameraAssistanceEnabled)]")
     }
 
     private func restartSession() {
@@ -265,20 +386,16 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
         guard restartCount <= maxRestarts else {
             print("⛔️ Max restarts reached. Switching to range-only mode (no camera assistance).")
             cameraAssistanceFailed = true
+            pendingARSessionAttachment = false
             restartCount = 0
             // Tạo session mới KHÔNG có ARSession (range-only)
-            session.invalidate()
-            session = NISession()
-            session.delegate = self
-            // Không gắn ARSession — chạy range-only
-            if hapticsAvailable { feedbackGenerator.prepare() }
+            recreateSession(allowARReattach: false, reason: "restart-range-only")
             statusMessage = "Range-only mode (no AR)"
 
             // Đợi discoveryToken sẵn sàng trước khi configure + broadcast
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self else { return }
-                if self.userRole == .rescuer,
-                   let peer = self.trackedPeer,
+                if let peer = self.trackedPeer,
                    let token = self.tokensByPeer[peer] {
                     self.configureSession(for: peer, token: token)
                 }
@@ -287,29 +404,14 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             return
         }
 
-        session.invalidate()
-        session = NISession()
-        session.delegate = self
-
-        // Chỉ re-attach ARSession nếu chưa fail camera assistance
-        if !cameraAssistanceFailed, let arSession, arSession.currentFrame != nil {
-            session.setARSession(arSession)
-            isARSessionAttachedToNI = true
-            print("🔗 Re-attached live ARSession to new NISession")
-        } else {
-            isARSessionAttachedToNI = false
-            print("⚠️ Running without ARSession (range-only mode)")
-        }
-
-        if hapticsAvailable { feedbackGenerator.prepare() }
-        statusMessage = userRole == .rescuer ? "Restarting search..." : "Reconnecting..."
+        recreateSession(allowARReattach: !cameraAssistanceFailed, reason: "restart")
+        statusMessage = "Reconnecting..."
 
         // Đợi discoveryToken sẵn sàng (NISession cần vài ms sau init)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
 
-            if self.userRole == .rescuer,
-               let peer = self.trackedPeer,
+            if let peer = self.trackedPeer,
                let token = self.tokensByPeer[peer] {
                 self.configureSession(for: peer, token: token)
             }
@@ -317,6 +419,96 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             // Broadcast token mới cho peers
             self.multipeerSession?.broadcastDiscoveryTokenToConnectedPeers()
         }
+    }
+
+    private func resetTrackingVisualState() {
+        DispatchQueue.main.async {
+            self.latestDistance = nil
+            self.latestDirection = nil
+            self.latestHorizontalAngle = nil
+            self.latestQuality = .unknown
+            self.currentWorldTransform = nil
+            self.showCoachingOverlay = true
+            self.showUpDownText = nil
+        }
+    }
+
+    private func shouldAutoRestart(after error: Error) -> Bool {
+        if #available(iOS 17.0, *) {
+            switch error {
+            case NIError.userDidNotAllow,
+                 NIError.incompatiblePeerDevice,
+                 NIError.activeSessionsLimitExceeded,
+                 NIError.activeExtendedDistanceSessionsLimitExceeded:
+                return false
+            case NIError.invalidARConfiguration:
+                // Attempt range-only fallback instead of hard-failing.
+                return true
+            default:
+                return true
+            }
+        } else {
+            switch error {
+            case NIError.userDidNotAllow,
+                 NIError.activeSessionsLimitExceeded:
+                return false
+            case NIError.invalidARConfiguration:
+                return true
+            default:
+                return true
+            }
+        }
+    }
+
+    private func handleInvalidARConfiguration() {
+        cameraAssistanceFailed = true
+        pendingARSessionAttachment = false
+        isARSessionAttachedToNI = false
+        restartCount = 0
+        statusMessage = "Camera assistance unavailable. Falling back to range-only mode."
+        print("⚠️ Invalid AR configuration. Falling back to range-only NI.")
+
+        guard isModeActive else { return }
+        restartSession()
+    }
+
+    private func handleRemovedPeers(_ nearbyObjects: [NINearbyObject], reason: NINearbyObject.RemovalReason) {
+        let removedPeers = nearbyObjects.compactMap { object -> MCPeerID? in
+            guard let data = tokenData(object.discoveryToken) else { return nil }
+            return peerByTokenData[data]
+        }
+
+        removedPeers.forEach { peer in
+            tokensByPeer.removeValue(forKey: peer)
+            convergenceByPeer.removeValue(forKey: peer)
+        }
+
+        nearbyObjects.forEach { object in
+            guard let data = tokenData(object.discoveryToken) else { return }
+            peerByTokenData.removeValue(forKey: data)
+        }
+
+        guard let activePeer = trackedPeer, removedPeers.contains(activePeer) else {
+            return
+        }
+
+        resetTrackingVisualState()
+
+        switch reason {
+        case .peerEnded:
+            statusMessage = "Peer ended nearby session. Waiting to reconnect..."
+        case .timeout:
+            statusMessage = "Signal lost. Reconnecting..."
+        default:
+            statusMessage = "Peer removed. Re-establishing session..."
+        }
+
+        guard isModeActive else {
+            print("ℹ️ Skip recovery after didRemove because mode is inactive")
+            return
+        }
+
+        restartSession()
     }
 
     private func tokenData(_ token: NIDiscoveryToken) -> Data? {
@@ -329,6 +521,26 @@ final class NearbyInteractionManager: NSObject, ObservableObject {
             feedbackGenerator.impactOccurred()
         }
         lastDistanceForHaptics = newDistance
+    }
+
+    func prepareDiscoveryTokenIfNeeded() {
+        guard isModeActive else { return }
+        if session.discoveryToken != nil {
+            return
+        }
+
+        print("🔁 Preparing NI session for discovery token...")
+
+        recreateSession(allowARReattach: !cameraAssistanceFailed, reason: "prepare-token")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            if self.session.discoveryToken != nil {
+                self.multipeerSession?.broadcastDiscoveryTokenToConnectedPeers()
+            } else {
+                print("⚠️ Discovery token still unavailable after NI session refresh")
+            }
+        }
     }
     
     // Logic tính toán view state giống Apple's "Finding Devices with Precision"
@@ -458,6 +670,32 @@ extension NearbyInteractionManager: NISessionDelegate {
         }
     }
 
+    func session(_ session: NISession,
+                 didUpdateAlgorithmConvergence convergence: NIAlgorithmConvergence,
+                 for object: NINearbyObject?) {
+        guard let object else { return }
+        guard let data = tokenData(object.discoveryToken),
+              let peer = peerByTokenData[data] else {
+            return
+        }
+
+        convergenceByPeer[peer] = convergence
+
+        guard peer == trackedPeer else { return }
+
+        if #available(iOS 17.0, *) {
+            computeViewState(with: convergence, nearbyObject: object)
+        }
+    }
+
+    func session(_ session: NISession,
+                 didRemove nearbyObjects: [NINearbyObject],
+                 reason: NINearbyObject.RemovalReason) {
+        guard !nearbyObjects.isEmpty else { return }
+        print("⚠️ didRemove nearby object(s), reason=\(reason.rawValue)")
+        handleRemovedPeers(nearbyObjects, reason: reason)
+    }
+
     func sessionSuspensionEnded(_ session: NISession) {
         DispatchQueue.main.async {
             self.statusMessage = "Session resumed."
@@ -469,6 +707,12 @@ extension NearbyInteractionManager: NISessionDelegate {
     }
 
     func session(_ session: NISession, didInvalidateWith error: Error) {
+        if suppressNextInvalidationRestart {
+            suppressNextInvalidationRestart = false
+            print("ℹ️ NISession invalidated intentionally, skip auto-restart")
+            return
+        }
+
         DispatchQueue.main.async {
             self.statusMessage = "Session invalidated: \(error.localizedDescription)"
             self.currentWorldTransform = nil
@@ -476,6 +720,28 @@ extension NearbyInteractionManager: NISessionDelegate {
             self.showUpDownText = nil
         }
         print("❌ NISession invalidated: \(error.localizedDescription)")
+
+        if #available(iOS 17.0, *) {
+            if case NIError.invalidARConfiguration = error {
+                handleInvalidARConfiguration()
+                return
+            }
+        } else {
+            if case NIError.invalidARConfiguration = error {
+                handleInvalidARConfiguration()
+                return
+            }
+        }
+
+        guard shouldAutoRestart(after: error) else {
+            print("ℹ️ Non-recoverable NI error, auto-restart disabled")
+            return
+        }
+
+        guard isModeActive else {
+            print("ℹ️ Ignore NI restart because mode is inactive")
+            return
+        }
         restartSession()
     }
 }

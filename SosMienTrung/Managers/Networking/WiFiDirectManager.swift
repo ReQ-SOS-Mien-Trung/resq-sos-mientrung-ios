@@ -7,22 +7,36 @@ final class WiFiDirectManager: NSObject {
 
     private let serviceType = "sos-wifi-direct"
     private let peerId: MCPeerID
-    private let session: MCSession
+    private var session: MCSession
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
+    private var pauseReasons: Set<String> = []
+    private let stateQueue = DispatchQueue(label: "wifi.direct.manager.state")
 
     var onReceiveData: ((Data, MCPeerID) -> Void)?
     var onPeersChanged: (([MCPeerID]) -> Void)?
 
     private override init() {
         let deviceName = UIDevice.current.name
-        peerId = MCPeerID(displayName: deviceName)
+        let suffix = UIDevice.current.identifierForVendor?.uuidString.suffix(4) ?? UUID().uuidString.suffix(4)
+        let maxBaseLength = max(8, 63 - suffix.count - 4)
+        let baseName = String(deviceName.prefix(maxBaseLength))
+        peerId = MCPeerID(displayName: "\(baseName)-wf\(suffix)")
         session = MCSession(peer: peerId, securityIdentity: nil, encryptionPreference: .required)
         super.init()
         session.delegate = self
     }
 
     func start() {
+        let activePauseReasons = stateQueue.sync { pauseReasons }
+        if !activePauseReasons.isEmpty {
+            let reasons = activePauseReasons.sorted().joined(separator: ",")
+            print("[WiFiDirect] Start skipped (paused: \(reasons))")
+            return
+        }
+
+        rebuildSessionIfNeeded()
+
         if advertiser == nil {
             advertiser = MCNearbyServiceAdvertiser(peer: peerId, discoveryInfo: nil, serviceType: serviceType)
             advertiser?.delegate = self
@@ -37,11 +51,40 @@ final class WiFiDirectManager: NSObject {
         print("[WiFiDirect] Started advertising/browsing")
     }
 
+    func pause(reason: String) {
+        let shouldStop = stateQueue.sync { () -> Bool in
+            let wasEmpty = pauseReasons.isEmpty
+            pauseReasons.insert(reason)
+            return wasEmpty
+        }
+
+        if shouldStop {
+            stop()
+        }
+    }
+
+    func resume(reason: String) {
+        let shouldStart = stateQueue.sync { () -> Bool in
+            pauseReasons.remove(reason)
+            return pauseReasons.isEmpty
+        }
+
+        if shouldStart {
+            start()
+        }
+    }
+
+    var isPaused: Bool {
+        stateQueue.sync { !pauseReasons.isEmpty }
+    }
+
     func stop() {
         advertiser?.stopAdvertisingPeer()
         browser?.stopBrowsingForPeers()
         advertiser = nil
         browser = nil
+        resetSession()
+        notifyPeersChanged()
         print("[WiFiDirect] Stopped advertising/browsing")
     }
 
@@ -64,6 +107,22 @@ final class WiFiDirectManager: NSObject {
 
     private func notifyPeersChanged() {
         onPeersChanged?(session.connectedPeers)
+    }
+
+    private func rebuildSessionIfNeeded() {
+        if session.delegate == nil {
+            session.delegate = self
+        }
+    }
+
+    private func resetSession() {
+        let oldSession = session
+        oldSession.delegate = nil
+        oldSession.disconnect()
+
+        let newSession = MCSession(peer: peerId, securityIdentity: nil, encryptionPreference: .required)
+        newSession.delegate = self
+        session = newSession
     }
 }
 
