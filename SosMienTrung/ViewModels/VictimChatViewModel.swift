@@ -22,6 +22,8 @@ final class VictimChatViewModel: ObservableObject {
     private let api: ConversationAPIService
     private let token: String
     private var statusCancellable: AnyCancellable?
+    private var chatServiceChangesCancellable: AnyCancellable?
+    private var historySyncTask: Task<Void, Never>?
 
     enum ChatPhase {
         case loading
@@ -34,6 +36,13 @@ final class VictimChatViewModel: ObservableObject {
     init() {
         self.token = AuthSessionStore.shared.session?.accessToken ?? ""
         self.api = ConversationAPIService(token: self.token)
+
+        // Bridge nested ObservableObject updates so SwiftUI redraws immediately.
+        self.chatServiceChangesCancellable = chatService.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
     }
 
     // MARK: - Bước 1: Mở màn hình
@@ -134,11 +143,22 @@ final class VictimChatViewModel: ObservableObject {
         inputText = ""
     }
 
+    func cleanup() {
+        historySyncTask?.cancel()
+        historySyncTask = nil
+        statusCancellable = nil
+
+        if let convId = conversationId {
+            chatService.disconnect(conversationId: convId)
+        }
+    }
+
     // MARK: - SignalR connect
 
     private func connectSignalR() {
         guard let convId = conversationId else { return }
         chatService.connect(token: token, conversationId: convId)
+        startHistorySyncLoop()
 
         // Auto-transition sang chatting khi coordinator join
         statusCancellable = chatService.$conversationStatus
@@ -153,11 +173,11 @@ final class VictimChatViewModel: ObservableObject {
 
     // MARK: - Tải lịch sử
 
-    func loadHistory() async {
+    func loadHistory(showError: Bool = true) async {
         guard let convId = conversationId else { return }
         do {
             let resp = try await api.getMessages(conversationId: convId)
-            let history: [CoordinatorChatMessage] = resp.messages.compactMap { dto in
+            let historyRaw: [CoordinatorChatMessage] = resp.messages.compactMap { dto in
                 guard let content = dto.content else { return nil }
                 return CoordinatorChatMessage(
                     id: dto.id,
@@ -169,10 +189,31 @@ final class VictimChatViewModel: ObservableObject {
                     createdAt: dto.createdAt ?? ""
                 )
             }
-            let existingIds = Set(chatService.messages.map(\.id))
-            chatService.messages = history + chatService.messages.filter { !existingIds.contains($0.id) }
+
+            var seenSystemContents = Set<String>()
+            let history = historyRaw.filter { message in
+                guard message.messageType == CoordinatorMessageType.systemMessage.rawValue else {
+                    return true
+                }
+
+                if seenSystemContents.contains(message.content) {
+                    return false
+                }
+                seenSystemContents.insert(message.content)
+                return true
+            }
+
+            let pendingLocal = chatService.messages.filter { $0.id < 0 }
+            let pendingStillNotEchoed = pendingLocal.filter { local in
+                !history.contains(where: {
+                    $0.senderId == local.senderId && $0.content == local.content
+                })
+            }
+            chatService.messages = history + pendingStillNotEchoed
         } catch {
-            errorMessage = "Không thể tải lịch sử: \(error.localizedDescription)"
+            if showError {
+                errorMessage = "Không thể tải lịch sử: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -189,5 +230,17 @@ final class VictimChatViewModel: ObservableObject {
             createdAt: ISO8601DateFormatter().string(from: Date())
         )
         chatService.messages.append(msg)
+    }
+
+    private func startHistorySyncLoop() {
+        historySyncTask?.cancel()
+        historySyncTask = Task { [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                await self.loadHistory(showError: false)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
     }
 }

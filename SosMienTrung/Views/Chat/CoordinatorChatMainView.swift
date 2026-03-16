@@ -18,6 +18,9 @@ struct CoordinatorChatMainView: View {
                     CoordinatorChatRoomView(vm: vm)
                 }
             }
+            .onDisappear {
+                vm.cleanup()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
