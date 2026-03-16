@@ -7,7 +7,7 @@ final class ServerRequestGateway: ObservableObject {
 
     enum TransportSource {
         case bridgefyMesh
-        case wifiDirect
+        case nearbyMultipeer
     }
 
     enum TriggerReason {
@@ -30,6 +30,7 @@ final class ServerRequestGateway: ObservableObject {
     private let networkMonitor = NetworkMonitor.shared
     private let sosRelayService = SOSRelayService.shared
     private let stateQueue = DispatchQueue(label: "server.request.gateway.state")
+    private weak var multipeerSession: MultipeerSession?
 
     private var pending: [String: PendingRequest] = [:]
     private var completed: Set<String> = []
@@ -54,8 +55,33 @@ final class ServerRequestGateway: ObservableObject {
         guard !isStarted else { return }
         isStarted = true
         setupNetworkObserver()
-        setupWiFiDirect()
         startRetryTimer()
+    }
+
+    func register(multipeerSession: MultipeerSession) {
+        self.multipeerSession = multipeerSession
+
+        multipeerSession.onReceiveApplicationData = { [weak self] data, _ in
+            guard let self else { return }
+            if let payload = try? JSONDecoder().decode(MeshPayload.self, from: data) {
+                switch payload.meshType {
+                case .serverRequest:
+                    if let request = payload.serverRequest {
+                        self.handleIncomingRequest(request, transport: .nearbyMultipeer)
+                    }
+                case .serverAck:
+                    if let ack = payload.serverAck {
+                        self.handleIncomingAck(ack, transport: .nearbyMultipeer)
+                    }
+                default:
+                    break
+                }
+            }
+        }
+
+        multipeerSession.onPeersChanged = { [weak self] _ in
+            self?.triggerRetry(reason: .peerUpdate)
+        }
     }
 
     func submitSOSBasic(_ packet: SOSPacket) {
@@ -321,8 +347,8 @@ final class ServerRequestGateway: ObservableObject {
             BridgefyNetworkManager.shared.sendServerRequest(relayed)
         }
 
-        if transport != .wifiDirect {
-            sendViaWiFiDirect(relayed)
+        if transport != .nearbyMultipeer {
+            sendViaNearbyMultipeer(relayed)
         }
     }
 
@@ -337,22 +363,22 @@ final class ServerRequestGateway: ObservableObject {
         switch transport {
         case .bridgefyMesh:
             BridgefyNetworkManager.shared.sendServerAck(ack)
-        case .wifiDirect:
-            sendAckViaWiFiDirect(ack)
+        case .nearbyMultipeer:
+            sendAckViaNearbyMultipeer(ack)
         }
     }
 
-    private func sendViaWiFiDirect(_ envelope: ServerRequestEnvelope) {
+    private func sendViaNearbyMultipeer(_ envelope: ServerRequestEnvelope) {
         let payload = MeshPayload(serverRequest: envelope)
         if let data = try? JSONEncoder().encode(payload) {
-            WiFiDirectManager.shared.send(data)
+            multipeerSession?.sendApplicationData(data)
         }
     }
 
-    private func sendAckViaWiFiDirect(_ ack: ServerRequestAck) {
+    private func sendAckViaNearbyMultipeer(_ ack: ServerRequestAck) {
         let payload = MeshPayload(serverAck: ack)
         if let data = try? JSONEncoder().encode(payload) {
-            WiFiDirectManager.shared.send(data)
+            multipeerSession?.sendApplicationData(data)
         }
     }
 
@@ -413,29 +439,4 @@ final class ServerRequestGateway: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func setupWiFiDirect() {
-        WiFiDirectManager.shared.onReceiveData = { [weak self] data, _ in
-            guard let self = self else { return }
-            if let payload = try? JSONDecoder().decode(MeshPayload.self, from: data) {
-                switch payload.meshType {
-                case .serverRequest:
-                    if let request = payload.serverRequest {
-                        self.handleIncomingRequest(request, transport: .wifiDirect)
-                    }
-                case .serverAck:
-                    if let ack = payload.serverAck {
-                        self.handleIncomingAck(ack, transport: .wifiDirect)
-                    }
-                default:
-                    break
-                }
-            }
-        }
-
-        WiFiDirectManager.shared.onPeersChanged = { [weak self] _ in
-            self?.triggerRetry(reason: .peerUpdate)
-        }
-
-        WiFiDirectManager.shared.start()
-    }
 }

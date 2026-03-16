@@ -916,7 +916,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.isPaused {
-                // NI mode intentionally pauses Bridgefy BLE.
+                // Another lifecycle policy temporarily paused Bridgefy.
                 return
             }
             guard let bridgefy = self.bridgefy, let sender = bridgefy.currentUserId else {

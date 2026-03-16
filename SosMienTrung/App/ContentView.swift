@@ -14,7 +14,12 @@ struct ContentView: View {
     init() {
         let manager = NearbyInteractionManager()
         _nearbyManager = StateObject(wrappedValue: manager)
-        _multipeerSession = StateObject(wrappedValue: MultipeerSession(nearbyManager: manager))
+        _multipeerSession = StateObject(
+            wrappedValue: MultipeerSession(
+                nearbyManager: manager,
+                coordinationPolicy: .coexistWithBridgefy
+            )
+        )
     }
     
     /// Cho vào app khi có user profile VÀ có session hợp lệ
@@ -42,6 +47,7 @@ struct ContentView: View {
             .onAppear {
                 isSetupComplete = isFullyAuthenticated
                 if isFullyAuthenticated {
+                    ServerRequestGateway.shared.register(multipeerSession: multipeerSession)
                     if !bridgefyManager.isPaused {
                         bridgefyManager.start()
                     }
@@ -66,6 +72,7 @@ struct ContentView: View {
             .preferredColorScheme(appearance.computedColorScheme)
             .onChange(of: isSetupComplete) { newValue in
                 if newValue {
+                    ServerRequestGateway.shared.register(multipeerSession: multipeerSession)
                     if !bridgefyManager.isPaused {
                         bridgefyManager.start()
                     }
