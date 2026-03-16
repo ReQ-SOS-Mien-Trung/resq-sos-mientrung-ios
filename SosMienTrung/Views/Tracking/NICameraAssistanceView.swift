@@ -83,7 +83,8 @@ struct NICameraAssistanceView: UIViewRepresentable {
         var lastWorldTransform: simd_float4x4?
         var lastDistance: Float = -1
         var lastUpdateTime: TimeInterval = 0  // Throttle updates: max 15 updates/sec
-        var subscriptions: [AnyCancellable] = []
+        var dataSubscriptions: [AnyCancellable] = []
+        var sceneSubscriptions: [Cancellable] = []
         
         // Subscribe to nearbyManager's published properties
         func startObserving() {
@@ -104,13 +105,19 @@ struct NICameraAssistanceView: UIViewRepresentable {
                         )
                     }
                 }
-                .store(in: &subscriptions)
+                .store(in: &dataSubscriptions)
         }
 
-            func stopObserving() {
-                subscriptions.forEach { $0.cancel() }
-                subscriptions.removeAll()
-            }
+        func stopObserving() {
+            dataSubscriptions.forEach { $0.cancel() }
+            dataSubscriptions.removeAll()
+
+            sceneSubscriptions.forEach { $0.cancel() }
+            sceneSubscriptions.removeAll()
+
+            animationUpdates.forEach { $0?.cancel() }
+            animationUpdates.removeAll()
+        }
         
         // Animate sphere nhảy lên và scale lặp lại
         func animate(entity: HasTransform,
@@ -211,10 +218,11 @@ struct NICameraAssistanceView: UIViewRepresentable {
                     sphereEntity.position = textEntity.position + [0, initialSize + 0.2, 0]
                     
                     // Text luôn quay về camera
-                    arView.scene.subscribe(to: SceneEvents.Update.self) { _ in
+                    let sceneUpdate = arView.scene.subscribe(to: SceneEvents.Update.self) { _ in
                         textEntity.look(at: arView.cameraTransform.translation, from: textEntity.position(relativeTo: nil), relativeTo: nil)
                         textEntity.transform.rotation *= simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 1, 0))
-                    }.store(in: &self.subscriptions)
+                    }
+                    self.sceneSubscriptions.append(sceneUpdate)
                     
                     arView.scene.addAnchor(peerAnchor)
                     // Set initial transform
@@ -271,8 +279,8 @@ struct NICameraAssistanceView: UIViewRepresentable {
                 }
                 arView.scene.anchors.removeAll()
                 
-                subscriptions.forEach { $0.cancel() }
-                subscriptions.removeAll()
+                sceneSubscriptions.forEach { $0.cancel() }
+                sceneSubscriptions.removeAll()
                 
                 animationUpdates.forEach { $0?.cancel() }
                 animationUpdates.removeAll()

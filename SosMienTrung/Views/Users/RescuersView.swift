@@ -1,5 +1,6 @@
 import SwiftUI
 import MultipeerConnectivity
+import Combine
 
 struct RescuersView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
@@ -7,94 +8,65 @@ struct RescuersView: View {
     
     @StateObject private var headingManager = HeadingManager()
     @Binding var selectedPeer: MCPeerID?
+    @State private var hasStartedSession = false
     
-    @State private var isRescueModeActive = false
-    @AppStorage("rescueModeEnabled") private var savedRescueMode = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Editorial header
-            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                EyebrowLabel(text: "TÌM KIẾM")
-                Text("Cứu Hộ")
-                    .font(DS.Typography.largeTitle)
-                    .foregroundColor(DS.Colors.text)
-                if isRescueModeActive && selectedPeer == nil {
-                    Text(nearbyManager.statusMessage)
-                        .font(DS.Typography.caption)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    EyebrowLabel(text: "TÌM KIẾM")
+                    Text("Cứu Hộ")
+                        .font(DS.Typography.largeTitle)
+                        .foregroundColor(DS.Colors.text)
+                    if selectedPeer == nil {
+                        Text(nearbyManager.statusMessage)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
+                }
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
                         .foregroundColor(DS.Colors.textTertiary)
                 }
-                EditorialDivider(height: DS.Border.thick)
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.top, DS.Spacing.md)
 
-            rescueToggle
+            EditorialDivider(height: DS.Border.thick)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.top, DS.Spacing.xs)
 
-            if isRescueModeActive {
-                peerList
-                if let peer = selectedPeer ?? multipeerSession.connectedPeers.first {
-                    TrackingView(peer: peer, nearbyManager: nearbyManager, findingMode: .rescuer)
-                } else {
-                    waitingForVictimView
-                }
+            peerList
+            if let peer = selectedPeer ?? multipeerSession.connectedPeers.first {
+                TrackingView(peer: peer, nearbyManager: nearbyManager, findingMode: .rescuer)
             } else {
-                inactiveView
+                waitingForVictimView
             }
             Spacer()
         }
         .background(DS.Colors.background)
         .onAppear {
-            isRescueModeActive = savedRescueMode
-            if isRescueModeActive { startRescueMode() }
+            if !hasStartedSession {
+                hasStartedSession = true
+                startRescueMode()
+            }
+            syncSelectedPeerWithConnections()
+        }
+        .onReceive(multipeerSession.$connectedPeers) { _ in
+            syncSelectedPeerWithConnections()
         }
         .onDisappear {
+            guard hasStartedSession else { return }
+            hasStartedSession = false
             stopRescueMode()
         }
-    }
-
-    private var rescueToggle: some View {
-        VStack(spacing: DS.Spacing.sm) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Image(systemName: isRescueModeActive ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(isRescueModeActive ? DS.Colors.success : DS.Colors.textTertiary)
-                        Text("Chế độ cứu hộ")
-                            .font(DS.Typography.headline)
-                            .foregroundColor(DS.Colors.text)
-                    }
-                    Text(isRescueModeActive ? "Đang tìm kiếm người cần cứu" : "Bật để bắt đầu tìm kiếm")
-                        .font(DS.Typography.caption)
-                        .foregroundColor(DS.Colors.textSecondary)
-                }
-                Spacer()
-                Toggle("", isOn: $isRescueModeActive)
-                    .labelsHidden()
-                    .tint(DS.Colors.success)
-                    .onChange(of: isRescueModeActive) { newValue in
-                        savedRescueMode = newValue
-                        if newValue { startRescueMode() } else { stopRescueMode() }
-                    }
-            }
-            .padding(DS.Spacing.md)
-            .background(isRescueModeActive ? DS.Colors.success.opacity(0.08) : DS.Colors.surface)
-            .overlay(Rectangle().stroke(isRescueModeActive ? DS.Colors.success : DS.Colors.border, lineWidth: DS.Border.medium))
-
-            if isRescueModeActive {
-                HStack(spacing: DS.Spacing.sm) {
-                    Rectangle().fill(DS.Colors.success).frame(width: 8, height: 8)
-                    Text("Đang hoạt động • \(multipeerSession.connectedPeers.count) người kết nối")
-                        .font(DS.Typography.caption)
-                        .foregroundColor(DS.Colors.success)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, DS.Spacing.xs)
-            }
-        }
-        .padding(.horizontal, DS.Spacing.md)
-        .padding(.top, DS.Spacing.sm)
     }
 
     // MARK: - Waiting for Victim View
@@ -107,7 +79,7 @@ struct RescuersView: View {
             Text("Đang quét tín hiệu UWB...")
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
-            Text("Yêu cầu người cần cứu hộ bật\n\"Chế độ chờ cứu\" trên thiết bị của họ")
+            Text("Yêu cầu thiết bị còn lại mở tính năng\nTìm kiếm UWB để ghép đôi")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -115,41 +87,6 @@ struct RescuersView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, 48)
         .padding(.horizontal, DS.Spacing.md)
-    }
-    private var inactiveView: some View {
-        VStack(spacing: DS.Spacing.md) {
-            Image(systemName: "figure.wave")
-                .font(.system(size: 48, weight: .bold))
-                .foregroundColor(DS.Colors.textSecondary.opacity(0.5))
-            Text("Chế độ cứu hộ đang tắt")
-                .font(DS.Typography.headline)
-                .foregroundColor(DS.Colors.text)
-            Text("Bật công tắc ở trên để bắt đầu tìm kiếm\nvà hỗ trợ những người cần cứu hộ gần đây.")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                withAnimation {
-                    isRescueModeActive = true
-                    savedRescueMode = true
-                    startRescueMode()
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "power")
-                    Text("BẬT CHẾ ĐỘ CỨU HỘ").font(DS.Typography.headline).tracking(1)
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity).padding(.vertical, DS.Spacing.md)
-                .background(DS.Colors.success)
-                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
-                .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
-            }
-            .padding(.top, DS.Spacing.sm)
-        }
-        .padding(.vertical, 40)
-        .padding(.horizontal, DS.Spacing.md)
-        .frame(maxWidth: .infinity)
     }
 
     private var peerList: some View {
@@ -204,16 +141,27 @@ struct RescuersView: View {
     // MARK: - Rescue Mode Control
 
     private func startRescueMode() {
-        // Set role trước khi scan — quan trọng!
-        nearbyManager.configureAsRescuer()
-        // Rescuer CHỈ browse — tìm victim đang advertise
-        // KHÔNG advertise — tránh dual-invitation conflict
-        multipeerSession.startAsRescuer()
+        nearbyManager.configureForPeerFinding()
+        multipeerSession.startPeerDiscovery()
     }
 
     private func stopRescueMode() {
         selectedPeer = nil
-        nearbyManager.userRole = .victim
+        nearbyManager.deactivateNearbyMode()
         multipeerSession.stopAll()
+    }
+
+    private func syncSelectedPeerWithConnections() {
+        let peers = multipeerSession.connectedPeers
+
+        if let current = selectedPeer, !peers.contains(current) {
+            selectedPeer = nil
+            nearbyManager.setActivePeer(nil)
+        }
+
+        if selectedPeer == nil, let firstPeer = peers.first {
+            selectedPeer = firstPeer
+            nearbyManager.setActivePeer(firstPeer)
+        }
     }
 }

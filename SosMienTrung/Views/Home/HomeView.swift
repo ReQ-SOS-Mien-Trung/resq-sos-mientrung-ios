@@ -83,6 +83,9 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showSOSSignal) {
             SOSSignalView()
         }
+        .fullScreenCover(isPresented: $showCoordinatorChat) {
+            CoordinatorChatMainView()
+        }
         .fullScreenCover(isPresented: $showRescuersView) {
             NavigationStack {
                 RescuersView(
@@ -109,9 +112,6 @@ struct HomeView: View {
                     }
                 }
             }
-        }
-        .fullScreenCover(isPresented: $showCoordinatorChat) {
-            CoordinatorChatMainView()
         }
     }
 
@@ -226,20 +226,22 @@ struct HomeView: View {
                 showMapDisabledAlert = true
             }
 
-            ResQGridButton(
-                icon: "antenna.radiowaves.left.and.right",
-                title: "Cứu hộ\n(Rescuer)",
-                accentColor: DS.Colors.accent
-            ) {
-                showRescuersView = true
-            }
-
-            ResQGridButton(
-                icon: "figure.wave.circle.fill",
-                title: "Chờ cứu\n(Victim)",
-                accentColor: DS.Colors.danger
-            ) {
-                showVictimStandby = true
+            if AuthSessionStore.shared.session?.roleId == 3 {
+                ResQGridButton(
+                    icon: "antenna.radiowaves.left.and.right",
+                    title: "Cứu hộ\n(Rescuer)",
+                    accentColor: DS.Colors.accent
+                ) {
+                    showRescuersView = true
+                }
+            } else {
+                ResQGridButton(
+                    icon: "figure.wave.circle.fill",
+                    title: "Chờ cứu\n(Victim)",
+                    accentColor: DS.Colors.danger
+                ) {
+                    showVictimStandby = true
+                }
             }
         }
     }

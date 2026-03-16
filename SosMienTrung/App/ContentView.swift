@@ -1,13 +1,6 @@
 import SwiftUI
 import MultipeerConnectivity
 
-// MARK: - Keyboard Dismiss Extension
-extension View {
-    func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-}
-
 struct ContentView: View {
     @StateObject private var nearbyManager: NearbyInteractionManager
     @StateObject private var multipeerSession: MultipeerSession
@@ -46,13 +39,12 @@ struct ContentView: View {
     @ViewBuilder
     private var configuredView: some View {
         rootView
-            .onTapGesture {
-                hideKeyboard()
-            }
             .onAppear {
                 isSetupComplete = isFullyAuthenticated
                 if isFullyAuthenticated {
-                    bridgefyManager.start()
+                    if !bridgefyManager.isPaused {
+                        bridgefyManager.start()
+                    }
                     ServerRequestGateway.shared.start()
                 }
             }
@@ -74,7 +66,9 @@ struct ContentView: View {
             .preferredColorScheme(appearance.computedColorScheme)
             .onChange(of: isSetupComplete) { newValue in
                 if newValue {
-                    bridgefyManager.start()
+                    if !bridgefyManager.isPaused {
+                        bridgefyManager.start()
+                    }
                     ServerRequestGateway.shared.start()
                 }
             }
