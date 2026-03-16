@@ -147,8 +147,8 @@ struct RescuersView: View {
 
     private func stopRescueMode() {
         selectedPeer = nil
-        nearbyManager.deactivateNearbyMode()
-        multipeerSession.stopAll()
+        nearbyManager.scheduleDeactivateNearbyMode()
+        multipeerSession.scheduleStopAll()
     }
 
     private func syncSelectedPeerWithConnections() {

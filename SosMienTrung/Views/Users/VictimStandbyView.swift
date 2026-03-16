@@ -143,7 +143,7 @@ struct VictimStandbyView: View {
     }
 
     private func stopVictimMode() {
-        nearbyManager.deactivateNearbyMode()
-        multipeerSession.stopAll()
+        nearbyManager.scheduleDeactivateNearbyMode()
+        multipeerSession.scheduleStopAll()
     }
 }

@@ -50,6 +50,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
     /// Số lần restart liên tiếp — chặn infinite loop
     private var restartCount = 0
     private let maxRestarts = 2
+    private var pendingDeactivateWorkItem: DispatchWorkItem?
     /// Tránh restart khi invalidate do chính app chủ động gọi.
     private var suppressNextInvalidationRestart = false
     /// Chỉ auto-restart khi user đang ở mode rescue/victim active.
@@ -219,6 +220,8 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
             statusMessage = "Nearby Interaction not supported on this device."
             return
         }
+        pendingDeactivateWorkItem?.cancel()
+        pendingDeactivateWorkItem = nil
         isModeActive = true
         statusMessage = "Searching for nearby devices..."
         print("🔎 Nearby mode active (symmetric peer finding)")
@@ -237,6 +240,8 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
     /// Dừng Nearby Interaction sạch sẽ khi rời flow tìm kiếm.
     func deactivateNearbyMode() {
+        pendingDeactivateWorkItem?.cancel()
+        pendingDeactivateWorkItem = nil
         isModeActive = false
         trackedPeer = nil
         statusMessage = "Nearby Interaction is idle."
@@ -253,6 +258,17 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         restartCount = 0
         cameraAssistanceFailed = false
         pendingARSessionAttachment = false
+    }
+
+    func scheduleDeactivateNearbyMode(after delay: TimeInterval = 0.75) {
+        pendingDeactivateWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.deactivateNearbyMode()
+        }
+
+        pendingDeactivateWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     func setActivePeer(_ peer: MCPeerID?) {
