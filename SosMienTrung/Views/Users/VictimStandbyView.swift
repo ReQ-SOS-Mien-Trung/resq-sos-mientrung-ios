@@ -1,7 +1,7 @@
 import SwiftUI
 import MultipeerConnectivity
 
-/// Màn hình chờ ghép đôi UWB theo cơ chế đối xứng.
+/// Màn hình chờ ghép đôi UWB ở vai trò advertise-only.
 struct VictimStandbyView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
@@ -139,11 +139,11 @@ struct VictimStandbyView: View {
 
     private func startVictimMode() {
         nearbyManager.configureForPeerFinding()
-        multipeerSession.startPeerDiscovery()
+        multipeerSession.activateNearbyInteractionDiscovery(for: .victim)
     }
 
     private func stopVictimMode() {
         nearbyManager.scheduleDeactivateNearbyMode()
-        multipeerSession.scheduleStopAll()
+        multipeerSession.scheduleDeactivateNearbyInteraction()
     }
 }

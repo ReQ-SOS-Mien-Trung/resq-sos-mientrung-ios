@@ -214,7 +214,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
     // MARK: - Session Configuration
 
-    /// Nearby Interaction mode theo kiến trúc đối xứng: thiết bị nào cũng có thể tìm nhau.
+    /// Bật Nearby Interaction khi user thực sự mở flow cứu hộ/chờ cứu.
     func configureForPeerFinding() {
         guard isNearbyInteractionSupported else {
             statusMessage = "Nearby Interaction not supported on this device."
@@ -224,8 +224,9 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         pendingDeactivateWorkItem = nil
         isModeActive = true
         statusMessage = "Searching for nearby devices..."
-        print("🔎 Nearby mode active (symmetric peer finding)")
+        print("🔎 Nearby mode active")
         prepareDiscoveryTokenIfNeeded()
+        restoreTrackedPeerIfPossible()
     }
 
     /// Backward-compat wrapper.
@@ -253,8 +254,6 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         showCoachingOverlay = true
         showUpDownText = nil
         convergenceByPeer.removeAll()
-        tokensByPeer.removeAll()
-        peerByTokenData.removeAll()
         restartCount = 0
         cameraAssistanceFailed = false
         pendingARSessionAttachment = false
@@ -319,6 +318,30 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         recreateSession(allowARReattach: false, reason: "transport-disconnect")
     }
 
+    private func restoreTrackedPeerIfPossible() {
+        guard isModeActive else { return }
+
+        if let activePeer = trackedPeer {
+            guard let token = tokensByPeer[activePeer] else {
+                print("⏳ Token not yet available for \(activePeer.displayName), will configure when token arrives")
+                return
+            }
+            configureSession(for: activePeer, token: token)
+            return
+        }
+
+        guard let candidatePeer = multipeerSession?.connectedPeers.first ?? tokensByPeer.keys.first else {
+            return
+        }
+
+        trackedPeer = candidatePeer
+        guard let token = tokensByPeer[candidatePeer] else {
+            print("⏳ Token not yet available for \(candidatePeer.displayName), will configure when token arrives")
+            return
+        }
+        configureSession(for: candidatePeer, token: token)
+    }
+
     func receivedPeerDiscoveryToken(_ token: NIDiscoveryToken, from peer: MCPeerID) {
         tokensByPeer[peer] = token
         if let tokenData = tokenData(token) {
@@ -329,6 +352,11 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
             print("📡 Received discovery token from \(peer.displayName), peer EDM support: \(token.deviceCapabilities.supportsExtendedDistanceMeasurement)")
         } else {
             print("📡 Received discovery token from \(peer.displayName)")
+        }
+
+        guard isModeActive else {
+            print("ℹ️ Stored discovery token from \(peer.displayName); NI remains idle until feature opens")
+            return
         }
 
         print("📡 Configure NI session with \(peer.displayName)")
