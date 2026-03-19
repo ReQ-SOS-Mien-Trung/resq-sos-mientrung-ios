@@ -2,9 +2,11 @@ import SwiftUI
 import MultipeerConnectivity
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var nearbyManager: NearbyInteractionManager
     @StateObject private var multipeerSession: MultipeerSession
     @StateObject private var bridgefyManager = BridgefyNetworkManager.shared
+    @StateObject private var notificationHub = NotificationHubService.shared
     @StateObject private var userProfile = UserProfile.shared
     @StateObject private var authSession = AuthSessionStore.shared
     @ObservedObject private var appearance = AppearanceManager.shared
@@ -27,13 +29,28 @@ struct ContentView: View {
         userProfile.isSetupComplete && authSession.isValid
     }
 
+    private var requiresRescuerEligibility: Bool {
+        authSession.session?.roleId == 3
+    }
+
+    private var hasUnlockedInterface: Bool {
+        guard isFullyAuthenticated else { return false }
+        guard requiresRescuerEligibility else { return true }
+        return authSession.session?.isEligibleRescuer == true
+    }
+
+    private var isCheckingRescuerEligibility: Bool {
+        guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
+        return authSession.isRefreshingCurrentUser || authSession.session?.isEligibleRescuer == nil
+    }
+
     private var currentDiscoveryRole: MultipeerSession.DiscoveryRole? {
-        guard isFullyAuthenticated else { return nil }
+        guard hasUnlockedInterface else { return nil }
         return authSession.session?.roleId == 3 ? .rescuer : .victim
     }
 
     private func bootstrapAuthenticatedNetworking() {
-        guard isFullyAuthenticated else { return }
+        guard hasUnlockedInterface else { return }
         ServerRequestGateway.shared.register(multipeerSession: multipeerSession)
         if let role = currentDiscoveryRole {
             multipeerSession.startBackgroundDiscovery(for: role)
@@ -42,21 +59,74 @@ struct ContentView: View {
             bridgefyManager.start()
         }
         ServerRequestGateway.shared.start()
+        Task {
+            await notificationHub.applicationDidBecomeActive()
+        }
+    }
+
+    private func refreshAuthenticatedAccess(force: Bool = false) {
+        guard isFullyAuthenticated else {
+            teardownAuthenticatedNetworking()
+            return
+        }
+
+        Task { @MainActor in
+            await authSession.refreshCurrentUserIfNeeded(force: force && requiresRescuerEligibility)
+
+            if hasUnlockedInterface {
+                bootstrapAuthenticatedNetworking()
+            } else {
+                teardownAuthenticatedNetworking()
+            }
+        }
     }
 
     private func teardownAuthenticatedNetworking() {
         multipeerSession.stopAll()
+        notificationHub.disconnect()
+    }
+
+    private var notificationAlertBinding: Binding<RealtimeNotification?> {
+        Binding(
+            get: { notificationHub.presentedNotification },
+            set: { newValue in
+                if newValue == nil {
+                    notificationHub.dismissPresentedNotification()
+                }
+            }
+        )
     }
 
     @ViewBuilder
     private var rootView: some View {
         if isFullyAuthenticated {
-            MainTabView(
-                nearbyManager: nearbyManager,
-                multipeerSession: multipeerSession,
-                bridgefyManager: bridgefyManager,
-                selectedPeer: $selectedPeer
-            )
+            if requiresRescuerEligibility {
+                if isCheckingRescuerEligibility {
+                    RescuerEligibilityGateView(
+                        state: .checking,
+                        retryAction: { refreshAuthenticatedAccess(force: true) }
+                    )
+                } else if authSession.session?.isEligibleRescuer == true {
+                    MainTabView(
+                        nearbyManager: nearbyManager,
+                        multipeerSession: multipeerSession,
+                        bridgefyManager: bridgefyManager,
+                        selectedPeer: $selectedPeer
+                    )
+                } else {
+                    RescuerEligibilityGateView(
+                        state: .locked,
+                        retryAction: { refreshAuthenticatedAccess(force: true) }
+                    )
+                }
+            } else {
+                MainTabView(
+                    nearbyManager: nearbyManager,
+                    multipeerSession: multipeerSession,
+                    bridgefyManager: bridgefyManager,
+                    selectedPeer: $selectedPeer
+                )
+            }
         } else {
             SetupProfileView(isSetupComplete: $isSetupComplete)
         }
@@ -68,7 +138,7 @@ struct ContentView: View {
             .onAppear {
                 isSetupComplete = isFullyAuthenticated
                 if isFullyAuthenticated {
-                    bootstrapAuthenticatedNetworking()
+                    refreshAuthenticatedAccess(force: true)
                 }
             }
             .onChange(of: userProfile.currentUser) { newUser in
@@ -77,7 +147,7 @@ struct ContentView: View {
                     teardownAuthenticatedNetworking()
                 } else if isFullyAuthenticated {
                     isSetupComplete = true
-                    bootstrapAuthenticatedNetworking()
+                    refreshAuthenticatedAccess()
                 }
             }
             .onChange(of: authSession.session) { newSession in
@@ -86,17 +156,33 @@ struct ContentView: View {
                     teardownAuthenticatedNetworking()
                 } else if isFullyAuthenticated {
                     isSetupComplete = true
-                    bootstrapAuthenticatedNetworking()
+                    refreshAuthenticatedAccess()
                 }
+            }
+            .onChange(of: scenePhase) { newPhase in
+                guard newPhase == .active else { return }
+                guard isFullyAuthenticated else { return }
+                refreshAuthenticatedAccess(force: true)
             }
     }
 
     var body: some View {
         configuredView
             .preferredColorScheme(appearance.computedColorScheme)
+            .alert(item: notificationAlertBinding) { notification in
+                Alert(
+                    title: Text(notification.displayTitle),
+                    message: Text(notification.displayMessage),
+                    dismissButton: .default(Text("OK")) {
+                        Task {
+                            await notificationHub.handlePresentedNotificationDismissal()
+                        }
+                    }
+                )
+            }
             .onChange(of: isSetupComplete) { newValue in
                 if newValue {
-                    bootstrapAuthenticatedNetworking()
+                    refreshAuthenticatedAccess()
                 } else {
                     teardownAuthenticatedNetworking()
                 }

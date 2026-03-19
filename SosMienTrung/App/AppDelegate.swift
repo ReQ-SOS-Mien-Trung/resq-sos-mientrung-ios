@@ -1,47 +1,135 @@
 import UIKit
+import UserNotifications
 import FirebaseCore
 import FirebaseAuth
+import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
-
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
         FirebaseApp.configure()
-        // Đăng ký nhận remote notifications (bắt buộc cho Firebase Phone Auth)
-        application.registerForRemoteNotifications()
-        print("✅ App did finish launching")
-        print("✅ Remote notifications registered: \(application.isRegisteredForRemoteNotifications)")
-        
-        // Log Firebase config
-        if let app = FirebaseApp.app() {
-            print("✅ Firebase configured: \(app.options.googleAppID)")
-            print("✅ Firebase API key: \(app.options.apiKey?.prefix(10) ?? "nil")...")
+
+        UNUserNotificationCenter.current().delegate = self
+        Messaging.messaging().delegate = self
+
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error {
+                print("🔴 Notification permission error: \(error.localizedDescription)")
+            }
+
+            print("✅ Notification permission granted: \(granted)")
+
+            DispatchQueue.main.async {
+                application.registerForRemoteNotifications()
+            }
         }
+
+        Messaging.messaging().token { token, error in
+            if let error {
+                print("🔴 FCM token fetch FAILED: \(error.localizedDescription)")
+                return
+            }
+
+            if let token {
+                print("✅ Initial FCM token received: \(token.prefix(16))...")
+                Task { @MainActor in
+                    NotificationHubService.shared.updateDevicePushToken(token)
+                }
+            }
+        }
+
+        print("✅ App did finish launching")
         return true
     }
 
-    // MARK: - APNs cho Firebase Phone Auth
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("✅ APNs token received: \(tokenString.prefix(20))...")
+
         Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+        Messaging.messaging().apnsToken = deviceToken
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("🔴 APNs registration FAILED: \(error.localizedDescription)")
     }
 
-    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
         if Auth.auth().canHandleNotification(userInfo) {
             completionHandler(.noData)
             return
         }
-        completionHandler(.noData)
+
+        Task { @MainActor in
+            _ = await NotificationHubService.shared.handleRemoteNotification(userInfo: userInfo)
+            completionHandler(.newData)
+        }
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if GoogleSignInManager.shared.handleOpenURL(url) {
+            return true
+        }
+
         if Auth.auth().canHandle(url) {
             return true
         }
+
         return false
+    }
+}
+
+extension AppDelegate: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let fcmToken, !fcmToken.isEmpty else { return }
+
+        print("✅ FCM registration token updated: \(fcmToken.prefix(16))...")
+        Task { @MainActor in
+            NotificationHubService.shared.updateDevicePushToken(fcmToken)
+        }
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let userInfo = notification.request.content.userInfo
+
+        if Auth.auth().canHandleNotification(userInfo) {
+            completionHandler([])
+            return
+        }
+
+        Task { @MainActor in
+            let handling = await NotificationHubService.shared.handleRemoteNotification(userInfo: userInfo)
+            switch handling {
+            case .ignored:
+                completionHandler([])
+            case .syncOnly, .display:
+                completionHandler([.banner, .sound, .badge])
+            }
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+
+        Task { @MainActor in
+            _ = await NotificationHubService.shared.handleRemoteNotification(userInfo: userInfo)
+            completionHandler()
+        }
     }
 }

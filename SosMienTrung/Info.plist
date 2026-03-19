@@ -48,6 +48,7 @@
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
@@ -88,6 +89,16 @@
 				<string>app-1-737045977409-ios-7e2bec70777a85574a69c0</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn</string>
+			</array>
+		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>737045977409-tqt0558r5rhqkkg3eg7sj8co458pfk2j.apps.googleusercontent.com</string>
 </dict>
 </plist>
