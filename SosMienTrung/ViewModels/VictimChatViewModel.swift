@@ -3,6 +3,7 @@ import Combine
 
 @MainActor
 final class VictimChatViewModel: ObservableObject {
+    private static let skippedConversationIdKey = "chat.skippedConversationId"
 
     // MARK: - Setup phase data
     @Published var conversationId: Int?
@@ -47,7 +48,7 @@ final class VictimChatViewModel: ObservableObject {
 
     // MARK: - Bước 1: Mở màn hình
 
-    func initialize() async {
+    func initialize(forceNewConversation: Bool = false) async {
         guard !token.isEmpty else {
             errorMessage = "Chưa đăng nhập, vui lòng đăng nhập lại"
             return
@@ -55,7 +56,22 @@ final class VictimChatViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
+            if !forceNewConversation {
+                let summaries = try await api.getMyConversations()
+                let skippedConversationId = UserDefaults.standard.object(forKey: Self.skippedConversationIdKey) as? Int
+
+                // Nếu đã có phòng đang hoạt động thì resume lại để không mất lịch sử sau khi refresh.
+                if let latestActive = summaries.first(where: {
+                    ($0.status == .waitingCoordinator || $0.status == .coordinatorActive)
+                    && $0.conversationId != skippedConversationId
+                }) {
+                    await resumeConversation(from: latestActive)
+                    return
+                }
+            }
+
             let conv = try await api.getOrCreateConversation()
+            UserDefaults.standard.removeObject(forKey: Self.skippedConversationIdKey)
             conversationId = conv.conversationId
             aiGreetingMessage = conv.aiGreetingMessage
             topicSuggestions = conv.topicSuggestions
@@ -153,6 +169,28 @@ final class VictimChatViewModel: ObservableObject {
         }
     }
 
+    func endCurrentConversation() async {
+        guard let convId = conversationId else { return }
+
+        historySyncTask?.cancel()
+        historySyncTask = nil
+        statusCancellable = nil
+
+        chatService.disconnect(conversationId: convId)
+        UserDefaults.standard.set(convId, forKey: Self.skippedConversationIdKey)
+
+        chatService.messages = []
+        chatService.conversationStatus = .aiAssist
+        conversationId = nil
+        topicSuggestions = []
+        aiGreetingMessage = nil
+        sosRequests = []
+        inputText = ""
+        phase = .loading
+
+        await initialize(forceNewConversation: true)
+    }
+
     // MARK: - SignalR connect
 
     private func connectSignalR() {
@@ -241,6 +279,33 @@ final class VictimChatViewModel: ObservableObject {
                 await self.loadHistory(showError: false)
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
+        }
+    }
+
+    private func resumeConversation(from summary: VictimConversationSummary) async {
+        conversationId = summary.conversationId
+
+        switch summary.status {
+        case .aiAssist:
+            let conv = try? await api.getOrCreateConversation()
+            aiGreetingMessage = conv?.aiGreetingMessage
+            topicSuggestions = conv?.topicSuggestions ?? []
+            phase = .selectingTopic
+
+        case .waitingCoordinator:
+            phase = .waitingCoordinator
+            connectSignalR()
+            await loadHistory(showError: false)
+
+        case .coordinatorActive:
+            phase = .chatting
+            chatService.conversationStatus = .coordinatorActive
+            connectSignalR()
+            await loadHistory(showError: false)
+
+        case .closed:
+            phase = .chatting
+            await loadHistory(showError: false)
         }
     }
 }

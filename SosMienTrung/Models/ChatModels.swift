@@ -45,6 +45,17 @@ struct ParticipantDto: Codable {
     let joinedAt: String?
 }
 
+// MARK: - GET /operations/conversations/my-conversations
+
+struct VictimConversationSummary: Codable {
+    let conversationId: Int
+    let status: ConversationStatus
+    let selectedTopic: String?
+    let linkedSosRequestId: Int?
+    let createdAt: String?
+    let updatedAt: String?
+}
+
 // MARK: - Step 2: POST /select-topic
 
 struct SelectTopicRequest: Codable {

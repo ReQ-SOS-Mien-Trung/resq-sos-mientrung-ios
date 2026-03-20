@@ -29,6 +29,7 @@ struct CoordinatorChatMainView: View {
                             .foregroundColor(DS.Colors.text)
                     }
                 }
+
             }
             .task { await vm.initialize() }
             .alert("Lỗi", isPresented: Binding(

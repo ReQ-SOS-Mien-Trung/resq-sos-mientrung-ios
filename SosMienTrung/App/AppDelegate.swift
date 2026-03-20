@@ -5,7 +5,7 @@ import FirebaseAuth
 class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        FirebaseApp.configure()
+        configureFirebaseIfPossible()
         // Đăng ký nhận remote notifications (bắt buộc cho Firebase Phone Auth)
         application.registerForRemoteNotifications()
         print("✅ App did finish launching")
@@ -17,6 +17,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             print("✅ Firebase API key: \(app.options.apiKey?.prefix(10) ?? "nil")...")
         }
         return true
+    }
+
+    private func configureFirebaseIfPossible() {
+        guard FirebaseApp.app() == nil else { return }
+
+        guard let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              let options = FirebaseOptions(contentsOfFile: plistPath) else {
+            assertionFailure("Missing or invalid GoogleService-Info.plist in app bundle")
+            print("🔴 Firebase not configured: missing/invalid GoogleService-Info.plist")
+            return
+        }
+
+        FirebaseApp.configure(options: options)
     }
 
     // MARK: - APNs cho Firebase Phone Auth

@@ -31,6 +31,12 @@ final class ConversationAPIService {
         return try decode(data)
     }
 
+    // MARK: - Lấy danh sách conversation của victim
+    func getMyConversations() async throws -> [VictimConversationSummary] {
+        let data = try await request("/operations/conversations/my-conversations")
+        return try decode(data)
+    }
+
     // MARK: - Bước 2: Chọn chủ đề
     func selectTopic(conversationId: Int, topicKey: String) async throws -> SelectTopicResponse {
         let body = try JSONEncoder().encode(SelectTopicRequest(topicKey: topicKey))
