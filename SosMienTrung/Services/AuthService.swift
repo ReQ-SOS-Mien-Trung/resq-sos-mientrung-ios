@@ -58,6 +58,15 @@ struct LoginRequest: Codable {
     let password: String?
 }
 
+struct RescuerLoginRequest: Codable {
+    let email: String
+    let password: String
+}
+
+struct GoogleLoginRequest: Codable {
+    let idToken: String
+}
+
 struct LoginResponse: Codable {
     let accessToken: String
     let refreshToken: String
@@ -65,10 +74,12 @@ struct LoginResponse: Codable {
     let tokenType: String
     let userId: String
     let username: String?
+    let email: String?
     let fullName: String?
     let firstName: String?
     let lastName: String?
     let roleId: Int?
+    let permissions: [String]?
 
     /// Tên hiển thị: ưu tiên fullName → ghép lastName + firstName → username
     var displayName: String? {
@@ -80,6 +91,49 @@ struct LoginResponse: Codable {
 
     /// roleId 3 = Rescuer, roleId 5 = Victim
     var isRescuer: Bool { roleId == 3 }
+}
+
+struct GoogleLoginResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresIn: Int
+    let tokenType: String
+    let userId: String
+    let username: String?
+    let firstName: String?
+    let lastName: String?
+    let roleId: Int?
+    let isNewUser: Bool
+    let isOnboarded: Bool
+
+    var displayName: String? {
+        let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
+        if !parts.isEmpty { return parts.joined(separator: " ") }
+        return username
+    }
+
+    var isRescuer: Bool { roleId == 3 }
+}
+
+struct CurrentUserResponse: Codable {
+    let id: String
+    let roleId: Int?
+    let firstName: String?
+    let lastName: String?
+    let username: String?
+    let phone: String?
+    let rescuerType: String?
+    let email: String?
+    let isEmailVerified: Bool
+    let isOnboarded: Bool
+    let isEligibleRescuer: Bool
+    let avatarUrl: String?
+
+    var displayName: String? {
+        let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
+        if !parts.isEmpty { return parts.joined(separator: " ") }
+        return username ?? email
+    }
 }
 
 // MARK: - Auth Service
@@ -145,18 +199,41 @@ final class AuthService {
         let payload = LoginRequest(username: username, phone: phone, password: password)
         request(path: "/identity/auth/login", body: payload, completion: completion)
     }
+
+    /// Đăng nhập với tư cách Rescuer bằng email + password
+    func loginRescuer(email: String, password: String, completion: @escaping (Result<LoginResponse, Error>) -> Void) {
+        let payload = RescuerLoginRequest(email: email, password: password)
+        request(path: "/identity/auth/login-rescuer", body: payload, completion: completion)
+    }
+
+    /// Đăng nhập Rescuer bằng Google ID token
+    func googleLogin(idToken: String) async throws -> GoogleLoginResponse {
+        let payload = GoogleLoginRequest(idToken: idToken)
+        return try await request(path: "/identity/auth/google-login", body: payload)
+    }
+
+    /// Lấy hồ sơ người dùng hiện tại để đọc các cờ quyền như isEligibleRescuer
+    func fetchCurrentUser() async throws -> CurrentUserResponse {
+        try await authorizedRequest(path: "/identity/user/me")
+    }
     
     /// Đăng xuất và xóa session
     func logout(completion: ((Result<Void, Error>) -> Void)? = nil) {
-        // Xóa token
-        AuthSessionStore.shared.clear()
-        // Xóa thông tin user → ContentView sẽ tự quay về SetupProfileView
-        UserProfile.shared.clearUser()
-        // Xóa danh sách SOS in-memory (dữ liệu local vẫn giữ theo userId)
-        SOSStorageManager.shared.clearSession()
-        
-        DispatchQueue.main.async {
-            completion?(.success(()))
+        Task {
+            do {
+                await NotificationHubService.shared.prepareForLogout()
+                try await NotificationAPIService.shared.logout()
+            } catch {
+                print("[AuthService] Logout API failed: \(error.localizedDescription)")
+            }
+
+            await MainActor.run {
+                GoogleSignInManager.shared.signOut()
+                AuthSessionStore.shared.clear()
+                UserProfile.shared.clearUser()
+                SOSStorageManager.shared.clearSession()
+                completion?(.success(()))
+            }
         }
     }
 
@@ -225,6 +302,79 @@ final class AuthService {
             }
         }
         task.resume()
+    }
+
+    private func request<T: Codable, R: Codable>(
+        path: String,
+        body: T
+    ) async throws -> R {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw AuthServiceError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            throw error
+        }
+
+        return try await perform(request)
+    }
+
+    private func authorizedRequest<R: Codable>(
+        path: String,
+        method: String = "GET"
+    ) async throws -> R {
+        guard let token = AuthSessionStore.shared.session?.accessToken, !token.isEmpty else {
+            throw AuthServiceError.missingData
+        }
+
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw AuthServiceError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try await perform(request)
+    }
+
+    private func perform<R: Codable>(_ request: URLRequest) async throws -> R {
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                var errorMessage: String? = nil
+                if !data.isEmpty {
+                    errorMessage = APIErrorResponse.decode(from: data)?.message
+                        ?? String(data: data, encoding: .utf8)
+                }
+                throw AuthServiceError.httpStatus(statusCode, errorMessage)
+            }
+
+            guard !data.isEmpty else {
+                throw AuthServiceError.missingData
+            }
+
+            do {
+                return try makeDecoder().decode(R.self, from: data)
+            } catch {
+                throw AuthServiceError.decodingFailed(error)
+            }
+        } catch let authError as AuthServiceError {
+            throw authError
+        } catch {
+            let nsErr = error as NSError
+            if nsErr.code == NSURLErrorTimedOut || nsErr.code == NSURLErrorCannotConnectToHost || nsErr.code == NSURLErrorNetworkConnectionLost {
+                throw AuthServiceError.timeout
+            }
+            throw AuthServiceError.requestFailed(error)
+        }
     }
 
     private func makeDecoder() -> JSONDecoder {

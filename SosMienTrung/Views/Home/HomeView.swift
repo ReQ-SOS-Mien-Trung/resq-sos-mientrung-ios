@@ -16,6 +16,7 @@ struct HomeView: View {
     @Binding var selectedPeer: MCPeerID?
 
     @StateObject private var locationManager = LocationManager()
+    @StateObject private var notificationHub = NotificationHubService.shared
 
     @State private var showSOSMap = false
     @State private var showSOSForm = false
@@ -24,6 +25,7 @@ struct HomeView: View {
     @State private var showMapDisabledAlert = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
+    @State private var showRescuerDashboard = false
     @State private var showVictimStandby = false
     @State private var showCoordinatorChat = false
     @State private var showSOSSignal = false
@@ -77,6 +79,10 @@ struct HomeView: View {
         .sheet(isPresented: $showChatBot) {
             ChatBotView()
         }
+        .sheet(isPresented: $showNotifications) {
+            NotificationCenterView(notificationHub: notificationHub)
+                .presentationDetents([.medium, .large])
+        }
         .sheet(isPresented: $showWaterEject) {
             WaterEjectView()
         }
@@ -100,6 +106,9 @@ struct HomeView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showRescuerDashboard) {
+            RescuerDashboardView()
+        }
         .fullScreenCover(isPresented: $showVictimStandby) {
             NavigationStack {
                 VictimStandbyView(
@@ -118,14 +127,56 @@ struct HomeView: View {
     // MARK: - Header
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack(alignment: .center, spacing: DS.Spacing.md) {
+                Image("resq_typo_logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 64)
 
-            Image("resq_typo_logo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 64)
+                Spacer()
+
+                notificationButton
+            }
 
             EditorialDivider(height: DS.Border.thin)
         }
+    }
+
+    private var notificationButton: some View {
+        Button {
+            showNotifications = true
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: notificationHub.unreadCount == 0 ? "bell" : "bell.badge.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(DS.Colors.text)
+                    .frame(width: 44, height: 44)
+                    .background(DS.Colors.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DS.Radius.sm)
+                            .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                    )
+
+                if notificationHub.unreadCount > 0 {
+                    Text(badgeText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(DS.Colors.danger)
+                        .clipShape(Capsule())
+                        .offset(x: 8, y: -6)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Trung tam thong bao")
+    }
+
+    private var badgeText: String {
+        let count = notificationHub.unreadCount
+        return count > 99 ? "99+" : "\(count)"
     }
 
     // MARK: - Weather
@@ -233,6 +284,13 @@ struct HomeView: View {
                     accentColor: DS.Colors.accent
                 ) {
                     showRescuersView = true
+                }
+                ResQGridButton(
+                    icon: "checklist",
+                    title: "Nhiệm vụ\ncủa team",
+                    accentColor: DS.Colors.warning
+                ) {
+                    showRescuerDashboard = true
                 }
             } else {
                 ResQGridButton(

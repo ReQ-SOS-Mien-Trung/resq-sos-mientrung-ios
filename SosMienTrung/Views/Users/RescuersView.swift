@@ -142,13 +142,13 @@ struct RescuersView: View {
 
     private func startRescueMode() {
         nearbyManager.configureForPeerFinding()
-        multipeerSession.startPeerDiscovery()
+        multipeerSession.activateNearbyInteractionDiscovery(for: .rescuer)
     }
 
     private func stopRescueMode() {
         selectedPeer = nil
         nearbyManager.scheduleDeactivateNearbyMode()
-        multipeerSession.scheduleStopAll()
+        multipeerSession.scheduleDeactivateNearbyInteraction()
     }
 
     private func syncSelectedPeerWithConnections() {

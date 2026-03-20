@@ -15,7 +15,7 @@ struct SetupProfileView: View {
     @State private var name = ""
     @State private var phoneNumber = ""
     @State private var password = ""
-    @State private var rescuerUsername = ""
+    @State private var rescuerEmail = ""
     @State private var rescuerPassword = ""
     @State private var confirmPassword = ""
     @State private var showPassword = false
@@ -33,7 +33,7 @@ struct SetupProfileView: View {
     @FocusState private var focusedField: Field?
     
     enum Field {
-        case name, phone, password, confirmPassword, rescuerUsername, rescuerPassword, otp
+        case name, phone, password, confirmPassword, rescuerEmail, rescuerPassword, otp
     }
 
     enum AuthMode: String, CaseIterable, Identifiable {
@@ -41,6 +41,17 @@ struct SetupProfileView: View {
         case login = "Đăng nhập"
 
         var id: String { rawValue }
+    }
+
+    private enum RescuerLoginError: LocalizedError {
+        case invalidRole
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidRole:
+                return "Tai khoan nay khong thuoc nhom rescuer."
+            }
+        }
     }
     
     var body: some View {
@@ -116,22 +127,23 @@ struct SetupProfileView: View {
                         if isRescuerMode {
                             // Rescuer: nhập tài khoản và mật khẩu
                             VStack(spacing: DS.Spacing.md) {
-                                // Username field
+                                // Email field
                                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                                    Text("TÀI KHOẢN")
+                                    Text("EMAIL")
                                         .font(DS.Typography.caption).tracking(1)
                                         .foregroundColor(DS.Colors.textSecondary)
                                     
                                     HStack {
-                                        Image(systemName: "person.fill")
+                                        Image(systemName: "envelope.fill")
                                             .foregroundColor(DS.Colors.warning)
                                             .frame(width: 20)
-                                        TextField("Nhập tài khoản...", text: $rescuerUsername)
-                                            .textContentType(.username)
+                                        TextField("Nhập email...", text: $rescuerEmail)
+                                            .textContentType(.emailAddress)
+                                            .keyboardType(.emailAddress)
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
                                             .foregroundColor(DS.Colors.text)
-                                            .focused($focusedField, equals: .rescuerUsername)
+                                            .focused($focusedField, equals: .rescuerEmail)
                                     }
                                     .padding(DS.Spacing.sm)
                                     .background(DS.Colors.surface)
@@ -169,6 +181,8 @@ struct SetupProfileView: View {
                                     .background(DS.Colors.surface)
                                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
                                 }
+
+                                rescuerGoogleLoginSection
                             }
                         } else {
                             VStack(spacing: DS.Spacing.md) {
@@ -326,21 +340,28 @@ struct SetupProfileView: View {
                         
                         // Submit button
                         if isRescuerMode {
-                            Button { submitRescuer() } label: {
-                                HStack(spacing: DS.Spacing.sm) {
-                                    if isLoading { ProgressView().tint(.white) }
-                                    Image(systemName: "shield.lefthalf.filled")
-                                    Text("ĐĂNG NHẬP LÍNH CỨU TRỢ")
-                                        .font(DS.Typography.headline).tracking(2)
+                            VStack(spacing: DS.Spacing.sm) {
+                                Button { submitRescuer() } label: {
+                                    HStack(spacing: DS.Spacing.sm) {
+                                        if isLoading { ProgressView().tint(.white) }
+                                        Image(systemName: "envelope.badge.fill")
+                                        Text("ĐĂNG NHẬP BẰNG EMAIL")
+                                            .font(DS.Typography.headline).tracking(2)
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, DS.Spacing.md)
+                                    .background(isFormValid && !isLoading ? DS.Colors.warning : DS.Colors.textTertiary)
+                                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
+                                    .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
                                 }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, DS.Spacing.md)
-                                .background(isFormValid && !isLoading ? DS.Colors.warning : DS.Colors.textTertiary)
-                                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
-                                .shadow(color: .black.opacity(0.2), radius: 0, x: 3, y: 3)
+                                .disabled(!isFormValid || isLoading)
+
+                                Text("Tai khoan Google rescuer se duoc kiem tra quyen sau khi dang nhap.")
+                                    .font(DS.Typography.caption)
+                                    .foregroundColor(DS.Colors.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .disabled(!isFormValid || isLoading)
                         } else if authMode == .register {
                             Button { sendOTP() } label: {
                                 HStack(spacing: DS.Spacing.sm) {
@@ -514,15 +535,53 @@ struct SetupProfileView: View {
     
     private var isFormValid: Bool {
         if isRescuerMode {
-            let trimmedUser = rescuerUsername.trimmingCharacters(in: .whitespaces)
-            let trimmedPass = rescuerPassword.trimmingCharacters(in: .whitespaces)
-            return !trimmedUser.isEmpty && !trimmedPass.isEmpty
+            let trimmedEmail = rescuerEmail.trimmingCharacters(in: .whitespaces)
+            let trimmedPass  = rescuerPassword.trimmingCharacters(in: .whitespaces)
+            return !trimmedEmail.isEmpty && trimmedEmail.contains("@") && !trimmedPass.isEmpty
         }
         if authMode == .register {
             return isPhoneValid && isPINValid && confirmPassword == password
         }
         // Đăng nhập bằng PIN: cần phone + PIN hợp lệ
         return isPhoneValid && password.count == 6
+    }
+
+    private var rescuerGoogleLoginSection: some View {
+        VStack(spacing: DS.Spacing.sm) {
+            HStack {
+                EditorialDivider()
+                Text("hoặc")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .padding(.horizontal, DS.Spacing.sm)
+                EditorialDivider()
+            }
+
+            Button {
+                Task {
+                    await loginWithGoogleRescuer()
+                }
+            } label: {
+                HStack(spacing: DS.Spacing.sm) {
+                    if isLoading { ProgressView().tint(DS.Colors.text) }
+                    Image(systemName: "globe")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("ĐĂNG NHẬP VỚI GOOGLE")
+                        .font(DS.Typography.subheadline).tracking(1)
+                }
+                .foregroundColor(DS.Colors.text)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Colors.background)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+            }
+            .disabled(isLoading)
+
+            Text("Neu chua du dieu kien rescuer, app se khoa giao dien va huong dan dang ky tren web.")
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - OTP Verification Sheet
@@ -756,11 +815,11 @@ struct SetupProfileView: View {
     }
 
     private func submitRescuer() {
-        let trimmedUser = rescuerUsername.trimmingCharacters(in: .whitespaces)
-        let trimmedPass = rescuerPassword.trimmingCharacters(in: .whitespaces)
+        let trimmedEmail = rescuerEmail.trimmingCharacters(in: .whitespaces)
+        let trimmedPass  = rescuerPassword.trimmingCharacters(in: .whitespaces)
 
-        guard !trimmedUser.isEmpty else {
-            errorMessage = "Vui lòng nhập tài khoản"
+        guard !trimmedEmail.isEmpty, trimmedEmail.contains("@") else {
+            errorMessage = "Vui lòng nhập địa chỉ email hợp lệ"
             showError = true
             return
         }
@@ -771,18 +830,67 @@ struct SetupProfileView: View {
         }
 
         isLoading = true
-        AuthService.shared.login(username: trimmedUser, phone: nil, password: trimmedPass) { result in
-            isLoading = false
+        AuthService.shared.loginRescuer(email: trimmedEmail, password: trimmedPass) { result in
             switch result {
             case .success(let response):
-                AuthSessionStore.shared.save(from: response)
-                let displayName = response.displayName ?? "Lính Cứu Trợ"
-                userProfile.saveUser(name: displayName, phoneNumber: "")
-                isSetupComplete = true
+                guard response.isRescuer else {
+                    isLoading = false
+                    handleError(RescuerLoginError.invalidRole)
+                    return
+                }
+
+                Task { @MainActor in
+                    AuthSessionStore.shared.save(from: response)
+                    await completeRescuerAuthentication(
+                        displayName: response.displayName ?? "Linh Cuu Tro",
+                        fallbackIdentifier: trimmedEmail
+                    )
+                }
             case .failure(let error):
+                isLoading = false
                 handleError(error)
             }
         }
+    }
+
+    @MainActor
+    private func loginWithGoogleRescuer() async {
+        guard !isLoading else { return }
+
+        isLoading = true
+
+        do {
+            let idToken = try await GoogleSignInManager.shared.signIn()
+            let response = try await AuthService.shared.googleLogin(idToken: idToken)
+
+            guard response.isRescuer else {
+                isLoading = false
+                handleError(RescuerLoginError.invalidRole)
+                return
+            }
+
+            AuthSessionStore.shared.save(from: response)
+            await completeRescuerAuthentication(
+                displayName: response.displayName ?? "Linh Cuu Tro",
+                fallbackIdentifier: response.username ?? "rescuer-google"
+            )
+        } catch {
+            isLoading = false
+            handleError(error)
+        }
+    }
+
+    @MainActor
+    private func completeRescuerAuthentication(displayName: String, fallbackIdentifier: String) async {
+        await AuthSessionStore.shared.refreshCurrentUserIfNeeded(force: true)
+
+        let session = AuthSessionStore.shared.session
+        let resolvedDisplayName = session?.fullName ?? displayName
+        let resolvedIdentifier = session?.email ?? session?.username ?? fallbackIdentifier
+
+        userProfile.saveUser(name: resolvedDisplayName, phoneNumber: resolvedIdentifier)
+        isLoading = false
+        isSetupComplete = true
     }
 
     private func handleError(_ error: Error) {
