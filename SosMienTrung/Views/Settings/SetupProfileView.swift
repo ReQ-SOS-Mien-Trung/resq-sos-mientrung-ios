@@ -860,10 +860,14 @@ struct SetupProfileView: View {
         isLoading = true
 
         do {
-            let idToken = try await GoogleSignInManager.shared.signIn()
-            let response = try await AuthService.shared.googleLogin(idToken: idToken)
+            let tokens = try await GoogleSignInManager.shared.signIn()
+            let response = try await AuthService.shared.googleLogin(
+                idToken: tokens.googleIDToken,
+                firebaseIdToken: tokens.firebaseIDToken
+            )
 
             guard response.isRescuer else {
+                GoogleSignInManager.shared.signOut()
                 isLoading = false
                 handleError(RescuerLoginError.invalidRole)
                 return
@@ -875,6 +879,7 @@ struct SetupProfileView: View {
                 fallbackIdentifier: response.username ?? "rescuer-google"
             )
         } catch {
+            GoogleSignInManager.shared.signOut()
             isLoading = false
             handleError(error)
         }

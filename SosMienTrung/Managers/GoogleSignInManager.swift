@@ -1,6 +1,12 @@
 import Foundation
 import UIKit
+import FirebaseAuth
 import GoogleSignIn
+
+struct GoogleSignInTokens {
+    let googleIDToken: String
+    let firebaseIDToken: String
+}
 
 enum GoogleSignInManagerError: LocalizedError {
     case missingIOSClientID
@@ -8,6 +14,8 @@ enum GoogleSignInManagerError: LocalizedError {
     case missingURLScheme(String)
     case missingPresentingViewController
     case missingIDToken
+    case missingAccessToken
+    case missingFirebaseIDToken
 
     var errorDescription: String? {
         switch self {
@@ -21,6 +29,10 @@ enum GoogleSignInManagerError: LocalizedError {
             return "Khong tim thay man hinh de mo Google Sign-In."
         case .missingIDToken:
             return "Google khong tra ve ID token hop le."
+        case .missingAccessToken:
+            return "Google khong tra ve access token hop le."
+        case .missingFirebaseIDToken:
+            return "Firebase khong tra ve ID token hop le sau khi dang nhap Google."
         }
     }
 }
@@ -31,7 +43,7 @@ final class GoogleSignInManager {
 
     private init() {}
 
-    func signIn() async throws -> String {
+    func signIn() async throws -> GoogleSignInTokens {
         let configuration = try makeConfiguration()
 
         guard let presentingViewController = UIApplication.shared.topMostViewController() else {
@@ -41,11 +53,30 @@ final class GoogleSignInManager {
         GIDSignIn.sharedInstance.configuration = configuration
 
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController)
-        guard let idToken = result.user.idToken?.tokenString else {
+        guard let googleIDToken = result.user.idToken?.tokenString else {
             throw GoogleSignInManagerError.missingIDToken
         }
+        let googleAccessToken = result.user.accessToken.tokenString
 
-        return idToken
+        guard googleAccessToken.isEmpty == false else {
+            throw GoogleSignInManagerError.missingAccessToken
+        }
+
+        let credential = GoogleAuthProvider.credential(
+            withIDToken: googleIDToken,
+            accessToken: googleAccessToken
+        )
+        let authResult = try await Auth.auth().signIn(with: credential)
+        let firebaseIDToken = try await authResult.user.getIDToken()
+
+        guard firebaseIDToken.isEmpty == false else {
+            throw GoogleSignInManagerError.missingFirebaseIDToken
+        }
+
+        return GoogleSignInTokens(
+            googleIDToken: googleIDToken,
+            firebaseIDToken: firebaseIDToken
+        )
     }
 
     func handleOpenURL(_ url: URL) -> Bool {
@@ -54,6 +85,7 @@ final class GoogleSignInManager {
 
     func signOut() {
         GIDSignIn.sharedInstance.signOut()
+        try? Auth.auth().signOut()
     }
 
     private func makeConfiguration() throws -> GIDConfiguration {

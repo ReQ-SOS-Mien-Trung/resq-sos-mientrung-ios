@@ -65,6 +65,7 @@ struct RescuerLoginRequest: Codable {
 
 struct GoogleLoginRequest: Codable {
     let idToken: String
+    let firebaseIdToken: String?
 }
 
 struct LoginResponse: Codable {
@@ -207,8 +208,8 @@ final class AuthService {
     }
 
     /// Đăng nhập Rescuer bằng Google ID token
-    func googleLogin(idToken: String) async throws -> GoogleLoginResponse {
-        let payload = GoogleLoginRequest(idToken: idToken)
+    func googleLogin(idToken: String, firebaseIdToken: String? = nil) async throws -> GoogleLoginResponse {
+        let payload = GoogleLoginRequest(idToken: idToken, firebaseIdToken: firebaseIdToken)
         return try await request(path: "/identity/auth/google-login", body: payload)
     }
 
