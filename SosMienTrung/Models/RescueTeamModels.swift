@@ -11,6 +11,36 @@ struct RescueTeamMember: Codable, Identifiable {
     let isLeader: Bool
     let roleInTeam: String?
     let checkedIn: Bool
+    let joinedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case userId
+        case firstName
+        case lastName
+        case phone
+        case avatarUrl
+        case rescuerType
+        case status
+        case isLeader
+        case roleInTeam
+        case checkedIn
+        case joinedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decode(String.self, forKey: .userId)
+        firstName = try container.decodeIfPresent(String.self, forKey: .firstName)
+        lastName = try container.decodeIfPresent(String.self, forKey: .lastName)
+        phone = try container.decodeIfPresent(String.self, forKey: .phone)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        rescuerType = try container.decodeIfPresent(String.self, forKey: .rescuerType)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        isLeader = try container.decode(Bool.self, forKey: .isLeader)
+        roleInTeam = try container.decodeIfPresent(String.self, forKey: .roleInTeam)
+        checkedIn = try container.decodeIfPresent(Bool.self, forKey: .checkedIn) ?? false
+        joinedAt = try container.decodeIfPresent(String.self, forKey: .joinedAt)
+    }
 
     var id: String { userId }
 
