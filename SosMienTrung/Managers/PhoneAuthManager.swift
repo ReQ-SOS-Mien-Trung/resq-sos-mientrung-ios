@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 import FirebaseAuth
 
 /// Quản lý xác thực OTP qua Firebase Phone Auth
@@ -28,6 +29,12 @@ final class PhoneAuthManager: ObservableObject {
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
+        logPhoneAuthPreflight()
+
+        if UIApplication.shared.isRegisteredForRemoteNotifications == false {
+            print("⚠️ APNs chưa sẵn sàng trước khi gửi OTP, yêu cầu đăng ký remote notifications lại")
+            UIApplication.shared.registerForRemoteNotifications()
+        }
 
         do {
             let provider = PhoneAuthProvider.provider(auth: Auth.auth())
@@ -117,6 +124,11 @@ final class PhoneAuthManager: ObservableObject {
 
     private func mapFirebaseError(_ error: Error) -> String {
         let nsError = error as NSError
+        let localizedDescription = nsError.localizedDescription.lowercased()
+
+        if localizedDescription.contains("no apns token specified") {
+            return "Thiết bị chưa nhận APNs token. Hãy chờ vài giây sau khi mở app rồi gửi lại OTP trên thiết bị thật."
+        }
 
         // Firebase backend error 503: parse inner error code for more specific messages
         if nsError.code == 17999,
@@ -149,5 +161,37 @@ final class PhoneAuthManager: ObservableObject {
         default:
             return "Lỗi xác thực: \(error.localizedDescription)"
         }
+    }
+
+    @MainActor
+    private func logPhoneAuthPreflight() {
+        let isRegistered = UIApplication.shared.isRegisteredForRemoteNotifications
+        let backgroundRefreshStatus: String
+
+        switch UIApplication.shared.backgroundRefreshStatus {
+        case .available:
+            backgroundRefreshStatus = "available"
+        case .denied:
+            backgroundRefreshStatus = "denied"
+        case .restricted:
+            backgroundRefreshStatus = "restricted"
+        @unknown default:
+            backgroundRefreshStatus = "unknown"
+        }
+
+        #if targetEnvironment(simulator)
+        let isSimulator = true
+        #else
+        let isSimulator = false
+        #endif
+
+        print(
+            """
+            📲 Phone Auth preflight:
+            - registeredForRemoteNotifications: \(isRegistered)
+            - backgroundRefreshStatus: \(backgroundRefreshStatus)
+            - simulator: \(isSimulator)
+            """
+        )
     }
 }

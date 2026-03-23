@@ -60,6 +60,11 @@ final class NotificationAPIService {
         _ = try await requestData("/identity/user/me/fcm-token", method: "POST", body: body)
     }
 
+    func broadcastAlert(_ payload: BroadcastAlertPayload) async throws {
+        let body = try Self.encoder().encode(payload)
+        _ = try await requestData("/notifications/broadcast", method: "POST", body: body)
+    }
+
     func unregisterFCMToken(_ token: String) async throws {
         let body = try JSONEncoder().encode(FCMTokenRequest(token: token))
         _ = try await requestData("/identity/user/me/fcm-token", method: "DELETE", body: body)
@@ -116,5 +121,16 @@ final class NotificationAPIService {
         }
 
         return data
+    }
+
+    private static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        encoder.dateEncodingStrategy = .custom { date, nestedEncoder in
+            var container = nestedEncoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
+        return encoder
     }
 }

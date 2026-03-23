@@ -5,6 +5,133 @@ enum NotificationOrigin: String, Equatable {
     case broadcastPush
 }
 
+struct BroadcastAlertLocation: Codable, Equatable {
+    let city: String?
+    let lat: Double?
+    let lon: Double?
+}
+
+struct BroadcastActiveAlert: Codable, Equatable {
+    let id: String?
+    let eventType: String?
+    let title: String?
+    let severity: String?
+    let areasAffected: [String]?
+    let startTime: Date?
+    let endTime: Date?
+    let description: String?
+    let instructionChecklist: [String]?
+    let source: String?
+}
+
+struct BroadcastAlertPayload: Codable, Equatable {
+    let location: BroadcastAlertLocation?
+    let activeAlerts: [BroadcastActiveAlert]?
+
+    var alerts: [BroadcastActiveAlert] {
+        activeAlerts ?? []
+    }
+
+    var primaryAlertTitle: String? {
+        alerts.compactMap { alert in
+            Self.trim(alert.title) ?? Self.normalizedType(alert.eventType)
+        }.first
+    }
+
+    var summaryMessage: String {
+        let city = Self.trim(location?.city)
+
+        switch alerts.count {
+        case 0:
+            if let city {
+                return "Canh bao moi tai \(city)."
+            }
+            return "Canh bao moi tu he thong."
+        case 1:
+            let alert = alerts[0]
+            var message = Self.trim(alert.title) ?? Self.normalizedType(alert.eventType) ?? "Canh bao moi"
+
+            if let city {
+                message += " tai \(city)"
+            }
+
+            if let severity = Self.trim(alert.severity) {
+                message += " (\(severity.uppercased()))"
+            }
+
+            let areas = (alert.areasAffected ?? []).compactMap(Self.trim)
+            if areas.isEmpty == false {
+                let preview = Array(areas.prefix(2))
+                message += ". Khu vuc anh huong: \(preview.joined(separator: ", "))"
+                if areas.count > preview.count {
+                    message += " va \(areas.count - preview.count) khu vuc khac"
+                }
+                message += "."
+            } else {
+                message += "."
+            }
+
+            return message
+        default:
+            var message = "Co \(alerts.count) canh bao dang hoat dong"
+            if let city {
+                message += " tai \(city)"
+            }
+            return message + "."
+        }
+    }
+
+    static func decode(fromJSONObject object: Any) -> BroadcastAlertPayload? {
+        guard let data = makeJSONData(from: object) else { return nil }
+        return try? RealtimeNotification.decoder().decode(BroadcastAlertPayload.self, from: data)
+    }
+
+    private static func makeJSONData(from object: Any) -> Data? {
+        if let rawString = object as? String {
+            let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.isEmpty == false,
+                  trimmed.first == "{" || trimmed.first == "[" else {
+                return nil
+            }
+            return trimmed.data(using: .utf8)
+        }
+
+        let normalizedObject = normalizedJSONObject(object)
+        guard JSONSerialization.isValidJSONObject(normalizedObject) else {
+            return nil
+        }
+
+        return try? JSONSerialization.data(withJSONObject: normalizedObject)
+    }
+
+    private static func normalizedJSONObject(_ object: Any) -> Any {
+        if let dictionary = object as? [AnyHashable: Any] {
+            return dictionary.reduce(into: [String: Any]()) { partialResult, item in
+                guard let key = item.key as? String else { return }
+                partialResult[key] = normalizedJSONObject(item.value)
+            }
+        }
+
+        if let array = object as? [Any] {
+            return array.map(normalizedJSONObject)
+        }
+
+        return object
+    }
+
+    private static func trim(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func normalizedType(_ value: String?) -> String? {
+        trim(value)?
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+}
+
 struct RealtimeNotification: Decodable, Identifiable, Equatable {
     let id: String
     let userNotificationId: Int?
@@ -12,17 +139,22 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
     let title: String?
     let type: String?
     let body: String?
+    let alertPayload: BroadcastAlertPayload?
     var isRead: Bool
     let readAt: Date?
     let createdAt: Date?
     let origin: NotificationOrigin
 
     var displayTitle: String {
-        Self.firstNonEmpty(title, type?.replacingOccurrences(of: "_", with: " ").capitalized) ?? "Thong bao"
+        Self.firstNonEmpty(
+            title,
+            alertPayload?.primaryAlertTitle,
+            type?.replacingOccurrences(of: "_", with: " ").capitalized
+        ) ?? "Thong bao"
     }
 
     var displayMessage: String {
-        Self.firstNonEmpty(body) ?? "Ban co mot thong bao moi tu he thong."
+        Self.firstNonEmpty(body, alertPayload?.summaryMessage) ?? "Ban co mot thong bao moi tu he thong."
     }
 
     var isPersisted: Bool {
@@ -39,6 +171,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         title: String? = nil,
         type: String? = nil,
         body: String? = nil,
+        alertPayload: BroadcastAlertPayload? = nil,
         isRead: Bool = false,
         readAt: Date? = nil,
         createdAt: Date? = nil,
@@ -50,6 +183,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         self.title = title
         self.type = type
         self.body = body
+        self.alertPayload = alertPayload
         self.isRead = isRead
         self.readAt = readAt
         self.createdAt = createdAt
@@ -59,7 +193,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
             notificationId: notificationId,
             title: title,
             type: type,
-            body: body,
+            body: body ?? alertPayload?.summaryMessage,
             createdAt: createdAt,
             origin: origin
         )
@@ -72,7 +206,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         let notificationId = Self.decodeInt(from: container, keys: ["notificationId"])
         let title = Self.decodeString(from: container, keys: ["title"])
         let type = Self.decodeString(from: container, keys: ["type"])
-        let body = Self.decodeString(from: container, keys: ["body", "content", "message", "description"])
+        let bodyValue = Self.decodeBodyValue(from: container, keys: ["body", "content", "message", "description"])
         let isRead = Self.decodeBool(from: container, keys: ["isRead"]) ?? false
         let readAt = Self.decodeDate(from: container, keys: ["readAt", "read_at"])
         let createdAt = Self.decodeDate(from: container, keys: ["createdAt", "created_at"])
@@ -82,7 +216,8 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
             notificationId: notificationId,
             title: title,
             type: type,
-            body: body,
+            body: bodyValue.text,
+            alertPayload: bodyValue.payload,
             isRead: isRead,
             readAt: readAt,
             createdAt: createdAt,
@@ -95,12 +230,14 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         body: String?,
         type: String?,
         messageId: String?,
+        alertPayload: BroadcastAlertPayload? = nil,
         createdAt: Date = Date()
     ) -> RealtimeNotification {
         RealtimeNotification(
             title: title,
             type: type,
             body: body,
+            alertPayload: alertPayload,
             isRead: false,
             createdAt: createdAt,
             origin: .broadcastPush,
@@ -169,6 +306,36 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         values
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first(where: { !$0.isEmpty })
+    }
+
+    private static func decodeBodyValue(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> (text: String?, payload: BroadcastAlertPayload?) {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let payload = try? container.decode(BroadcastAlertPayload.self, forKey: key) {
+                return (nil, payload)
+            }
+
+            if let value = try? container.decode(String.self, forKey: key) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.isEmpty == false else { continue }
+
+                if let payload = BroadcastAlertPayload.decode(fromJSONObject: trimmed) {
+                    return (nil, payload)
+                }
+
+                return (trimmed, nil)
+            }
+
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return (String(value), nil)
+            }
+        }
+
+        return (nil, nil)
     }
 
     private static func decodeString(

@@ -216,13 +216,15 @@ final class NotificationHubService: ObservableObject {
 
         if let type = extractString(for: "type", in: userInfo),
            !type.isEmpty {
+            let alertPayload = extractBroadcastAlertPayload(from: userInfo)
             let broadcastNotification = RealtimeNotification.makeBroadcastPush(
                 title: extractNotificationTitle(from: userInfo),
-                body: extractNotificationBody(from: userInfo),
+                body: extractNotificationBody(from: userInfo, fallbackPayload: alertPayload),
                 type: type,
                 messageId: extractString(for: "gcm.message_id", in: userInfo)
                     ?? extractString(for: "google.c.a.c_id", in: userInfo)
-                    ?? extractString(for: "message_id", in: userInfo)
+                    ?? extractString(for: "message_id", in: userInfo),
+                alertPayload: alertPayload
             )
 
             handle(notification: broadcastNotification, shouldPresent: true, adjustsBackendUnread: false)
@@ -381,10 +383,17 @@ final class NotificationHubService: ObservableObject {
         return aps["alert"] as? String
     }
 
-    private func extractNotificationBody(from userInfo: [AnyHashable: Any]) -> String? {
-        if let body = extractString(for: "body", in: userInfo)
-            ?? extractString(for: "content", in: userInfo) {
+    private func extractNotificationBody(
+        from userInfo: [AnyHashable: Any],
+        fallbackPayload: BroadcastAlertPayload? = nil
+    ) -> String? {
+        if let body = extractPlainText(for: "body", in: userInfo)
+            ?? extractPlainText(for: "content", in: userInfo) {
             return body
+        }
+
+        if let fallbackPayload {
+            return fallbackPayload.summaryMessage
         }
 
         guard let aps = userInfo["aps"] as? [AnyHashable: Any] else {
@@ -396,6 +405,43 @@ final class NotificationHubService: ObservableObject {
         }
 
         return aps["alert"] as? String
+    }
+
+    private func extractBroadcastAlertPayload(from userInfo: [AnyHashable: Any]) -> BroadcastAlertPayload? {
+        if let bodyValue = userInfo["body"],
+           let payload = BroadcastAlertPayload.decode(fromJSONObject: bodyValue) {
+            return payload
+        }
+
+        if let contentValue = userInfo["content"],
+           let payload = BroadcastAlertPayload.decode(fromJSONObject: contentValue) {
+            return payload
+        }
+
+        if userInfo["location"] != nil || userInfo["activeAlerts"] != nil,
+           let payload = BroadcastAlertPayload.decode(fromJSONObject: userInfo) {
+            return payload
+        }
+
+        guard let aps = userInfo["aps"] as? [AnyHashable: Any] else {
+            return nil
+        }
+
+        if let alert = aps["alert"] as? [AnyHashable: Any],
+           let bodyValue = alert["body"],
+           let payload = BroadcastAlertPayload.decode(fromJSONObject: bodyValue) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private func extractPlainText(for key: String, in dictionary: [AnyHashable: Any]) -> String? {
+        guard let value = extractString(for: key, in: dictionary) else {
+            return nil
+        }
+
+        return BroadcastAlertPayload.decode(fromJSONObject: value) == nil ? value : nil
     }
 
     private func extractString(for key: String, in dictionary: [AnyHashable: Any]) -> String? {

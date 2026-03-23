@@ -13,32 +13,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
-
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if let error {
-                print("🔴 Notification permission error: \(error.localizedDescription)")
-            }
-
-            print("✅ Notification permission granted: \(granted)")
-
-            DispatchQueue.main.async {
-                application.registerForRemoteNotifications()
-            }
-        }
-
-        Messaging.messaging().token { token, error in
-            if let error {
-                print("🔴 FCM token fetch FAILED: \(error.localizedDescription)")
-                return
-            }
-
-            if let token {
-                print("✅ Initial FCM token received: \(token.prefix(16))...")
-                Task { @MainActor in
-                    NotificationHubService.shared.updateDevicePushToken(token)
-                }
-            }
-        }
+        registerForPushNotifications(application)
+        requestNotificationAuthorization()
 
         print("✅ App did finish launching")
         return true
@@ -50,6 +26,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         Auth.auth().setAPNSToken(deviceToken, type: .unknown)
         Messaging.messaging().apnsToken = deviceToken
+        fetchFCMToken(reason: "APNs token available")
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
@@ -82,6 +59,42 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         return false
+    }
+
+    private func requestNotificationAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error {
+                print("🔴 Notification permission error: \(error.localizedDescription)")
+            }
+
+            print("✅ Notification permission granted: \(granted)")
+        }
+    }
+
+    private func registerForPushNotifications(_ application: UIApplication) {
+        DispatchQueue.main.async {
+            application.registerForRemoteNotifications()
+            print("📲 Requested APNs registration")
+        }
+    }
+
+    private func fetchFCMToken(reason: String) {
+        Messaging.messaging().token { token, error in
+            if let error {
+                print("🔴 FCM token fetch FAILED after \(reason): \(error.localizedDescription)")
+                return
+            }
+
+            guard let token, !token.isEmpty else {
+                print("⚠️ FCM token fetch returned empty token after \(reason)")
+                return
+            }
+
+            print("✅ FCM token received after \(reason): \(token.prefix(16))...")
+            Task { @MainActor in
+                NotificationHubService.shared.updateDevicePushToken(token)
+            }
+        }
     }
 }
 
