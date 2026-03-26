@@ -56,6 +56,81 @@ struct SOSInjuredPerson: Codable {
     }
 }
 
+struct SOSSpecialDietPerson: Codable {
+    let personType: String
+    let index: Int
+    let name: String
+    let customName: String?
+    let dietDescription: String?
+
+    enum CodingKeys: String, CodingKey {
+        case personType = "person_type"
+        case index
+        case name
+        case customName = "custom_name"
+        case dietDescription = "diet_description"
+    }
+}
+
+struct SOSClothingPerson: Codable {
+    let personType: String
+    let index: Int
+    let name: String
+    let customName: String?
+    let gender: String
+
+    enum CodingKeys: String, CodingKey {
+        case personType = "person_type"
+        case index
+        case name
+        case customName = "custom_name"
+        case gender
+    }
+}
+
+struct SOSSupplyDetailData: Codable {
+    // Water
+    let waterDuration: String?
+    let waterRemaining: String?
+    // Food
+    let foodDuration: String?
+    let specialDietNeed: String?
+    let specialDietPersons: [SOSSpecialDietPerson]?
+    // Medicine / Medical
+    let needsUrgentMedicine: Bool?
+    let medicineConditions: [String]?
+    let medicineOtherDescription: String?
+    let medicalNeeds: [String]?
+    let medicalDescription: String?
+    // Blanket
+    let isColdOrWet: Bool?
+    let blanketAvailability: String?
+    let areBlanketsEnough: Bool?
+    let blanketRequestCount: Int?
+    // Clothes
+    let clothingStatus: String?
+    let clothingPersons: [SOSClothingPerson]?
+
+    enum CodingKeys: String, CodingKey {
+        case waterDuration = "water_duration"
+        case waterRemaining = "water_remaining"
+        case foodDuration = "food_duration"
+        case specialDietNeed = "special_diet_need"
+        case specialDietPersons = "special_diet_persons"
+        case needsUrgentMedicine = "needs_urgent_medicine"
+        case medicineConditions = "medicine_conditions"
+        case medicineOtherDescription = "medicine_other_description"
+        case medicalNeeds = "medical_needs"
+        case medicalDescription = "medical_description"
+        case isColdOrWet = "is_cold_or_wet"
+        case blanketAvailability = "blanket_availability"
+        case areBlanketsEnough = "are_blankets_enough"
+        case blanketRequestCount = "blanket_request_count"
+        case clothingStatus = "clothing_status"
+        case clothingPersons = "clothing_persons"
+    }
+}
+
 // MARK: - Structured Data (unified rescue + relief)
 struct SOSStructuredData: Codable {
     // === RESCUE fields ===
@@ -72,6 +147,7 @@ struct SOSStructuredData: Codable {
     // === RELIEF fields ===
     let supplies: [String]?
     let otherSupplyDescription: String?
+    let supplyDetails: SOSSupplyDetailData?
     
     // === COMMON fields ===
     let peopleCount: SOSPeopleCount?
@@ -89,6 +165,7 @@ struct SOSStructuredData: Codable {
         case injuredPersons = "injured_persons"
         case supplies
         case otherSupplyDescription = "other_supply_description"
+        case supplyDetails = "supply_details"
         case peopleCount = "people_count"
         case additionalDescription = "additional_description"
     }
@@ -105,6 +182,7 @@ struct SOSStructuredData: Codable {
         injuredPersons: [SOSInjuredPerson]? = nil,
         supplies: [String]? = nil,
         otherSupplyDescription: String? = nil,
+        supplyDetails: SOSSupplyDetailData? = nil,
         peopleCount: SOSPeopleCount? = nil,
         additionalDescription: String? = nil
     ) {
@@ -119,6 +197,7 @@ struct SOSStructuredData: Codable {
         self.injuredPersons = injuredPersons
         self.supplies = supplies
         self.otherSupplyDescription = otherSupplyDescription
+        self.supplyDetails = supplyDetails
         self.peopleCount = peopleCount
         self.additionalDescription = additionalDescription
     }

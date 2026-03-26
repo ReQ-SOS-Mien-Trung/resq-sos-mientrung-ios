@@ -91,7 +91,7 @@ enum SupplyNeed: String, Codable, CaseIterable, Identifiable {
         case .food: return "Thực phẩm"
         case .clothes: return "Quần áo"
         case .blanket: return "Chăn / Giữ ấm"
-        case .medicine: return "Thuốc men"
+        case .medicine: return "Y tế"
         case .other: return "Khác"
         }
     }
@@ -239,6 +239,42 @@ enum ClothingStatus: String, Codable, CaseIterable, Identifiable {
         case .completelyLacking: return "Thiếu hoàn toàn"
         case .partiallyLacking: return "Thiếu một phần"
         case .sufficient: return "Đủ"
+        }
+    }
+}
+
+enum MedicalSupportNeed: String, Codable, CaseIterable, Identifiable {
+    case commonMedicine = "COMMON_MEDICINE"
+    case firstAid = "FIRST_AID"
+    case chronicMaintenance = "CHRONIC_MAINTENANCE"
+    case minorInjury = "MINOR_INJURY"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .commonMedicine:
+            return "Thuốc thông dụng (hạ sốt, đau đầu, tiêu hóa...)"
+        case .firstAid:
+            return "Vật tư sơ cứu (băng gạc, oxy già, thuốc đỏ...)"
+        case .chronicMaintenance:
+            return "Người có bệnh nền cần thuốc duy trì"
+        case .minorInjury:
+            return "Người bị thương nhẹ (cần xử lý tại chỗ)"
+        }
+    }
+}
+
+enum ClothingGender: String, Codable, CaseIterable, Identifiable {
+    case male = "MALE"
+    case female = "FEMALE"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .male: return "Nam"
+        case .female: return "Nữ"
         }
     }
 }
@@ -576,6 +612,20 @@ struct PersonMedicalInfo: Codable, Equatable, Identifiable {
     }
 }
 
+struct PersonSpecialDietInfo: Codable, Equatable, Identifiable {
+    let personId: String
+    var dietDescription: String = ""
+
+    var id: String { personId }
+}
+
+struct ClothingPersonInfo: Codable, Equatable, Identifiable {
+    let personId: String
+    var gender: ClothingGender? = nil
+
+    var id: String { personId }
+}
+
 /// Thông tin auto-collected
 struct AutoCollectedInfo: Codable {
     let deviceId: String
@@ -627,19 +677,27 @@ struct ReliefData: Codable, Equatable {
     // Follow-up: Thực phẩm
     var foodDuration: FoodDuration?
     var specialDietNeed: SpecialDietNeed?
-    
-    // Follow-up: Thuốc men
+    var specialDietPersonIds: Set<String> = []
+    var specialDietInfoByPerson: [String: PersonSpecialDietInfo] = [:]
+
+    // Follow-up: Y tế
     var needsUrgentMedicine: Bool?
     var medicineConditions: Set<MedicineCondition> = []
     var medicineOtherDescription: String = ""
-    
+    var medicalNeeds: Set<MedicalSupportNeed> = []
+    var medicalDescription: String = ""
+
     // Follow-up: Chăn / giữ ấm
     var isColdOrWet: Bool?
     var blanketAvailability: BlanketAvailability?
-    
+    var areBlanketsEnough: Bool?
+    var blanketRequestCount: Int?
+
     // Follow-up: Quần áo
     var clothingStatus: ClothingStatus?
-    
+    var clothingPersonIds: Set<String> = []
+    var clothingInfoByPerson: [String: ClothingPersonInfo] = [:]
+
     /// Xóa dữ liệu follow-up khi bỏ chọn nhu yếu phẩm
     mutating func clearFollowUp(for supply: SupplyNeed) {
         switch supply {
@@ -649,17 +707,40 @@ struct ReliefData: Codable, Equatable {
         case .food:
             foodDuration = nil
             specialDietNeed = nil
+            specialDietPersonIds = []
+            specialDietInfoByPerson = [:]
         case .medicine:
             needsUrgentMedicine = nil
             medicineConditions = []
             medicineOtherDescription = ""
+            medicalNeeds = []
+            medicalDescription = ""
         case .blanket:
             isColdOrWet = nil
             blanketAvailability = nil
+            areBlanketsEnough = nil
+            blanketRequestCount = nil
         case .clothes:
             clothingStatus = nil
+            clothingPersonIds = []
+            clothingInfoByPerson = [:]
         case .other:
             break
+        }
+    }
+
+    mutating func syncToValidPeople(validIds: Set<String>, maxPeopleCount: Int) {
+        specialDietPersonIds = specialDietPersonIds.intersection(validIds)
+        specialDietInfoByPerson = specialDietInfoByPerson.filter { validIds.contains($0.key) }
+
+        clothingPersonIds = clothingPersonIds.intersection(validIds)
+        clothingInfoByPerson = clothingInfoByPerson.filter { validIds.contains($0.key) }
+
+        guard let blanketRequestCount else { return }
+        if maxPeopleCount <= 0 {
+            self.blanketRequestCount = nil
+        } else {
+            self.blanketRequestCount = min(max(blanketRequestCount, 1), maxPeopleCount)
         }
     }
 }
@@ -670,7 +751,7 @@ struct RescueData: Codable, Equatable {
     var otherSituationDescription: String = ""
     var peopleCount: PeopleCount = PeopleCount()
     
-    // Danh sách người được tạo từ peopleCount
+    // Legacy mirrored people list for local persistence/detail view
     var people: [Person] = []
     
     // Người bị thương được chọn
@@ -725,6 +806,11 @@ struct RescueData: Codable, Equatable {
         
         people = newPeople
     }
+
+    mutating func syncToValidPeople(validIds: Set<String>) {
+        injuredPersonIds = injuredPersonIds.intersection(validIds)
+        medicalInfoByPerson = medicalInfoByPerson.filter { validIds.contains($0.key) }
+    }
     
     /// personMedicalScore = Σ(issueWeight) × ageWeight cho mỗi người
     /// Tổng: Σ(personMedicalScore)
@@ -774,7 +860,12 @@ class SOSFormData: ObservableObject {
     }
     
     // Số người cần hỗ trợ (shared giữa rescue và relief)
-    @Published var sharedPeopleCount: PeopleCount = PeopleCount()
+    @Published var sharedPeopleCount: PeopleCount = PeopleCount() {
+        didSet {
+            syncPeopleCount()
+        }
+    }
+    @Published var sharedPeople: [Person] = []
     
     // Step 2A: Cứu trợ
     @Published var reliefData: ReliefData = ReliefData()
@@ -787,6 +878,10 @@ class SOSFormData: ObservableObject {
     
     // Quick preset applied
     @Published var appliedPreset: QuickPreset?
+
+    init() {
+        syncPeopleCount()
+    }
     
     // MARK: - Computed Properties
     
@@ -872,11 +967,12 @@ class SOSFormData: ObservableObject {
         currentStep = .autoInfo
         completedSteps = []
         selectedTypes = []
-        sharedPeopleCount = PeopleCount()
         reliefData = ReliefData()
         rescueData = RescueData()
         additionalDescription = ""
         appliedPreset = nil
+        sharedPeople = []
+        sharedPeopleCount = PeopleCount()
     }
     
     func markStepCompleted(_ step: SOSWizardStep) {
@@ -947,13 +1043,62 @@ class SOSFormData: ObservableObject {
     }
     
     /// Sync shared people count vào rescue và relief data
-    private func syncPeopleCount() {
-        rescueData.peopleCount = sharedPeopleCount
-        reliefData.peopleCount = sharedPeopleCount
-        // Generate people list cho rescue nếu cần
-        if needsRescueStep {
-            rescueData.generatePeople()
+    func syncPeopleCount() {
+        let existingNames = Dictionary(uniqueKeysWithValues: sharedPeople.map { ($0.id, $0.customName) })
+        var newPeople: [Person] = []
+
+        let adultCount = max(1, sharedPeopleCount.adults)
+        for index in 1...adultCount {
+            var person = Person(id: "adult_\(index)", type: .adult, index: index)
+            person.customName = existingNames[person.id] ?? ""
+            newPeople.append(person)
         }
+
+        if sharedPeopleCount.children > 0 {
+            for index in 1...sharedPeopleCount.children {
+                var person = Person(id: "child_\(index)", type: .child, index: index)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
+            }
+        }
+
+        if sharedPeopleCount.elderly > 0 {
+            for index in 1...sharedPeopleCount.elderly {
+                var person = Person(id: "elderly_\(index)", type: .elderly, index: index)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
+            }
+        }
+
+        let validIds = Set(newPeople.map(\.id))
+        sharedPeople = newPeople
+        reliefData.peopleCount = sharedPeopleCount
+        rescueData.peopleCount = sharedPeopleCount
+        rescueData.people = newPeople
+        rescueData.syncToValidPeople(validIds: validIds)
+        reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
+    }
+
+    func restoreSharedPeople(_ people: [Person]) {
+        sharedPeople = people
+        syncPeopleCount()
+    }
+
+    func updatePersonName(_ name: String, for personId: String) {
+        guard let index = sharedPeople.firstIndex(where: { $0.id == personId }) else { return }
+        var updatedPeople = sharedPeople
+        updatedPeople[index].customName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        sharedPeople = updatedPeople
+        rescueData.people = updatedPeople
+    }
+
+    func person(for personId: String) -> Person? {
+        sharedPeople.first(where: { $0.id == personId }) ??
+            rescueData.people.first(where: { $0.id == personId })
+    }
+
+    func orderedPeople(for personIds: Set<String>) -> [Person] {
+        sharedPeople.filter { personIds.contains($0.id) }
     }
     
     /// Apply quick preset
@@ -984,8 +1129,8 @@ class SOSFormData: ObservableObject {
             parts.append("[\(type.title)]")
         }
         
-        // Chi tiết theo loại
-        if sosType == .rescue {
+        // Chi tiết cứu hộ
+        if needsRescueStep {
             if let situation = rescueData.situation {
                 parts.append("Tình trạng: \(situation.title)")
             }
@@ -1003,7 +1148,7 @@ class SOSFormData: ObservableObject {
             if rescueData.hasInjured && !rescueData.injuredPersonIds.isEmpty {
                 var injuredInfo: [String] = []
                 for personId in rescueData.injuredPersonIds {
-                    if let person = rescueData.people.first(where: { $0.id == personId }),
+                    if let person = person(for: personId),
                        let medicalInfo = rescueData.medicalInfoByPerson[personId] {
                         let issues = medicalInfo.medicalIssues.map { $0.title }.joined(separator: ", ")
                         let nameLabel: String
@@ -1019,13 +1164,64 @@ class SOSFormData: ObservableObject {
                     parts.append("Bị thương: \(injuredInfo.joined(separator: "; "))")
                 }
             }
-        } else if sosType == .relief {
+        }
+
+        // Chi tiết cứu trợ
+        if needsReliefStep {
             if !reliefData.supplies.isEmpty {
                 let supplies = reliefData.supplies.map { $0.title }.joined(separator: ", ")
                 parts.append("Cần: \(supplies)")
             }
             
             parts.append("Số người: \(reliefData.peopleCount.total)")
+
+            if let waterDuration = reliefData.waterDuration {
+                parts.append("Nước: \(waterDuration.title)")
+            }
+
+            if let waterRemaining = reliefData.waterRemaining {
+                parts.append("Nước còn: \(waterRemaining.title)")
+            }
+
+            if let foodDuration = reliefData.foodDuration {
+                parts.append("Thực phẩm: \(foodDuration.title)")
+            }
+
+            let specialDietSummaries = orderedPeople(for: reliefData.specialDietPersonIds).compactMap { person -> String? in
+                guard let info = reliefData.specialDietInfoByPerson[person.id] else { return nil }
+                let description = info.dietDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                return description.isEmpty ? person.displayName : "\(person.displayName) (\(description))"
+            }
+            if !specialDietSummaries.isEmpty {
+                parts.append("Ăn đặc biệt: \(specialDietSummaries.joined(separator: "; "))")
+            }
+
+            if !reliefData.medicalNeeds.isEmpty {
+                parts.append("Y tế: \(reliefData.medicalNeeds.map(\.title).joined(separator: ", "))")
+            }
+
+            if !reliefData.medicalDescription.isEmpty {
+                parts.append("Mô tả y tế: \(reliefData.medicalDescription)")
+            }
+
+            if let areBlanketsEnough = reliefData.areBlanketsEnough {
+                if areBlanketsEnough {
+                    parts.append("Chăn mền: đủ")
+                } else if let blanketRequestCount = reliefData.blanketRequestCount {
+                    parts.append("Chăn mền: cần thêm \(blanketRequestCount)")
+                } else {
+                    parts.append("Chăn mền: không đủ")
+                }
+            }
+
+            let clothingSummaries = orderedPeople(for: reliefData.clothingPersonIds).compactMap { person -> String? in
+                guard let info = reliefData.clothingInfoByPerson[person.id] else { return nil }
+                let genderTitle = info.gender?.title ?? "Chưa rõ"
+                return "\(person.displayName) (\(genderTitle))"
+            }
+            if !clothingSummaries.isEmpty {
+                parts.append("Quần áo: \(clothingSummaries.joined(separator: "; "))")
+            }
         }
         
         // Mô tả thêm
@@ -1040,8 +1236,8 @@ class SOSFormData: ObservableObject {
     func toStructuredPayload() -> SOSStructuredPayload {
         SOSStructuredPayload(
             sosType: sosType?.rawValue,
-            reliefData: sosType == .relief ? reliefData : nil,
-            rescueData: sosType == .rescue ? rescueData : nil,
+            reliefData: needsReliefStep ? reliefData : nil,
+            rescueData: needsRescueStep ? rescueData : nil,
             additionalDescription: additionalDescription.isEmpty ? nil : additionalDescription,
             priorityScore: priorityScore,
             autoInfo: autoInfo
@@ -1186,7 +1382,7 @@ extension SOSFormData {
             injuredPersons: needsRescueStep && !rescueData.injuredPersonIds.isEmpty ? {
                 var persons: [SOSInjuredPerson] = []
                 for personId in rescueData.injuredPersonIds {
-                    if let person = rescueData.people.first(where: { $0.id == personId }),
+                    if let person = person(for: personId),
                        let info = rescueData.medicalInfoByPerson[personId] {
                         persons.append(SOSInjuredPerson(
                             personType: person.type.rawValue,
@@ -1208,6 +1404,62 @@ extension SOSFormData {
             otherSupplyDescription: needsReliefStep && !reliefData.otherSupplyDescription.isEmpty 
                 ? reliefData.otherSupplyDescription 
                 : nil,
+            supplyDetails: needsReliefStep ? {
+                let specialDietPersons = orderedPeople(for: reliefData.specialDietPersonIds).compactMap { person -> SOSSpecialDietPerson? in
+                    guard let info = reliefData.specialDietInfoByPerson[person.id] else { return nil }
+                    return SOSSpecialDietPerson(
+                        personType: person.type.rawValue,
+                        index: person.index,
+                        name: person.displayName,
+                        customName: person.customName.isEmpty ? nil : person.customName,
+                        dietDescription: info.dietDescription.isEmpty ? nil : info.dietDescription
+                    )
+                }
+
+                let clothingPersons = orderedPeople(for: reliefData.clothingPersonIds).compactMap { person -> SOSClothingPerson? in
+                    guard let info = reliefData.clothingInfoByPerson[person.id],
+                          let gender = info.gender else { return nil }
+                    return SOSClothingPerson(
+                        personType: person.type.rawValue,
+                        index: person.index,
+                        name: person.displayName,
+                        customName: person.customName.isEmpty ? nil : person.customName,
+                        gender: gender.rawValue
+                    )
+                }
+
+                let hasSomeDetail =
+                    reliefData.waterDuration != nil ||
+                    reliefData.waterRemaining != nil ||
+                    reliefData.foodDuration != nil ||
+                    !specialDietPersons.isEmpty ||
+                    !reliefData.medicalNeeds.isEmpty ||
+                    !reliefData.medicalDescription.isEmpty ||
+                    reliefData.areBlanketsEnough != nil ||
+                    reliefData.blanketRequestCount != nil ||
+                    !clothingPersons.isEmpty
+
+                guard hasSomeDetail else { return nil }
+
+                return SOSSupplyDetailData(
+                    waterDuration: reliefData.waterDuration?.rawValue,
+                    waterRemaining: reliefData.waterRemaining?.rawValue,
+                    foodDuration: reliefData.foodDuration?.rawValue,
+                    specialDietNeed: reliefData.specialDietNeed?.rawValue,
+                    specialDietPersons: specialDietPersons.isEmpty ? nil : specialDietPersons,
+                    needsUrgentMedicine: reliefData.needsUrgentMedicine,
+                    medicineConditions: reliefData.medicineConditions.isEmpty ? nil : reliefData.medicineConditions.map { $0.rawValue },
+                    medicineOtherDescription: reliefData.medicineOtherDescription.isEmpty ? nil : reliefData.medicineOtherDescription,
+                    medicalNeeds: reliefData.medicalNeeds.isEmpty ? nil : reliefData.medicalNeeds.map { $0.rawValue },
+                    medicalDescription: reliefData.medicalDescription.isEmpty ? nil : reliefData.medicalDescription,
+                    isColdOrWet: reliefData.isColdOrWet,
+                    blanketAvailability: reliefData.blanketAvailability?.rawValue,
+                    areBlanketsEnough: reliefData.areBlanketsEnough,
+                    blanketRequestCount: reliefData.blanketRequestCount,
+                    clothingStatus: reliefData.clothingStatus?.rawValue,
+                    clothingPersons: clothingPersons.isEmpty ? nil : clothingPersons
+                )
+            }() : nil,
             
             // Common fields
             peopleCount: SOSPeopleCount(

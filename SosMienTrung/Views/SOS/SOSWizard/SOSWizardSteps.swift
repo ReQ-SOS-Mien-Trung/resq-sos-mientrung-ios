@@ -343,8 +343,21 @@ struct SOSTypeCheckbox: View {
 
 struct Step2AReliefView: View {
     @ObservedObject var formData: SOSFormData
+    @State private var activeEditor: ReliefPersonEditorTarget?
     
     private var peopleCount: Int { formData.sharedPeopleCount.total }
+
+    private struct ReliefPersonEditorTarget: Identifiable {
+        enum Mode: String {
+            case specialDiet
+            case clothing
+        }
+
+        let person: Person
+        let mode: Mode
+
+        var id: String { "\(mode.rawValue)_\(person.id)" }
+    }
     
     var body: some View {
         ScrollView {
@@ -433,6 +446,25 @@ struct Step2AReliefView: View {
                 Spacer(minLength: 100)
             }
         }
+        .onAppear {
+            formData.syncPeopleCount()
+        }
+        .sheet(item: $activeEditor) { target in
+            switch target.mode {
+            case .specialDiet:
+                SpecialDietFormSheet(
+                    person: target.person,
+                    formData: formData,
+                    onDismiss: { activeEditor = nil }
+                )
+            case .clothing:
+                ClothingPersonFormSheet(
+                    person: target.person,
+                    formData: formData,
+                    onDismiss: { activeEditor = nil }
+                )
+            }
+        }
     }
     
     // MARK: - 💧 Water Follow-up
@@ -503,17 +535,26 @@ struct Step2AReliefView: View {
             
             Divider().padding(.vertical, 4)
             
-            Text("Bạn có trẻ em / người già cần chế độ ăn đặc biệt không?")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.text)
-            
-            ForEach(SpecialDietNeed.allCases) { option in
-                ReliefRadioRow(
-                    title: option.title,
-                    isSelected: formData.reliefData.specialDietNeed == option
-                ) {
-                    formData.reliefData.specialDietNeed = option
-                }
+            SharedPersonSelectionSection(
+                icon: "🍽",
+                title: "Ai cần chế độ ăn đặc biệt?",
+                subtitle: "Chọn người rồi nhập tên và mô tả chế độ ăn đặc biệt của họ",
+                people: formData.sharedPeople
+            ) { person in
+                PersonRequirementRow(
+                    person: person,
+                    isSelected: formData.reliefData.specialDietPersonIds.contains(person.id),
+                    accentColor: .orange,
+                    badgeText: formData.reliefData.specialDietInfoByPerson[person.id] == nil ? nil : "Đã chọn",
+                    detailText: specialDietSummary(for: person.id),
+                    emptyDetailText: "Nhập tên và mô tả chế độ ăn đặc biệt",
+                    onToggle: {
+                        toggleSpecialDiet(person)
+                    },
+                    onEdit: {
+                        openSpecialDietEditor(for: person)
+                    }
+                )
             }
         }
         .padding()
@@ -529,61 +570,33 @@ struct Step2AReliefView: View {
     
     private var medicineFollowUpSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Thuốc men", systemImage: "pills.fill")
+            Label("Y tế", systemImage: "cross.case.fill")
                 .font(DS.Typography.headline)
                 .foregroundColor(.red)
             
-            Text("Có ai đang cần thuốc khẩn cấp không?")
+            Text("Chọn loại hỗ trợ y tế đang cần:")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.text)
             
-            HStack(spacing: 12) {
-                ReliefRadioRow(
-                    title: "Không",
-                    isSelected: formData.reliefData.needsUrgentMedicine == false
+            ForEach(MedicalSupportNeed.allCases) { need in
+                ReliefCheckboxRow(
+                    title: need.title,
+                    isSelected: formData.reliefData.medicalNeeds.contains(need)
                 ) {
-                    formData.reliefData.needsUrgentMedicine = false
-                    formData.reliefData.medicineConditions = []
-                    formData.reliefData.medicineOtherDescription = ""
-                }
-                
-                ReliefRadioRow(
-                    title: "Có",
-                    isSelected: formData.reliefData.needsUrgentMedicine == true
-                ) {
-                    formData.reliefData.needsUrgentMedicine = true
-                }
-            }
-            
-            if formData.reliefData.needsUrgentMedicine == true {
-                Divider().padding(.vertical, 4)
-                
-                Text("Loại tình trạng y tế:")
-                    .font(DS.Typography.subheadline)
-                    .foregroundColor(DS.Colors.text)
-                
-                ForEach(MedicineCondition.allCases) { condition in
-                    ReliefCheckboxRow(
-                        title: condition.title,
-                        isSelected: formData.reliefData.medicineConditions.contains(condition)
-                    ) {
-                        if formData.reliefData.medicineConditions.contains(condition) {
-                            formData.reliefData.medicineConditions.remove(condition)
-                        } else {
-                            formData.reliefData.medicineConditions.insert(condition)
-                        }
+                    if formData.reliefData.medicalNeeds.contains(need) {
+                        formData.reliefData.medicalNeeds.remove(need)
+                    } else {
+                        formData.reliefData.medicalNeeds.insert(need)
                     }
                 }
-                
-                if formData.reliefData.medicineConditions.contains(.other) {
-                    TextField("Mô tả tình trạng khác...", text: $formData.reliefData.medicineOtherDescription)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(DS.Colors.background)
-                        .cornerRadius(8)
-                        .foregroundColor(DS.Colors.text)
-                }
             }
+
+            TextField("Mô tả rõ hơn về tình trạng y tế...", text: $formData.reliefData.medicalDescription)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(DS.Colors.background)
+                .cornerRadius(8)
+                .foregroundColor(DS.Colors.text)
         }
         .padding()
         .background(DS.Colors.surface)
@@ -592,7 +605,6 @@ struct Step2AReliefView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.red.opacity(0.3), lineWidth: 1)
         )
-        .animation(.easeInOut(duration: 0.3), value: formData.reliefData.needsUrgentMedicine)
     }
     
     // MARK: - 🛏 Blanket Follow-up
@@ -603,39 +615,52 @@ struct Step2AReliefView: View {
                 .font(DS.Typography.headline)
                 .foregroundColor(.purple)
             
-            Text("Hiện tại nơi ở có bị lạnh hoặc ướt không?")
+            Text("Chăn mền của bạn còn đủ không?")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.text)
             
             HStack(spacing: 12) {
                 ReliefRadioRow(
                     title: "Có",
-                    isSelected: formData.reliefData.isColdOrWet == true
+                    isSelected: formData.reliefData.areBlanketsEnough == true
                 ) {
-                    formData.reliefData.isColdOrWet = true
+                    formData.reliefData.areBlanketsEnough = true
+                    formData.reliefData.blanketRequestCount = nil
                 }
                 
                 ReliefRadioRow(
                     title: "Không",
-                    isSelected: formData.reliefData.isColdOrWet == false
+                    isSelected: formData.reliefData.areBlanketsEnough == false
                 ) {
-                    formData.reliefData.isColdOrWet = false
+                    formData.reliefData.areBlanketsEnough = false
+                    if formData.reliefData.blanketRequestCount == nil {
+                        formData.reliefData.blanketRequestCount = 1
+                    }
                 }
             }
             
-            Divider().padding(.vertical, 4)
-            
-            Text("Bạn có chăn / đồ giữ ấm không?")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.text)
-            
-            ForEach(BlanketAvailability.allCases) { option in
-                ReliefRadioRow(
-                    title: option.title,
-                    isSelected: formData.reliefData.blanketAvailability == option
-                ) {
-                    formData.reliefData.blanketAvailability = option
-                }
+            if formData.reliefData.areBlanketsEnough == false {
+                Divider().padding(.vertical, 4)
+
+                Text("Số lượng chăn mền cần thêm")
+                    .font(DS.Typography.subheadline)
+                    .foregroundColor(DS.Colors.text)
+
+                QuantityStepperRow(
+                    title: "Chăn mền",
+                    value: Binding(
+                        get: { formData.reliefData.blanketRequestCount ?? 1 },
+                        set: { newValue in
+                            formData.reliefData.blanketRequestCount = min(max(newValue, 1), peopleCount)
+                        }
+                    ),
+                    minValue: 1,
+                    maxValue: max(1, peopleCount)
+                )
+
+                Text("Tối đa \(peopleCount) chăn mền theo số người cần hỗ trợ")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
             }
         }
         .padding()
@@ -655,17 +680,26 @@ struct Step2AReliefView: View {
                 .font(DS.Typography.headline)
                 .foregroundColor(.teal)
             
-            Text("Quần áo hiện tại có bị ướt / thiếu không?")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.text)
-            
-            ForEach(ClothingStatus.allCases) { option in
-                ReliefRadioRow(
-                    title: option.title,
-                    isSelected: formData.reliefData.clothingStatus == option
-                ) {
-                    formData.reliefData.clothingStatus = option
-                }
+            SharedPersonSelectionSection(
+                icon: "👕",
+                title: "Ai cần quần áo?",
+                subtitle: "Chọn người rồi nhập tên và giới tính của họ",
+                people: formData.sharedPeople
+            ) { person in
+                PersonRequirementRow(
+                    person: person,
+                    isSelected: formData.reliefData.clothingPersonIds.contains(person.id),
+                    accentColor: .teal,
+                    badgeText: formData.reliefData.clothingInfoByPerson[person.id]?.gender?.title,
+                    detailText: clothingSummary(for: person.id),
+                    emptyDetailText: "Nhập tên và giới tính người cần quần áo",
+                    onToggle: {
+                        toggleClothingPerson(person)
+                    },
+                    onEdit: {
+                        openClothingEditor(for: person)
+                    }
+                )
             }
         }
         .padding()
@@ -675,6 +709,58 @@ struct Step2AReliefView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.teal.opacity(0.3), lineWidth: 1)
         )
+    }
+
+    private func toggleSpecialDiet(_ person: Person) {
+        if formData.reliefData.specialDietPersonIds.contains(person.id) {
+            formData.reliefData.specialDietPersonIds.remove(person.id)
+            formData.reliefData.specialDietInfoByPerson.removeValue(forKey: person.id)
+        } else {
+            formData.reliefData.specialDietPersonIds.insert(person.id)
+            if formData.reliefData.specialDietInfoByPerson[person.id] == nil {
+                formData.reliefData.specialDietInfoByPerson[person.id] = PersonSpecialDietInfo(personId: person.id)
+            }
+            openSpecialDietEditor(for: person)
+        }
+    }
+
+    private func openSpecialDietEditor(for person: Person) {
+        activeEditor = ReliefPersonEditorTarget(
+            person: formData.person(for: person.id) ?? person,
+            mode: .specialDiet
+        )
+    }
+
+    private func toggleClothingPerson(_ person: Person) {
+        if formData.reliefData.clothingPersonIds.contains(person.id) {
+            formData.reliefData.clothingPersonIds.remove(person.id)
+            formData.reliefData.clothingInfoByPerson.removeValue(forKey: person.id)
+        } else {
+            formData.reliefData.clothingPersonIds.insert(person.id)
+            if formData.reliefData.clothingInfoByPerson[person.id] == nil {
+                formData.reliefData.clothingInfoByPerson[person.id] = ClothingPersonInfo(personId: person.id)
+            }
+            openClothingEditor(for: person)
+        }
+    }
+
+    private func openClothingEditor(for person: Person) {
+        activeEditor = ReliefPersonEditorTarget(
+            person: formData.person(for: person.id) ?? person,
+            mode: .clothing
+        )
+    }
+
+    private func specialDietSummary(for personId: String) -> String? {
+        guard let info = formData.reliefData.specialDietInfoByPerson[personId] else { return nil }
+        let description = info.dietDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? nil : description
+    }
+
+    private func clothingSummary(for personId: String) -> String? {
+        guard let info = formData.reliefData.clothingInfoByPerson[personId],
+              let gender = info.gender else { return nil }
+        return "Giới tính: \(gender.title)"
     }
 }
 
@@ -711,7 +797,7 @@ struct Step2BRescueView: View {
                 .padding(.top, 20)
                 
                 // Section 1: Ai bị thương? (hiển thị sẵn)
-                if !formData.rescueData.people.isEmpty {
+                if !formData.sharedPeople.isEmpty {
                     InjuredPersonSelectionSection(
                         formData: formData,
                         selectedPersonForMedical: $selectedPersonForMedical
@@ -729,11 +815,8 @@ struct Step2BRescueView: View {
             }
         }
         .onAppear {
-            // Sync shared people count và generate people list khi view appear
-            formData.rescueData.peopleCount = formData.sharedPeopleCount
-            if formData.rescueData.people.isEmpty {
-                formData.rescueData.generatePeople()
-            }
+            // Sync shared people list khi view appear
+            formData.syncPeopleCount()
             // Mặc định set hasInjured = true để hiển thị danh sách người
             formData.rescueData.hasInjured = true
         }
@@ -917,20 +1000,12 @@ struct InjuredPersonSelectionSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("👆")
-                    .font(.title2)
-                Text("Ai bị thương?")
-                    .font(DS.Typography.headline)
-                    .foregroundColor(DS.Colors.text)
-            }
-            
-            Text("Chọn người bị thương, sau đó nhập tình trạng y tế")
-                .font(DS.Typography.caption)
-                .foregroundColor(DS.Colors.textSecondary)
-            
-            // Danh sách người
-            ForEach(formData.rescueData.people) { person in
+            SharedPersonSelectionSection(
+                icon: "👆",
+                title: "Ai bị thương?",
+                subtitle: "Chọn người bị thương, sau đó nhập tình trạng y tế",
+                people: formData.sharedPeople
+            ) { person in
                 PersonInjuredRow(
                     person: person,
                     isInjured: formData.rescueData.injuredPersonIds.contains(person.id),
@@ -944,23 +1019,21 @@ struct InjuredPersonSelectionSection: View {
                     }
                 )
             }
-            
-            // Checkbox: những người còn lại ổn định (chỉ hiện khi còn người chưa bị thương)
+
             if !formData.rescueData.injuredPersonIds.isEmpty &&
-               formData.rescueData.injuredPersonIds.count < formData.rescueData.people.count {
+               formData.rescueData.injuredPersonIds.count < formData.sharedPeople.count {
                 Button {
                     formData.rescueData.othersAreStable.toggle()
                 } label: {
                     HStack {
                         Image(systemName: formData.rescueData.othersAreStable ? "checkmark.square.fill" : "square")
                             .foregroundColor(formData.rescueData.othersAreStable ? .green : DS.Colors.textSecondary)
-                        
+
                         Text("Những người còn lại ổn định")
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.text)
                     }
                 }
-                .padding(.top, 8)
             }
         }
         .padding(.horizontal)
@@ -976,7 +1049,7 @@ struct InjuredPersonSelectionSection: View {
             selectedPersonForMedical = person
         }
         // Reset nếu tất cả đều bị thương
-        if formData.rescueData.injuredPersonIds.count >= formData.rescueData.people.count {
+        if formData.rescueData.injuredPersonIds.count >= formData.sharedPeople.count {
             formData.rescueData.othersAreStable = false
         }
     }
@@ -1102,6 +1175,157 @@ struct PersonInjuredRow: View {
     }
 }
 
+struct SharedPersonSelectionSection<RowContent: View>: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let people: [Person]
+    let rowContent: (Person) -> RowContent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(icon)
+                    .font(.title2)
+                Text(title)
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
+            }
+
+            Text(subtitle)
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+
+            ForEach(people) { person in
+                rowContent(person)
+            }
+        }
+    }
+}
+
+struct PersonRequirementRow: View {
+    let person: Person
+    let isSelected: Bool
+    let accentColor: Color
+    let badgeText: String?
+    let detailText: String?
+    let emptyDetailText: String
+    let onToggle: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: onToggle) {
+                HStack {
+                    Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                        .foregroundColor(isSelected ? accentColor : DS.Colors.textSecondary)
+
+                    Text(person.type.icon)
+                    Text(person.displayName)
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+
+                    Spacer()
+
+                    if isSelected, let badgeText, !badgeText.isEmpty {
+                        Text(badgeText)
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(accentColor.opacity(0.18))
+                            .foregroundColor(accentColor)
+                    }
+                }
+                .padding(12)
+                .background(DS.Colors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected ? accentColor.opacity(0.12) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? accentColor : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
+                )
+            }
+
+            if isSelected {
+                Button(action: onEdit) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "pencil.circle.fill")
+                            .foregroundColor(accentColor)
+
+                        Text(detailText ?? emptyDetailText)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(detailText == nil ? DS.Colors.textSecondary : DS.Colors.text)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(DS.Colors.textMuted)
+                    }
+                    .padding(12)
+                    .background(DS.Colors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(accentColor.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(accentColor.opacity(0.35), lineWidth: 1)
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct QuantityStepperRow: View {
+    let title: String
+    @Binding var value: Int
+    let minValue: Int
+    let maxValue: Int
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.text)
+
+            Spacer()
+
+            HStack(spacing: 12) {
+                Button {
+                    if value > minValue { value -= 1 }
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(value > minValue ? DS.Colors.text : DS.Colors.textMuted)
+                }
+                .disabled(value <= minValue)
+
+                Text("\(value)")
+                    .font(.title3.bold())
+                    .foregroundColor(DS.Colors.text)
+                    .frame(minWidth: 30)
+
+                Button {
+                    if value < maxValue { value += 1 }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(value < maxValue ? DS.Colors.text : DS.Colors.textMuted)
+                }
+                .disabled(value >= maxValue)
+            }
+        }
+        .padding(12)
+        .background(DS.Colors.background)
+        .cornerRadius(8)
+    }
+}
+
 struct SeverityBadge: View {
     let issueCount: Int
     
@@ -1112,6 +1336,179 @@ struct SeverityBadge: View {
             .padding(.vertical, 4)
             .background(Color.red.opacity(0.3))
             .foregroundColor(.red)
+    }
+}
+
+struct SpecialDietFormSheet: View {
+    let person: Person
+    @ObservedObject var formData: SOSFormData
+    let onDismiss: () -> Void
+
+    @State private var localName: String = ""
+    @State private var localDietDescription: String = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 8) {
+                        Text("🍽")
+                            .font(.system(size: 48))
+
+                        Text("Chế độ ăn của")
+                            .font(.title3.bold())
+                            .foregroundColor(.primary)
+
+                        TextField(person.displayName, text: $localName)
+                            .font(.title3)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(.systemGray4), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 40)
+                    }
+                    .padding(.top, 20)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Mô tả chế độ ăn đặc biệt")
+                            .font(DS.Typography.headline)
+
+                        TextField("Ví dụ: ăn lỏng, cần sữa, dị ứng hải sản...", text: $localDietDescription, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(3...5)
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 50)
+                }
+            }
+            .navigationTitle("Chi tiết thực phẩm")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Hủy") {
+                        onDismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Lưu") {
+                        saveSpecialDietInfo()
+                        onDismiss()
+                    }
+                    .bold()
+                }
+            }
+        }
+        .onAppear {
+            localName = formData.person(for: person.id)?.customName ?? person.customName
+            localDietDescription = formData.reliefData.specialDietInfoByPerson[person.id]?.dietDescription ?? ""
+        }
+    }
+
+    private func saveSpecialDietInfo() {
+        formData.updatePersonName(localName, for: person.id)
+        formData.reliefData.specialDietPersonIds.insert(person.id)
+        formData.reliefData.specialDietInfoByPerson[person.id] = PersonSpecialDietInfo(
+            personId: person.id,
+            dietDescription: localDietDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+}
+
+struct ClothingPersonFormSheet: View {
+    let person: Person
+    @ObservedObject var formData: SOSFormData
+    let onDismiss: () -> Void
+
+    @State private var localName: String = ""
+    @State private var localGender: ClothingGender = .male
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 8) {
+                        Text("👕")
+                            .font(.system(size: 48))
+
+                        Text("Thông tin người cần quần áo")
+                            .font(.title3.bold())
+                            .foregroundColor(.primary)
+
+                        TextField(person.displayName, text: $localName)
+                            .font(.title3)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(.systemGray4), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 40)
+                    }
+                    .padding(.top, 20)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Giới tính")
+                            .font(DS.Typography.headline)
+
+                        ForEach(ClothingGender.allCases) { gender in
+                            ReliefRadioRow(
+                                title: gender.title,
+                                isSelected: localGender == gender
+                            ) {
+                                localGender = gender
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 50)
+                }
+            }
+            .navigationTitle("Chi tiết quần áo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Hủy") {
+                        onDismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Lưu") {
+                        saveClothingInfo()
+                        onDismiss()
+                    }
+                    .bold()
+                }
+            }
+        }
+        .onAppear {
+            localName = formData.person(for: person.id)?.customName ?? person.customName
+            localGender = formData.reliefData.clothingInfoByPerson[person.id]?.gender ?? .male
+        }
+    }
+
+    private func saveClothingInfo() {
+        formData.updatePersonName(localName, for: person.id)
+        formData.reliefData.clothingPersonIds.insert(person.id)
+        formData.reliefData.clothingInfoByPerson[person.id] = ClothingPersonInfo(
+            personId: person.id,
+            gender: localGender
+        )
     }
 }
 
@@ -1226,9 +1623,7 @@ struct PersonMedicalFormSheet: View {
     private func saveMedicalInfo() {
         // Lưu tên tùy chỉnh vào person
         let trimmedName = localName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let idx = formData.rescueData.people.firstIndex(where: { $0.id == person.id }) {
-            formData.rescueData.people[idx].customName = trimmedName
-        }
+        formData.updatePersonName(trimmedName, for: person.id)
         
         let medicalInfo = PersonMedicalInfo(
             personId: person.id,
@@ -1453,15 +1848,10 @@ struct Step4ReviewView: View {
                         ReviewRow(icon: icon, title: "Loại SOS", value: typesText)
                     }
                     
-                    // Số người (shared)
-                    ReviewRow(icon: "👥", title: "Tổng số người", value: "\(formData.sharedPeopleCount.total)")
-                    
-                    if formData.sharedPeopleCount.children > 0 {
-                        ReviewRow(icon: "👶", title: "Trẻ em", value: "\(formData.sharedPeopleCount.children)")
-                    }
-                    if formData.sharedPeopleCount.elderly > 0 {
-                        ReviewRow(icon: "👴", title: "Người già", value: "\(formData.sharedPeopleCount.elderly)")
-                    }
+                    PeopleCountSummaryGrid(
+                        peopleCount: formData.sharedPeopleCount,
+                        layoutStyle: .inline
+                    )
                     
                     // RESCUE info
                     if formData.needsRescueStep {
@@ -1482,18 +1872,20 @@ struct Step4ReviewView: View {
                                 Text("🚑 Người bị thương:")
                                     .font(.caption.bold())
                                     .foregroundColor(DS.Colors.text)
-                                
-                                ForEach(formData.rescueData.people.filter { 
-                                    formData.rescueData.injuredPersonIds.contains($0.id) 
-                                }) { person in
-                                    if let medicalInfo = formData.rescueData.medicalInfoByPerson[person.id] {
-                                        InjuredPersonReviewCard(person: person, medicalInfo: medicalInfo)
+
+                                LazyVGrid(columns: summaryGridColumns, spacing: 10) {
+                                    ForEach(formData.sharedPeople.filter {
+                                        formData.rescueData.injuredPersonIds.contains($0.id)
+                                    }) { person in
+                                        if let medicalInfo = formData.rescueData.medicalInfoByPerson[person.id] {
+                                            InjuredPersonReviewCard(person: person, medicalInfo: medicalInfo)
+                                        }
                                     }
                                 }
                                 
                                 // Những người còn lại ổn định
                                 if formData.rescueData.othersAreStable &&
-                                   formData.rescueData.injuredPersonIds.count < formData.rescueData.people.count {
+                                   formData.rescueData.injuredPersonIds.count < formData.sharedPeople.count {
                                     HStack(spacing: 6) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.green)
@@ -1515,44 +1907,11 @@ struct Step4ReviewView: View {
                         Text("🎒 Thông tin cứu trợ")
                             .font(.subheadline.bold())
                             .foregroundColor(.yellow)
-                        
-                        if !formData.reliefData.supplies.isEmpty {
-                            let supplies = formData.reliefData.supplies.map { $0.title }.joined(separator: ", ")
-                            ReviewRow(icon: "📦", title: "Cần", value: supplies)
-                        }
-                        
-                        if !formData.reliefData.otherSupplyDescription.isEmpty {
-                            ReviewRow(icon: "📝", title: "Khác", value: formData.reliefData.otherSupplyDescription)
-                        }
-                        
-                        // Supply follow-up details
-                        if let d = formData.reliefData.waterDuration {
-                            ReviewRow(icon: "💧", title: "Nước duy trì", value: d.title)
-                        }
-                        if let r = formData.reliefData.waterRemaining {
-                            ReviewRow(icon: "🪣", title: "Nước còn lại", value: r.title)
-                        }
-                        if let d = formData.reliefData.foodDuration {
-                            ReviewRow(icon: "🍚", title: "Thực phẩm duy trì", value: d.title)
-                        }
-                        if let s = formData.reliefData.specialDietNeed, s != .none {
-                            ReviewRow(icon: "🍽", title: "Chế độ ăn đặc biệt", value: s.title)
-                        }
-                        if let urgent = formData.reliefData.needsUrgentMedicine {
-                            ReviewRow(icon: "💊", title: "Thuốc khẩn cấp", value: urgent ? "Có" : "Không")
-                        }
-                        if !formData.reliefData.medicineConditions.isEmpty {
-                            ReviewRow(icon: "🏥", title: "Tình trạng y tế", value: formData.reliefData.medicineConditions.map { $0.title }.joined(separator: ", "))
-                        }
-                        if let cold = formData.reliefData.isColdOrWet {
-                            ReviewRow(icon: "🌧", title: "Lạnh / ướt", value: cold ? "Có" : "Không")
-                        }
-                        if let b = formData.reliefData.blanketAvailability {
-                            ReviewRow(icon: "🛌", title: "Chăn / giữ ấm", value: b.title)
-                        }
-                        if let c = formData.reliefData.clothingStatus {
-                            ReviewRow(icon: "👕", title: "Quần áo", value: c.title)
-                        }
+
+                        ReliefSummaryGridContent(
+                            relief: formData.reliefData,
+                            people: formData.sharedPeople
+                        )
                     }
                     
                     // Additional description
@@ -1612,11 +1971,17 @@ struct InjuredPersonReviewCard: View {
                 Text(medicalInfo.medicalIssues.map { "\($0.icon) \($0.title)" }.joined(separator: ", "))
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(10)
         .background(Color.red.opacity(0.1))
-        
+        .cornerRadius(DS.Radius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .stroke(Color.red.opacity(0.18), lineWidth: DS.Border.thin)
+        )
     }
 }
 
@@ -2028,6 +2393,421 @@ struct ReviewRow: View {
             
             Spacer()
         }
+    }
+}
+
+let summaryGridColumns: [GridItem] = [
+    GridItem(.flexible(), spacing: 12, alignment: .top),
+    GridItem(.flexible(), spacing: 12, alignment: .top)
+]
+
+struct PeopleCountMetric: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let value: String
+}
+
+struct ReliefSupplyCardLine: Identifiable {
+    let id: String
+    let label: String
+    let value: String
+}
+
+struct ReliefSupplyCardModel: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let accentColor: Color
+    let lines: [ReliefSupplyCardLine]
+}
+
+struct PersonRequirementSummaryModel: Identifiable {
+    let id: String
+    let name: String
+    let typeIcon: String
+    let needsClothing: Bool
+    let hasSpecialDiet: Bool
+    let dietDescription: String?
+    let genderTag: String?
+}
+
+func peopleCountMetrics(from peopleCount: PeopleCount) -> [PeopleCountMetric] {
+    [
+        PeopleCountMetric(id: "total", icon: "👥", title: "Tổng người", value: "\(peopleCount.total)"),
+        PeopleCountMetric(id: "adults", icon: "🧑", title: "Người lớn", value: "\(peopleCount.adults)"),
+        PeopleCountMetric(id: "children", icon: "👶", title: "Trẻ em", value: "\(peopleCount.children)"),
+        PeopleCountMetric(id: "elderly", icon: "👴", title: "Người già", value: "\(peopleCount.elderly)")
+    ]
+}
+
+func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] {
+    func line(_ id: String, _ label: String, _ value: String) -> ReliefSupplyCardLine {
+        ReliefSupplyCardLine(id: id, label: label, value: value)
+    }
+
+    func fallbackLine() -> [ReliefSupplyCardLine] {
+        [line("requested", "Trạng thái", "Đã yêu cầu")]
+    }
+
+    let trimmedMedicalDescription = relief.medicalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedOtherDescription = relief.otherSupplyDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    var cards: [ReliefSupplyCardModel] = []
+
+    if relief.supplies.contains(.water) {
+        var lines: [ReliefSupplyCardLine] = []
+        if let duration = relief.waterDuration {
+            lines.append(line("water_duration", "Còn duy trì", duration.title))
+        }
+        if let remaining = relief.waterRemaining {
+            lines.append(line("water_remaining", "Lượng còn lại", remaining.title))
+        }
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.water.rawValue,
+                icon: SupplyNeed.water.icon,
+                title: SupplyNeed.water.title,
+                accentColor: .blue,
+                lines: lines.isEmpty ? fallbackLine() : lines
+            )
+        )
+    }
+
+    if relief.supplies.contains(.food) {
+        var lines: [ReliefSupplyCardLine] = []
+        if let duration = relief.foodDuration {
+            lines.append(line("food_duration", "Còn duy trì", duration.title))
+        }
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.food.rawValue,
+                icon: SupplyNeed.food.icon,
+                title: SupplyNeed.food.title,
+                accentColor: .orange,
+                lines: lines.isEmpty ? fallbackLine() : lines
+            )
+        )
+    }
+
+    if relief.supplies.contains(.medicine) {
+        var lines: [ReliefSupplyCardLine] = []
+        if !relief.medicalNeeds.isEmpty {
+            lines.append(line("medical_needs", "Hạng mục", relief.medicalNeeds.map(\.title).joined(separator: ", ")))
+        }
+        if !trimmedMedicalDescription.isEmpty {
+            lines.append(line("medical_description", "Mô tả", trimmedMedicalDescription))
+        }
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.medicine.rawValue,
+                icon: SupplyNeed.medicine.icon,
+                title: SupplyNeed.medicine.title,
+                accentColor: .red,
+                lines: lines.isEmpty ? fallbackLine() : lines
+            )
+        )
+    }
+
+    if relief.supplies.contains(.blanket) {
+        var lines: [ReliefSupplyCardLine] = []
+        if let areBlanketsEnough = relief.areBlanketsEnough {
+            lines.append(line("blanket_status", "Tình trạng", areBlanketsEnough ? "Còn đủ" : "Không đủ"))
+        }
+        if let blanketRequestCount = relief.blanketRequestCount {
+            lines.append(line("blanket_count", "Cần thêm", "\(blanketRequestCount)"))
+        }
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.blanket.rawValue,
+                icon: "🛏️",
+                title: "Chăn mền",
+                accentColor: .purple,
+                lines: lines.isEmpty ? fallbackLine() : lines
+            )
+        )
+    }
+
+    if relief.supplies.contains(.clothes) {
+        let lines = relief.clothingPersonIds.isEmpty
+            ? fallbackLine()
+            : [line("clothing_count", "Số người", "\(relief.clothingPersonIds.count) người")]
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.clothes.rawValue,
+                icon: SupplyNeed.clothes.icon,
+                title: SupplyNeed.clothes.title,
+                accentColor: .teal,
+                lines: lines
+            )
+        )
+    }
+
+    if relief.supplies.contains(.other) {
+        let lines = trimmedOtherDescription.isEmpty
+            ? fallbackLine()
+            : [line("other_description", "Chi tiết", trimmedOtherDescription)]
+        cards.append(
+            ReliefSupplyCardModel(
+                id: SupplyNeed.other.rawValue,
+                icon: SupplyNeed.other.icon,
+                title: SupplyNeed.other.title,
+                accentColor: DS.Colors.accent,
+                lines: lines
+            )
+        )
+    }
+
+    return cards
+}
+
+func personRequirementSummaryModels(from relief: ReliefData, people: [Person]) -> [PersonRequirementSummaryModel] {
+    let requestedPersonIds = relief.specialDietPersonIds.union(relief.clothingPersonIds)
+
+    return people.compactMap { person in
+        guard requestedPersonIds.contains(person.id) else { return nil }
+
+        let hasClothing = relief.clothingPersonIds.contains(person.id)
+        let hasSpecialDiet = relief.specialDietPersonIds.contains(person.id)
+        let dietDescription = relief.specialDietInfoByPerson[person.id]?.dietDescription
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let genderTag = relief.clothingInfoByPerson[person.id]?.gender?.title
+
+        return PersonRequirementSummaryModel(
+            id: person.id,
+            name: person.displayName,
+            typeIcon: person.type.icon,
+            needsClothing: hasClothing,
+            hasSpecialDiet: hasSpecialDiet,
+            dietDescription: dietDescription?.isEmpty == false ? dietDescription : nil,
+            genderTag: genderTag
+        )
+    }
+}
+
+enum PeopleCountMetricLayoutStyle {
+    case stacked
+    case inline
+}
+
+struct PeopleCountSummaryGrid: View {
+    let peopleCount: PeopleCount
+    var layoutStyle: PeopleCountMetricLayoutStyle = .stacked
+
+    var body: some View {
+        LazyVGrid(columns: summaryGridColumns, spacing: 12) {
+            ForEach(peopleCountMetrics(from: peopleCount)) { metric in
+                PeopleCountMetricCard(metric: metric, layoutStyle: layoutStyle)
+            }
+        }
+    }
+}
+
+struct PeopleCountMetricCard: View {
+    let metric: PeopleCountMetric
+    var layoutStyle: PeopleCountMetricLayoutStyle = .stacked
+
+    var body: some View {
+        Group {
+            if layoutStyle == .inline {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(metric.icon)
+                        .font(.title3)
+
+                    Text("\(metric.title):")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text(metric.value)
+                        .font(.title2.bold())
+                        .foregroundColor(DS.Colors.text)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(metric.icon)
+                        .font(.title3)
+
+                    Text(metric.title)
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text(metric.value)
+                        .font(.title3.bold())
+                        .foregroundColor(DS.Colors.text)
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: layoutStyle == .inline ? 56 : 88,
+            alignment: layoutStyle == .inline ? .leading : .topLeading
+        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, layoutStyle == .inline ? 8 : 12)
+        .background(DS.Colors.background)
+        .cornerRadius(DS.Radius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .stroke(DS.Colors.borderSubtle, lineWidth: DS.Border.thin)
+        )
+    }
+}
+
+struct ReliefSummaryGridContent: View {
+    let relief: ReliefData
+    let people: [Person]
+
+    private var supplyCards: [ReliefSupplyCardModel] {
+        reliefSupplyCardModels(from: relief)
+    }
+
+    private var personCards: [PersonRequirementSummaryModel] {
+        personRequirementSummaryModels(from: relief, people: people)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !supplyCards.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Các nhu yếu phẩm được yêu cầu")
+                        .font(.caption.bold())
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    LazyVGrid(columns: summaryGridColumns, spacing: 12) {
+                        ForEach(supplyCards) { card in
+                            ReliefSupplySummaryCard(card: card)
+                        }
+                    }
+                }
+            }
+
+            if !personCards.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Yêu cầu theo người")
+                        .font(.caption.bold())
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    LazyVGrid(columns: summaryGridColumns, spacing: 12) {
+                        ForEach(personCards) { card in
+                            PersonRequirementSummaryCard(card: card)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ReliefSupplySummaryCard: View {
+    let card: ReliefSupplyCardModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(card.icon)
+                    .font(.headline)
+
+                Text(card.title)
+                    .font(.subheadline.bold())
+                    .foregroundColor(DS.Colors.text)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+
+            ForEach(card.lines) { line in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(line.label)
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text(line.value)
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(card.accentColor.opacity(0.10))
+        .cornerRadius(DS.Radius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .stroke(card.accentColor.opacity(0.28), lineWidth: DS.Border.thin)
+        )
+    }
+}
+
+struct PersonRequirementSummaryCard: View {
+    let card: PersonRequirementSummaryModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(card.typeIcon)
+                    .font(.headline)
+
+                Text(card.name)
+                    .font(.subheadline.bold())
+                    .foregroundColor(DS.Colors.text)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+
+                if let genderTag = card.genderTag {
+                    SummaryTag(text: genderTag)
+                }
+            }
+
+            if card.needsClothing {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Yêu cầu")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text("Quần áo")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if card.hasSpecialDiet {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Chế độ ăn đặc biệt")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    Text(card.dietDescription ?? "Có")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(DS.Colors.background)
+        .cornerRadius(DS.Radius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .stroke(DS.Colors.borderSubtle, lineWidth: DS.Border.thin)
+        )
+    }
+}
+
+struct SummaryTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.bold())
+            .foregroundColor(DS.Colors.accent)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(DS.Colors.accent.opacity(0.14))
+            .cornerRadius(999)
     }
 }
 

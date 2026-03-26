@@ -101,6 +101,133 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(notification.displayMessage.contains("Hue"))
     }
 
+    func testSharedPeopleRegenerationPreservesNamesAndFiltersReliefSelections() throws {
+        let formData = SOSFormData()
+
+        var count = formData.sharedPeopleCount
+        count.children = 1
+        formData.sharedPeopleCount = count
+
+        formData.updatePersonName("Anh Hai", for: "adult_1")
+        formData.reliefData.specialDietPersonIds = ["adult_1", "child_1"]
+        formData.reliefData.specialDietInfoByPerson["adult_1"] = PersonSpecialDietInfo(personId: "adult_1", dietDescription: "Ăn mềm")
+        formData.reliefData.specialDietInfoByPerson["child_1"] = PersonSpecialDietInfo(personId: "child_1", dietDescription: "Cần sữa")
+
+        count.children = 0
+        formData.sharedPeopleCount = count
+
+        XCTAssertEqual(formData.person(for: "adult_1")?.displayName, "Anh Hai")
+        XCTAssertEqual(formData.sharedPeople.count, 1)
+        XCTAssertEqual(formData.reliefData.specialDietPersonIds, ["adult_1"])
+        XCTAssertNil(formData.reliefData.specialDietInfoByPerson["child_1"])
+    }
+
+    func testUpdatePersonNameSyncsAcrossSharedAndRescueData() throws {
+        let formData = SOSFormData()
+
+        formData.updatePersonName("Bé Na", for: "adult_1")
+        formData.rescueData.injuredPersonIds = ["adult_1"]
+        formData.rescueData.medicalInfoByPerson["adult_1"] = PersonMedicalInfo(
+            personId: "adult_1",
+            medicalIssues: [.highFever]
+        )
+
+        XCTAssertEqual(formData.person(for: "adult_1")?.displayName, "Bé Na")
+        XCTAssertEqual(formData.rescueData.people.first?.displayName, "Bé Na")
+    }
+
+    func testBlanketRequestCountIsClampedToPeopleCountAndClearedWhenNoPeople() throws {
+        var relief = ReliefData()
+        relief.blanketRequestCount = 10
+        relief.syncToValidPeople(validIds: ["adult_1"], maxPeopleCount: 3)
+        XCTAssertEqual(relief.blanketRequestCount, 3)
+
+        relief.blanketRequestCount = 2
+        relief.syncToValidPeople(validIds: [], maxPeopleCount: 0)
+        XCTAssertNil(relief.blanketRequestCount)
+    }
+
+    func testEnhancedPacketEncodesAndDecodesNewReliefFields() throws {
+        let formData = SOSFormData()
+        formData.selectedTypes = [.relief]
+        formData.reliefData.supplies = [.food, .medicine, .blanket, .clothes]
+        formData.updatePersonName("Bé Tí", for: "adult_1")
+        formData.reliefData.specialDietPersonIds = ["adult_1"]
+        formData.reliefData.specialDietInfoByPerson["adult_1"] = PersonSpecialDietInfo(
+            personId: "adult_1",
+            dietDescription: "Cần thức ăn mềm"
+        )
+        formData.reliefData.medicalNeeds = [.commonMedicine, .minorInjury]
+        formData.reliefData.medicalDescription = "Đau đầu và trầy xước nhẹ"
+        formData.reliefData.areBlanketsEnough = false
+        formData.reliefData.blanketRequestCount = 1
+        formData.reliefData.clothingPersonIds = ["adult_1"]
+        formData.reliefData.clothingInfoByPerson["adult_1"] = ClothingPersonInfo(
+            personId: "adult_1",
+            gender: .male
+        )
+
+        let packet = SOSPacketEnhanced(from: formData, originId: "origin", latitude: 16.0, longitude: 108.0)
+        let data = try JSONEncoder().encode(packet)
+        let decoded = try JSONDecoder().decode(SOSPacketEnhanced.self, from: data)
+        let supplyDetails = try XCTUnwrap(decoded.structuredData?.supplyDetails)
+
+        XCTAssertEqual(supplyDetails.specialDietPersons?.first?.name, "Bé Tí")
+        XCTAssertEqual(Set(supplyDetails.medicalNeeds ?? []), Set([MedicalSupportNeed.commonMedicine.rawValue, MedicalSupportNeed.minorInjury.rawValue]))
+        XCTAssertEqual(supplyDetails.areBlanketsEnough, false)
+        XCTAssertEqual(supplyDetails.blanketRequestCount, 1)
+        XCTAssertEqual(supplyDetails.clothingPersons?.first?.gender, ClothingGender.male.rawValue)
+    }
+
+    func testPeopleCountMetricsAlwaysIncludeFourCards() {
+        let metrics = peopleCountMetrics(from: PeopleCount(adults: 2, children: 0, elderly: 1))
+
+        XCTAssertEqual(metrics.map(\.title), ["Tổng người", "Người lớn", "Trẻ em", "Người già"])
+        XCTAssertEqual(metrics.map(\.value), ["3", "2", "0", "1"])
+    }
+
+    func testPersonRequirementSummaryModelsMergeNeedsForSamePerson() {
+        let formData = SOSFormData()
+        formData.updatePersonName("Thảo", for: "adult_1")
+        formData.reliefData.specialDietPersonIds = ["adult_1"]
+        formData.reliefData.specialDietInfoByPerson["adult_1"] = PersonSpecialDietInfo(
+            personId: "adult_1",
+            dietDescription: "Không lactose"
+        )
+        formData.reliefData.clothingPersonIds = ["adult_1"]
+        formData.reliefData.clothingInfoByPerson["adult_1"] = ClothingPersonInfo(
+            personId: "adult_1",
+            gender: .female
+        )
+
+        let summaries = personRequirementSummaryModels(from: formData.reliefData, people: formData.sharedPeople)
+
+        XCTAssertEqual(summaries.count, 1)
+        XCTAssertEqual(summaries.first?.name, "Thảo")
+        XCTAssertEqual(summaries.first?.needsClothing, true)
+        XCTAssertEqual(summaries.first?.hasSpecialDiet, true)
+        XCTAssertEqual(summaries.first?.dietDescription, "Không lactose")
+        XCTAssertEqual(summaries.first?.genderTag, "Nữ")
+    }
+
+    func testReliefSupplyCardModelsCreateCompactCardsForSelectedNeeds() {
+        var relief = ReliefData()
+        relief.supplies = [.water, .food, .medicine, .blanket, .clothes]
+        relief.waterDuration = .from12to24h
+        relief.foodDuration = .from1to2days
+        relief.medicalNeeds = [.commonMedicine]
+        relief.areBlanketsEnough = false
+        relief.blanketRequestCount = 2
+        relief.specialDietPersonIds = ["adult_1"]
+        relief.clothingPersonIds = ["adult_1"]
+
+        let cards = reliefSupplyCardModels(from: relief)
+
+        XCTAssertEqual(cards.map(\.title), ["Nước uống", "Thực phẩm", "Y tế", "Chăn mền", "Quần áo"])
+        XCTAssertNil(cards.first(where: { $0.title == "Chế độ ăn đặc biệt" }))
+        XCTAssertEqual(cards.first(where: { $0.title == "Quần áo" })?.lines.first?.value, "1 người")
+    }
+
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
         self.measure {

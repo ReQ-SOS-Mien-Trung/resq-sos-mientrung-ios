@@ -19,6 +19,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     let message: String
     
     // Structured data
+    var sharedPeople: [Person]
     var reliefData: ReliefData?
     var rescueData: SavedRescueData?
     var additionalDescription: String
@@ -45,6 +46,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.latitude = latitude
         self.longitude = longitude
         self.message = formData.toSOSMessage()
+        self.sharedPeople = formData.sharedPeople
         
         // Lưu cả relief và rescue data nếu có
         if formData.needsReliefStep {
@@ -95,6 +97,15 @@ struct SavedSOS: Codable, Identifiable, Equatable {
             formData.rescueData = rescue.toRescueData()
             formData.sharedPeopleCount = rescue.peopleCount
         }
+
+        let restoredPeople = !sharedPeople.isEmpty
+            ? sharedPeople
+            : (rescueData?.people ?? [])
+        if !restoredPeople.isEmpty {
+            formData.restoreSharedPeople(restoredPeople)
+        } else {
+            formData.syncPeopleCount()
+        }
         
         // Set auto info nếu có location
         if let lat = latitude, let lon = longitude {
@@ -120,6 +131,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.latitude    = record.latitude
         self.longitude   = record.longitude
         self.message     = record.rawMessage
+        self.sharedPeople = []
         self.reliefData  = nil
         self.rescueData  = nil
         self.additionalDescription = record.structuredData?.additionalDescription ?? ""
@@ -135,7 +147,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     
     enum CodingKeys: String, CodingKey {
         case id, timestamp, sosType, latitude, longitude, message
-        case reliefData, rescueData, additionalDescription
+        case sharedPeople, reliefData, rescueData, additionalDescription
         case status, lastUpdated, sendHistory
         case senderName, senderPhone, isMine
     }
@@ -148,6 +160,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         latitude             = try c.decodeIfPresent(Double.self, forKey: .latitude)
         longitude            = try c.decodeIfPresent(Double.self, forKey: .longitude)
         message              = try c.decode(String.self, forKey: .message)
+        sharedPeople         = (try? c.decodeIfPresent([Person].self, forKey: .sharedPeople)) ?? []
         reliefData           = try c.decodeIfPresent(ReliefData.self, forKey: .reliefData)
         rescueData           = try c.decodeIfPresent(SavedRescueData.self, forKey: .rescueData)
         additionalDescription = try c.decode(String.self, forKey: .additionalDescription)

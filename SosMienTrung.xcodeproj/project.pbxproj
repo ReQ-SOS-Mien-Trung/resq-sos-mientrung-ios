@@ -575,6 +575,7 @@
 		};
 		3BE85A732EE35F20007BF228 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = BB54F4536388C04F605BB3D0 /* Pods-SosMienTrung.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -597,6 +598,7 @@
 		};
 		3BE85A742EE35F20007BF228 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E43EB8A1D3166D8B71658CE2 /* Pods-SosMienTrung.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;

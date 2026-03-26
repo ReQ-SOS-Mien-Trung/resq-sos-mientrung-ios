@@ -46,7 +46,7 @@ struct SOSPacketEnhanced: Codable {
         // Relief data
         let supplies: [String]?
         let otherSupplyDescription: String?
-        let supplyDetails: SupplyDetailData?
+        let supplyDetails: SOSSupplyDetailData?
         
         // Rescue data
         let situation: String?
@@ -76,37 +76,6 @@ struct SOSPacketEnhanced: Codable {
             case canMove = "can_move"
             case peopleCount = "people_count"
             case additionalDescription = "additional_description"
-        }
-    }
-    
-    struct SupplyDetailData: Codable {
-        // Water
-        let waterDuration: String?
-        let waterRemaining: String?
-        // Food
-        let foodDuration: String?
-        let specialDietNeed: String?
-        // Medicine
-        let needsUrgentMedicine: Bool?
-        let medicineConditions: [String]?
-        let medicineOtherDescription: String?
-        // Blanket
-        let isColdOrWet: Bool?
-        let blanketAvailability: String?
-        // Clothes
-        let clothingStatus: String?
-        
-        enum CodingKeys: String, CodingKey {
-            case waterDuration = "water_duration"
-            case waterRemaining = "water_remaining"
-            case foodDuration = "food_duration"
-            case specialDietNeed = "special_diet_need"
-            case needsUrgentMedicine = "needs_urgent_medicine"
-            case medicineConditions = "medicine_conditions"
-            case medicineOtherDescription = "medicine_other_description"
-            case isColdOrWet = "is_cold_or_wet"
-            case blanketAvailability = "blanket_availability"
-            case clothingStatus = "clothing_status"
         }
     }
     
@@ -200,30 +169,62 @@ struct SOSPacketEnhanced: Codable {
         )
         
         // Relief data - nếu có chọn relief
-        var supplyDetails: SupplyDetailData? = nil
+        var supplyDetails: SOSSupplyDetailData? = nil
         if formData.needsReliefStep {
             supplies = formData.reliefData.supplies.map { $0.rawValue }
             otherSupplyDescription = formData.reliefData.otherSupplyDescription.isEmpty ? nil : formData.reliefData.otherSupplyDescription
             
             let relief = formData.reliefData
+            let specialDietPersons = formData.orderedPeople(for: relief.specialDietPersonIds).compactMap { person -> SOSSpecialDietPerson? in
+                guard let info = relief.specialDietInfoByPerson[person.id] else { return nil }
+                return SOSSpecialDietPerson(
+                    personType: person.type.rawValue,
+                    index: person.index,
+                    name: person.displayName,
+                    customName: person.customName.isEmpty ? nil : person.customName,
+                    dietDescription: info.dietDescription.isEmpty ? nil : info.dietDescription
+                )
+            }
+
+            let clothingPersons = formData.orderedPeople(for: relief.clothingPersonIds).compactMap { person -> SOSClothingPerson? in
+                guard let info = relief.clothingInfoByPerson[person.id],
+                      let gender = info.gender else { return nil }
+                return SOSClothingPerson(
+                    personType: person.type.rawValue,
+                    index: person.index,
+                    name: person.displayName,
+                    customName: person.customName.isEmpty ? nil : person.customName,
+                    gender: gender.rawValue
+                )
+            }
+
             let hasSomeDetail = relief.waterDuration != nil || relief.waterRemaining != nil ||
                 relief.foodDuration != nil || relief.specialDietNeed != nil ||
+                !specialDietPersons.isEmpty ||
                 relief.needsUrgentMedicine != nil || !relief.medicineConditions.isEmpty ||
+                !relief.medicalNeeds.isEmpty || !relief.medicalDescription.isEmpty ||
                 relief.isColdOrWet != nil || relief.blanketAvailability != nil ||
-                relief.clothingStatus != nil
+                relief.areBlanketsEnough != nil || relief.blanketRequestCount != nil ||
+                relief.clothingStatus != nil || !clothingPersons.isEmpty
             
             if hasSomeDetail {
-                supplyDetails = SupplyDetailData(
+                supplyDetails = SOSSupplyDetailData(
                     waterDuration: relief.waterDuration?.rawValue,
                     waterRemaining: relief.waterRemaining?.rawValue,
                     foodDuration: relief.foodDuration?.rawValue,
                     specialDietNeed: relief.specialDietNeed?.rawValue,
+                    specialDietPersons: specialDietPersons.isEmpty ? nil : specialDietPersons,
                     needsUrgentMedicine: relief.needsUrgentMedicine,
                     medicineConditions: relief.medicineConditions.isEmpty ? nil : relief.medicineConditions.map { $0.rawValue },
                     medicineOtherDescription: relief.medicineOtherDescription.isEmpty ? nil : relief.medicineOtherDescription,
+                    medicalNeeds: relief.medicalNeeds.isEmpty ? nil : relief.medicalNeeds.map { $0.rawValue },
+                    medicalDescription: relief.medicalDescription.isEmpty ? nil : relief.medicalDescription,
                     isColdOrWet: relief.isColdOrWet,
                     blanketAvailability: relief.blanketAvailability?.rawValue,
-                    clothingStatus: relief.clothingStatus?.rawValue
+                    areBlanketsEnough: relief.areBlanketsEnough,
+                    blanketRequestCount: relief.blanketRequestCount,
+                    clothingStatus: relief.clothingStatus?.rawValue,
+                    clothingPersons: clothingPersons.isEmpty ? nil : clothingPersons
                 )
             }
         }
@@ -249,7 +250,7 @@ struct SOSPacketEnhanced: Codable {
         if formData.needsRescueStep && !formData.rescueData.injuredPersonIds.isEmpty {
             var persons: [InjuredPersonData] = []
             for personId in formData.rescueData.injuredPersonIds {
-                if let person = formData.rescueData.people.first(where: { $0.id == personId }),
+                if let person = formData.person(for: personId),
                    let info = formData.rescueData.medicalInfoByPerson[personId] {
                     persons.append(InjuredPersonData(
                         personType: person.type.rawValue,
@@ -352,6 +353,7 @@ struct SOSPacketEnhanced: Codable {
                 },
                 supplies: sd.supplies,
                 otherSupplyDescription: sd.otherSupplyDescription,
+                supplyDetails: sd.supplyDetails,
                 peopleCount: sd.peopleCount.map { SOSPeopleCount(adult: $0.adults, child: $0.children, elderly: $0.elderly) },
                 additionalDescription: sd.additionalDescription
             )

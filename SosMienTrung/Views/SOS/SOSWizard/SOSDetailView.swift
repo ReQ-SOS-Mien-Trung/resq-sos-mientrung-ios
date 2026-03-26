@@ -30,28 +30,8 @@ struct SOSDetailView: View {
                         
                         // Send history timeline
                         sendHistoryCard
-                        
-                        // Location card
-                        if savedSOS.latitude != nil && savedSOS.longitude != nil {
-                            locationCard
-                        }
-                        
-                        // SOS Type
-                        if let type = savedSOS.sosType {
-                            sosTypeCard(type)
-                        }
-                        
-                        // Detailed info based on type
-                        if savedSOS.sosType == .rescue {
-                            rescueDetailsCard
-                        } else if savedSOS.sosType == .relief {
-                            reliefDetailsCard
-                        }
-                        
-                        // Additional description
-                        if !savedSOS.additionalDescription.isEmpty {
-                            additionalDescriptionCard
-                        }
+
+                        sosContentCard
                         
                         // Action buttons
                         actionButtons
@@ -406,6 +386,150 @@ struct SOSDetailView: View {
         )
         
     }
+
+    private var detailSelectedTypes: [SOSType] {
+        var types: [SOSType] = []
+
+        if currentSOS.rescueData != nil {
+            types.append(.rescue)
+        }
+
+        if currentSOS.reliefData != nil {
+            types.append(.relief)
+        }
+
+        if types.isEmpty, let type = currentSOS.sosType {
+            types.append(type)
+        }
+
+        return types
+    }
+
+    private var detailPeople: [Person] {
+        if !currentSOS.sharedPeople.isEmpty {
+            return currentSOS.sharedPeople
+        }
+
+        if let rescuePeople = currentSOS.rescueData?.people, !rescuePeople.isEmpty {
+            return rescuePeople
+        }
+
+        return []
+    }
+
+    private var detailPeopleCount: PeopleCount {
+        if !detailPeople.isEmpty {
+            return PeopleCount(
+                adults: detailPeople.filter { $0.type == .adult }.count,
+                children: detailPeople.filter { $0.type == .child }.count,
+                elderly: detailPeople.filter { $0.type == .elderly }.count
+            )
+        }
+
+        if let rescueCount = currentSOS.rescueData?.peopleCount {
+            return rescueCount
+        }
+
+        if let reliefCount = currentSOS.reliefData?.peopleCount {
+            return reliefCount
+        }
+
+        return PeopleCount(adults: 0, children: 0, elderly: 0)
+    }
+
+    private var sosContentCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let lat = currentSOS.latitude, let lon = currentSOS.longitude {
+                ReviewRow(icon: "📍", title: "Vị trí", value: String(format: "%.4f, %.4f", lat, lon))
+            }
+
+            if !detailSelectedTypes.isEmpty {
+                let typesText = detailSelectedTypes.map(\.title).joined(separator: " + ")
+                let icon = detailSelectedTypes.count > 1 ? "🆘" : (detailSelectedTypes.first?.icon ?? "🆘")
+                ReviewRow(icon: icon, title: "Loại SOS", value: typesText)
+            }
+
+            if detailPeopleCount.total > 0 {
+                PeopleCountSummaryGrid(
+                    peopleCount: detailPeopleCount,
+                    layoutStyle: .inline
+                )
+            }
+
+            if let rescue = currentSOS.rescueData {
+                Divider()
+                    .background(DS.Colors.surface)
+
+                Text("🚨 Thông tin cứu hộ")
+                    .font(.subheadline.bold())
+                    .foregroundColor(DS.Colors.danger)
+
+                if let situation = rescue.situation {
+                    ReviewRow(icon: situation.icon, title: "Tình trạng", value: situation.title)
+                }
+
+                if !rescue.otherSituationDescription.isEmpty {
+                    ReviewRow(icon: "📝", title: "Mô tả thêm", value: rescue.otherSituationDescription)
+                }
+
+                if rescue.hasInjured && !rescue.injuredPersonIds.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("🚑 Người bị thương:")
+                            .font(.caption.bold())
+                            .foregroundColor(DS.Colors.text)
+
+                        LazyVGrid(columns: summaryGridColumns, spacing: 10) {
+                            ForEach(detailPeople.filter { rescue.injuredPersonIds.contains($0.id) }) { person in
+                                if let medicalInfo = rescue.medicalInfoByPerson[person.id] {
+                                    InjuredPersonReviewCard(person: person, medicalInfo: medicalInfo)
+                                }
+                            }
+                        }
+
+                        let totalPeople = detailPeople.isEmpty ? rescue.peopleCount.total : detailPeople.count
+                        if rescue.othersAreStable && rescue.injuredPersonIds.count < totalPeople {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Những người còn lại ổn định")
+                                    .font(DS.Typography.caption)
+                                    .foregroundColor(DS.Colors.textSecondary)
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+                }
+            }
+
+            if let relief = currentSOS.reliefData {
+                Divider()
+                    .background(DS.Colors.surface)
+
+                Text("🎒 Thông tin cứu trợ")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.yellow)
+
+                ReliefSummaryGridContent(
+                    relief: relief,
+                    people: detailPeople
+                )
+            }
+
+            if !currentSOS.additionalDescription.isEmpty {
+                Divider()
+                    .background(DS.Colors.surface)
+                ReviewRow(icon: "📝", title: "Ghi chú", value: currentSOS.additionalDescription)
+            }
+
+            ReviewRow(
+                icon: "🕒",
+                title: "Thời gian",
+                value: currentSOS.timestamp.formatted(date: .abbreviated, time: .shortened)
+            )
+        }
+        .padding()
+        .background(DS.Colors.surface)
+    }
     
     // MARK: - Rescue Details
     
@@ -425,16 +549,7 @@ struct SOSDetailView: View {
                     DetailRow(icon: "📝", title: "Mô tả thêm", value: rescue.otherSituationDescription)
                 }
                 
-                // People count
-                DetailRow(icon: "👥", title: "Tổng số người", value: "\(rescue.peopleCount.total)")
-                
-                if rescue.peopleCount.children > 0 {
-                    DetailRow(icon: "👶", title: "Trẻ em", value: "\(rescue.peopleCount.children)")
-                }
-                
-                if rescue.peopleCount.elderly > 0 {
-                    DetailRow(icon: "👴", title: "Người già", value: "\(rescue.peopleCount.elderly)")
-                }
+                PeopleCountSummaryGrid(peopleCount: rescue.peopleCount)
                 
                 // Injured info
                 if rescue.hasInjured {
@@ -449,12 +564,7 @@ struct SOSDetailView: View {
                         rescue.medicalInfoByPerson[personId]
                     }
                     
-                    let columns = [
-                        GridItem(.flexible(), spacing: 10),
-                        GridItem(.flexible(), spacing: 10)
-                    ]
-                    
-                    LazyVGrid(columns: columns, spacing: 10) {
+                    LazyVGrid(columns: summaryGridColumns, spacing: 10) {
                         ForEach(injuredInfos, id: \.personId) { info in
                             injuredPersonCard(info: info, rescue: rescue)
                         }
@@ -476,123 +586,12 @@ struct SOSDetailView: View {
                 .foregroundColor(DS.Colors.text)
             
             if let relief = savedSOS.reliefData {
-                // Supplies needed
-                if !relief.supplies.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Nhu yếu phẩm cần:")
-                            .font(DS.Typography.subheadline)
-                            .foregroundColor(DS.Colors.text)
-                        
-                        FlowLayout(spacing: 8) {
-                            ForEach(Array(relief.supplies), id: \.self) { supply in
-                                HStack(spacing: 4) {
-                                    Text(supply.icon)
-                                    Text(supply.title)
-                                }
-                                .font(DS.Typography.caption)
-                                .foregroundColor(DS.Colors.text)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.yellow.opacity(0.3))
-                                
-                            }
-                        }
-                    }
-                }
-                
-                if !relief.otherSupplyDescription.isEmpty {
-                    DetailRow(icon: "📝", title: "Khác", value: relief.otherSupplyDescription)
-                }
-                
-                // Supply detail answers
-                if relief.supplies.contains(.water) {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("💧 Nước uống")
-                            .font(.caption.bold())
-                            .foregroundColor(.blue)
-                        if let d = relief.waterDuration {
-                            DetailRow(icon: "⏱", title: "Duy trì thêm", value: d.title)
-                        }
-                        if let r = relief.waterRemaining {
-                            DetailRow(icon: "🪣", title: "Lượng còn lại", value: r.title)
-                        }
-                    }
-                }
-                
-                if relief.supplies.contains(.food) {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("🍚 Thực phẩm")
-                            .font(.caption.bold())
-                            .foregroundColor(.orange)
-                        if let d = relief.foodDuration {
-                            DetailRow(icon: "⏱", title: "Duy trì thêm", value: d.title)
-                        }
-                        if let s = relief.specialDietNeed, s != .none {
-                            DetailRow(icon: "🍽", title: "Chế độ ăn đặc biệt", value: s.title)
-                        }
-                    }
-                }
-                
-                if relief.supplies.contains(.medicine) {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("💊 Thuốc men")
-                            .font(.caption.bold())
-                            .foregroundColor(.red)
-                        if let urgent = relief.needsUrgentMedicine {
-                            DetailRow(icon: "🚑", title: "Cần thuốc khẩn cấp", value: urgent ? "Có" : "Không")
-                        }
-                        if !relief.medicineConditions.isEmpty {
-                            let conditions = relief.medicineConditions.map { $0.title }.joined(separator: ", ")
-                            DetailRow(icon: "🏥", title: "Tình trạng", value: conditions)
-                        }
-                        if !relief.medicineOtherDescription.isEmpty {
-                            DetailRow(icon: "📝", title: "Mô tả thêm", value: relief.medicineOtherDescription)
-                        }
-                    }
-                }
-                
-                if relief.supplies.contains(.blanket) {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("🛏️ Chăn / Giữ ấm")
-                            .font(.caption.bold())
-                            .foregroundColor(.purple)
-                        if let cold = relief.isColdOrWet {
-                            DetailRow(icon: "🌧", title: "Lạnh / ướt", value: cold ? "Có" : "Không")
-                        }
-                        if let b = relief.blanketAvailability {
-                            DetailRow(icon: "🛌", title: "Chăn / đồ giữ ấm", value: b.title)
-                        }
-                    }
-                }
-                
-                if relief.supplies.contains(.clothes) {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("👕 Quần áo")
-                            .font(.caption.bold())
-                            .foregroundColor(.teal)
-                        if let c = relief.clothingStatus {
-                            DetailRow(icon: "👔", title: "Tình trạng", value: c.title)
-                        }
-                    }
-                }
-                
-                Divider()
-                
-                // People count
-                DetailRow(icon: "👥", title: "Số người", value: "\(relief.peopleCount.total)")
-                
-                if relief.peopleCount.children > 0 {
-                    DetailRow(icon: "👶", title: "Trẻ em", value: "\(relief.peopleCount.children)")
-                }
-                
-                if relief.peopleCount.elderly > 0 {
-                    DetailRow(icon: "👴", title: "Người già", value: "\(relief.peopleCount.elderly)")
-                }
+                PeopleCountSummaryGrid(peopleCount: relief.peopleCount)
+
+                ReliefSummaryGridContent(
+                    relief: relief,
+                    people: savedSOS.sharedPeople.isEmpty ? (savedSOS.rescueData?.people ?? []) : savedSOS.sharedPeople
+                )
             }
         }
         .padding()
@@ -671,7 +670,7 @@ struct SOSDetailView: View {
     
     /// Card hiển thị thông tin người bị thương trong grid
     private func injuredPersonCard(info: PersonMedicalInfo, rescue: SavedRescueData) -> some View {
-        let person = rescue.people.first(where: { $0.id == info.personId })
+        let person = savedPerson(info.personId) ?? rescue.people.first(where: { $0.id == info.personId })
         let name = person?.displayName ?? personLabel(info.personId)
         let personTypeIcon = person?.type.icon ?? "🧑"
         let personTypeTitle = person?.type.title ?? ""
@@ -721,9 +720,7 @@ struct SOSDetailView: View {
     /// Chuyển personId ("adult_1", "child_2", "elderly_1") thành nhãn hiển thị
     /// Ưu tiên hiển thị tên (customName) nếu có, ngược lại hiển thị loại + số thứ tự
     private func personLabel(_ personId: String) -> String {
-        // Tìm person trong rescueData để lấy customName
-        if let rescue = savedSOS.rescueData,
-           let person = rescue.people.first(where: { $0.id == personId }) {
+        if let person = savedPerson(personId) {
             return person.displayName
         }
         
@@ -740,6 +737,11 @@ struct SOSDetailView: View {
         default:        typeName = "Người"
         }
         return "\(typeName) \(index)"
+    }
+
+    private func savedPerson(_ personId: String) -> Person? {
+        savedSOS.sharedPeople.first(where: { $0.id == personId }) ??
+            savedSOS.rescueData?.people.first(where: { $0.id == personId })
     }
     
     private func openInMaps(lat: Double, lon: Double) {
@@ -853,6 +855,7 @@ struct SOSEditView: View {
             // Cập nhật nội dung của SOS cũ (giữ lịch sử) nhưng không ghi đè sendHistory
             var updated = savedSOS
             updated.lastUpdated = Date()
+            updated.sharedPeople = formData.sharedPeople
             
             // Lưu cả relief và rescue data nếu có
             if formData.needsReliefStep {
