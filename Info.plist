@@ -65,8 +65,6 @@
 	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>SosMienTrung sử dụng camera để hiển thị AR và hướng dẫn bạn tìm đến người cần cứu hộ.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SosMienTrung cần truy cập thư viện ảnh để gửi hình ảnh cho tổng đài viên hỗ trợ.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Ứng dụng cần Bluetooth để kết nối với các thiết bị gần đó khi không có internet.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
@@ -76,9 +74,7 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
 	<key>BASE_URL</key>
-	<string>http://192.168.100.112:8080</string>
-	<key>FirebaseAutomaticScreenReportingEnabled</key>
-	<false/>
+	<string>http://192.168.2.4:8080</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

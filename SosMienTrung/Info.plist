@@ -2,14 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>BASE_URL</key>
-	<string>http://192.168.1.41:8080</string>
-	<key>BASE_URL_DEVICE</key>
-	<string>http://192.168.1.41:8080</string>
-	<key>BASE_URL_SIMULATOR</key>
-	<string>http://127.0.0.1:8080</string>
-	<key>FirebaseAutomaticScreenReportingEnabled</key>
-	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -24,59 +16,10 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>app-1-737045977409-ios-7e2bec70777a85574a69c0</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>GIDClientID</key>
-	<string>737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn.apps.googleusercontent.com</string>
-	<key>GIDServerClientID</key>
-	<string>737045977409-tqt0558r5rhqkkg3eg7sj8co458pfk2j.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Ứng dụng cần Bluetooth để kết nối với các thiết bị gần đó khi không có internet.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Cho phép ứng dụng chia sẻ dữ liệu qua Bluetooth.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_rescuefinder._udp</string>
-		<string>_rescuefinder._tcp</string>
-		<string>_sos-handover._tcp</string>
-		<string>_sos-handover._udp</string>
-		<string>_sos-wifi-direct._tcp</string>
-		<string>_sos-wifi-direct._udp</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>SosMienTrung sử dụng camera để hiển thị AR và hướng dẫn bạn tìm đến người cần cứu hộ.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SosMienTrung cần truy cập thư viện ảnh để gửi hình ảnh cho tổng đài viên hỗ trợ.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>SosMienTrung sử dụng mạng cục bộ để kết nối với thiết bị gần đó, tìm kiếm cứu hộ và chuyển tài khoản offline.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SosMienTrung cần truy cập vị trí để gửi tọa độ cứu hộ cho người xung quanh.</string>
-	<key>NSNearbyInteractionUsageDescription</key>
-	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -84,11 +27,6 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -108,5 +46,59 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>SosMienTrung sử dụng mạng cục bộ để kết nối với thiết bị gần đó, tìm kiếm cứu hộ và chuyển tài khoản offline.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rescuefinder._udp</string>
+		<string>_rescuefinder._tcp</string>
+		<string>_sos-handover._tcp</string>
+		<string>_sos-handover._udp</string>
+		<string>_sos-wifi-direct._tcp</string>
+		<string>_sos-wifi-direct._udp</string>
+	</array>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>RescueFinder uses Ultra Wideband to precisely locate teammates during emergencies.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SosMienTrung sử dụng camera để hiển thị AR và hướng dẫn bạn tìm đến người cần cứu hộ.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Ứng dụng cần Bluetooth để kết nối với các thiết bị gần đó khi không có internet.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Cho phép ứng dụng chia sẻ dữ liệu qua Bluetooth.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SosMienTrung cần truy cập vị trí để gửi tọa độ cứu hộ cho người xung quanh.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>SosMienTrung cần truy cập vị trí liên tục để gửi tín hiệu cứu hộ ngay cả khi app chạy ngầm.</string>
+	<key>BASE_URL</key>
+	<string>http://192.168.2.7:8080</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-737045977409-ios-7e2bec70777a85574a69c0</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>737045977409-i1jtvkvcpustfm83i22k3vsddr5askrn.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>737045977409-tqt0558r5rhqkkg3eg7sj8co458pfk2j.apps.googleusercontent.com</string>
 </dict>
 </plist>
