@@ -9,13 +9,13 @@ enum NotificationAPIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "URL thong bao khong hop le"
+            return "URL thông báo không hợp lệ"
         case .notAuthenticated:
-            return "Chua dang nhap"
+            return "Chưa đăng nhập"
         case .httpError(let code, let message):
-            return message.isEmpty ? "May chu tra ve loi \(code)" : "May chu tra ve loi \(code): \(message)"
+            return message.isEmpty ? "Máy chủ trả về lỗi \(code)" : "Máy chủ trả về lỗi \(code): \(message)"
         case .decodingError:
-            return "Khong the doc du lieu thong bao tu may chu"
+            return "Không thể đọc dữ liệu thông báo từ máy chủ"
         }
     }
 }

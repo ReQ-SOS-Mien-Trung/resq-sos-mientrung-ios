@@ -150,11 +150,11 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
             title,
             alertPayload?.primaryAlertTitle,
             type?.replacingOccurrences(of: "_", with: " ").capitalized
-        ) ?? "Thong bao"
+        ) ?? "Thông báo"
     }
 
     var displayMessage: String {
-        Self.firstNonEmpty(body, alertPayload?.summaryMessage) ?? "Ban co mot thong bao moi tu he thong."
+        Self.firstNonEmpty(body, alertPayload?.summaryMessage) ?? "Bạn có một thông báo mới từ hệ thống."
     }
 
     var isPersisted: Bool {

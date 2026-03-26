@@ -3,6 +3,51 @@ import Foundation
 final class RescueTeamService {
     static let shared = RescueTeamService()
 
+    private struct AssemblyPointEventsPage: Codable {
+        let items: [AssemblyPointEvent]
+        let pageNumber: Int?
+        let pageSize: Int?
+        let totalCount: Int?
+        let totalPages: Int?
+        let hasPreviousPage: Bool?
+        let hasNextPage: Bool?
+    }
+
+    private struct AssemblyPointEvent: Codable {
+        let eventId: Int
+        let assemblyPointId: Int
+        let assemblyDate: String?
+        let status: String?
+        let createdBy: String?
+        let createdAt: String?
+        let updatedAt: String?
+        let participantCount: Int?
+        let checkedInCount: Int?
+    }
+
+    enum RescueTeamServiceError: LocalizedError {
+        case invalidURL
+        case notAuthenticated
+        case httpError(status: Int, message: String)
+        case decodingError(Error)
+        case network(Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "URL không hợp lệ"
+            case .notAuthenticated:
+                return "Bạn chưa đăng nhập"
+            case .httpError(let status, let message):
+                return message.isEmpty ? "Máy chủ trả về lỗi \(status)" : message
+            case .decodingError:
+                return "Không đọc được dữ liệu phản hồi từ máy chủ"
+            case .network(let error):
+                return error.localizedDescription
+            }
+        }
+    }
+
     private let baseURL: String
     private let session: URLSession
 
@@ -19,40 +64,213 @@ final class RescueTeamService {
         return "Bearer \(token)"
     }
 
+    private struct CheckInRequestBody: Codable {
+        let latitude: Double
+        let longitude: Double
+    }
+
     // MARK: - GET /personnel/rescue-teams/my
     func getMyTeam() async throws -> RescueTeam {
         guard let url = URL(string: "\(baseURL)/personnel/rescue-teams/my") else {
-            throw URLError(.badURL)
+            throw RescueTeamServiceError.invalidURL
         }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        if let auth = authHeader { request.setValue(auth, forHTTPHeaderField: "Authorization") }
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
         print("[RescueTeamService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else {
-            print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            do {
+                return try JSONDecoder().decode(RescueTeam.self, from: data)
+            } catch {
+                throw RescueTeamServiceError.decodingError(error)
+            }
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
         }
-        return try JSONDecoder().decode(RescueTeam.self, from: data)
     }
 
-    // MARK: - POST /personnel/rescue-teams/{teamId}/members/check-in
-    func checkIn(teamId: Int) async throws -> CheckInResponse {
-        guard let url = URL(string: "\(baseURL)/personnel/rescue-teams/\(teamId)/members/check-in") else {
-            throw URLError(.badURL)
+    // MARK: - POST /personnel/assembly-point/events/{eventId}/check-in
+    func checkIn(eventId: Int, latitude: Double, longitude: Double) async throws -> CheckInResponse {
+        guard let url = URL(string: "\(baseURL)/personnel/assembly-point/events/\(eventId)/check-in") else {
+            throw RescueTeamServiceError.invalidURL
         }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let auth = authHeader { request.setValue(auth, forHTTPHeaderField: "Authorization") }
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(
+            CheckInRequestBody(latitude: latitude, longitude: longitude)
+        )
+
         print("[RescueTeamService] → POST \(url.absoluteString)")
-        let (data, response) = try await session.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else {
-            print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            return (try? JSONDecoder().decode(CheckInResponse.self, from: data))
+                ?? CheckInResponse(message: "Check-in thành công")
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
         }
-        return (try? JSONDecoder().decode(CheckInResponse.self, from: data)) ?? CheckInResponse(message: "OK")
+    }
+
+    // MARK: - GET /personnel/assembly-point/{id}/events
+    func resolveCheckInEventId(assemblyPointId: Int, preferredEventId: Int?) async throws -> Int {
+        let events = try await getAssemblyPointEvents(assemblyPointId: assemblyPointId)
+
+        if let preferredEventId,
+           events.contains(where: { $0.eventId == preferredEventId }) {
+            return preferredEventId
+        }
+
+        if let gatheringEvent = events.first(where: { normalizedStatus($0.status) == "gathering" }) {
+            return gatheringEvent.eventId
+        }
+
+        if let ongoingEvent = events.first(where: { normalizedStatus($0.status) == "ongoing" }) {
+            return ongoingEvent.eventId
+        }
+
+        if let plannedEvent = upcomingOrLatestEvent(from: events) {
+            return plannedEvent.eventId
+        }
+
+        throw RescueTeamServiceError.httpError(
+            status: 404,
+            message: "Không tìm thấy sự kiện tập trung hợp lệ cho điểm tập kết này"
+        )
+    }
+
+    private func getAssemblyPointEvents(assemblyPointId: Int, pageNumber: Int = 1, pageSize: Int = 10) async throws -> [AssemblyPointEvent] {
+        guard var components = URLComponents(string: "\(baseURL)/personnel/assembly-point/\(assemblyPointId)/events") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "pageNumber", value: String(pageNumber)),
+            URLQueryItem(name: "pageSize", value: String(pageSize))
+        ]
+
+        guard let url = components.url else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
+
+        print("[RescueTeamService] → GET \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            do {
+                let page = try JSONDecoder().decode(AssemblyPointEventsPage.self, from: data)
+                return page.items
+            } catch {
+                throw RescueTeamServiceError.decodingError(error)
+            }
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
+    private func normalizedStatus(_ status: String?) -> String {
+        (status ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func upcomingOrLatestEvent(from events: [AssemblyPointEvent]) -> AssemblyPointEvent? {
+        guard events.isEmpty == false else { return nil }
+
+        let now = Date()
+        let datedEvents = events.map { ($0, parseISODate($0.assemblyDate) ?? Date.distantPast) }
+        let futureEvents = datedEvents
+            .filter { $0.1 >= now }
+            .sorted { $0.1 < $1.1 }
+
+        if let nearestFuture = futureEvents.first?.0 {
+            return nearestFuture
+        }
+
+        return datedEvents
+            .sorted { $0.1 > $1.1 }
+            .first?.0
+    }
+
+    private func parseISODate(_ rawValue: String?) -> Date? {
+        guard let rawValue, rawValue.isEmpty == false else { return nil }
+
+        let isoWithFraction = ISO8601DateFormatter()
+        isoWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoNoFraction = ISO8601DateFormatter()
+        isoNoFraction.formatOptions = [.withInternetDateTime]
+
+        return isoWithFraction.date(from: rawValue) ?? isoNoFraction.date(from: rawValue)
+    }
+
+    private static func extractBackendErrorMessage(from data: Data) -> String {
+        guard !data.isEmpty else { return "" }
+
+        if let decoded = try? JSONDecoder().decode(APIErrorResponse.self, from: data),
+           decoded.message.isEmpty == false {
+            return decoded.message
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "error", "detail", "title"] {
+                if let value = object[key] as? String, value.isEmpty == false {
+                    return value
+                }
+            }
+        }
+
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }

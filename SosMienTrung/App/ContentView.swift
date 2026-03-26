@@ -41,7 +41,9 @@ struct ContentView: View {
 
     private var isCheckingRescuerEligibility: Bool {
         guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
-        return authSession.isRefreshingCurrentUser || authSession.session?.isEligibleRescuer == nil
+        // Only show loading while an active refresh is running.
+        // If refresh finished but eligibility is still unknown, show locked state with retry.
+        return authSession.isRefreshingCurrentUser
     }
 
     private var currentDiscoveryRole: MultipeerSession.DiscoveryRole? {

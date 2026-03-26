@@ -171,7 +171,7 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Trung tam thong bao")
+        .accessibilityLabel("Trung tâm thông báo")
     }
 
     private var badgeText: String {

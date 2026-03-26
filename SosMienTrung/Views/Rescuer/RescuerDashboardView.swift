@@ -81,6 +81,7 @@ struct MissionRowView: View {
 struct RescuerDashboardView: View {
     @StateObject private var vm = RescuerMissionViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var isMembersExpanded = false
 
     private var currentUserId: String? {
         AuthSessionStore.shared.session?.userId
@@ -191,6 +192,10 @@ struct RescuerDashboardView: View {
                     }
                 }
 
+                if let members = team.members, !members.isEmpty {
+                    memberDropdown(members: members)
+                }
+
                 Button { vm.checkIn() } label: {
                     HStack(spacing: DS.Spacing.xs) {
                         Image(systemName: hasCheckedIn ? "checkmark.circle.fill" : "checkmark.circle")
@@ -270,5 +275,67 @@ struct RescuerDashboardView: View {
         status
             .replacingOccurrences(of: "_", with: "")
             .lowercased()
+    }
+
+    @ViewBuilder
+    private func memberDropdown(members: [RescueTeamMember]) -> some View {
+        let sortedMembers = members.sorted { lhs, rhs in
+            if lhs.isLeader != rhs.isLeader {
+                return lhs.isLeader && !rhs.isLeader
+            }
+            return lhs.fullName.localizedCaseInsensitiveCompare(rhs.fullName) == .orderedAscending
+        }
+
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isMembersExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("Danh sách thành viên")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.text)
+
+                    Spacer()
+
+                    Image(systemName: isMembersExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, DS.Spacing.xs)
+                .background(DS.Colors.background)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+            }
+            .buttonStyle(.plain)
+
+            if isMembersExpanded {
+                VStack(spacing: DS.Spacing.xxs) {
+                    ForEach(sortedMembers) { member in
+                        HStack(spacing: DS.Spacing.xs) {
+                            Image(systemName: member.isLeader ? "crown.fill" : "person.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(member.isLeader ? DS.Colors.warning : DS.Colors.textSecondary)
+                                .frame(width: 14)
+
+                            Text(member.fullName)
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.text)
+
+                            Spacer()
+
+                            Text(member.isLeader ? "Đội trưởng" : "Thành viên")
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.textSecondary)
+                        }
+                        .padding(.horizontal, DS.Spacing.sm)
+                        .padding(.vertical, 6)
+                        .background(DS.Colors.background)
+                        .overlay(Rectangle().stroke(DS.Colors.border.opacity(0.8), lineWidth: DS.Border.thin))
+                    }
+                }
+            }
+        }
     }
 }

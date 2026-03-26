@@ -22,18 +22,18 @@ struct NotificationCenterView: View {
                 await notificationHub.syncNotifications()
             }
             .background(DS.Colors.background)
-            .navigationTitle("Thong bao")
+            .navigationTitle("Thông báo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Dong") {
+                    Button("Đóng") {
                         dismiss()
                     }
                 }
 
                 if notificationHub.unreadCount > 0 {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Doc het") {
+                        Button("Đọc hết") {
                             Task {
                                 await notificationHub.markAllAsRead()
                             }
@@ -53,11 +53,11 @@ struct NotificationCenterView: View {
                 .font(.system(size: 40, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
 
-            Text("Chua co thong bao")
+            Text("Chưa có thông báo")
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
 
-            Text("Danh sach thong bao tu server va broadcast FCM se hien thi tai day.")
+            Text("Danh sách thông báo từ server và broadcast FCM sẽ hiển thị tại đây.")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -109,7 +109,7 @@ struct NotificationCenterView: View {
 
                 HStack {
                     if let type = notification.type, !type.isEmpty {
-                        ResQBadge(text: type.uppercased(), color: iconColor(for: notification))
+                        ResQBadge(text: displayTypeLabel(for: type), color: iconColor(for: notification))
                     }
 
                     Spacer()
@@ -157,6 +157,39 @@ struct NotificationCenterView: View {
             return DS.Colors.info
         default:
             return DS.Colors.warning
+        }
+    }
+
+    private func displayTypeLabel(for rawType: String) -> String {
+        switch rawType.lowercased() {
+        case "assembly_point_assignment":
+            return "Điểm tập kết"
+        case "team_invitation":
+            return "Mời vào team"
+        case "chat_message":
+            return "Tin nhắn"
+        case "flood_alert":
+            return "Cảnh báo lũ"
+        case "coordinator_join":
+            return "Điều phối viên vào"
+        case "coordinator_leave":
+            return "Điều phối viên rời"
+        case "supply_request":
+            return "Yêu cầu tiếp tế"
+        case "supply_accepted":
+            return "Tiếp tế đã duyệt"
+        case "supply_preparing":
+            return "Đang chuẩn bị tiếp tế"
+        case "supply_shipped":
+            return "Đang vận chuyển"
+        case "supply_completed":
+            return "Tiếp tế hoàn tất"
+        case "supply_rejected":
+            return "Tiếp tế bị từ chối"
+        default:
+            return rawType
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
         }
     }
 

@@ -36,8 +36,8 @@ struct KeychainHelper {
 }
 
 enum AppConfig {
-    private static let fallbackBaseURLDevice = "http://192.168.1.41:8080"
-    private static let fallbackBaseURLSimulator = "http://127.0.0.1:8080"
+    private static let fallbackBaseURLDevice = "https://resq.somee.com/"
+    private static let fallbackBaseURLSimulator = "https://resq.somee.com/"
 
     private static func normalizedURLString(_ raw: String?) -> String? {
         guard let raw else { return nil }

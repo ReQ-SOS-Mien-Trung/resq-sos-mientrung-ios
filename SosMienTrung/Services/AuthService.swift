@@ -135,6 +135,133 @@ struct CurrentUserResponse: Codable {
         if !parts.isEmpty { return parts.joined(separator: " ") }
         return username ?? email
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+
+        // Some environments wrap user payload under data/user/result.
+        if !container.contains(DynamicCodingKey(rawValue: "id")) {
+            if let nested = Self.decodeNestedUser(from: container, key: "data")
+                ?? Self.decodeNestedUser(from: container, key: "user")
+                ?? Self.decodeNestedUser(from: container, key: "result")
+                ?? Self.decodeNestedUser(from: container, key: "payload") {
+                self = nested
+                return
+            }
+        }
+
+        id = Self.decodeString(from: container, keys: ["id", "userId", "uid"]) ?? ""
+        roleId = Self.decodeInt(from: container, keys: ["roleId", "role_id"])
+        firstName = Self.decodeString(from: container, keys: ["firstName", "first_name"])
+        lastName = Self.decodeString(from: container, keys: ["lastName", "last_name"])
+        username = Self.decodeString(from: container, keys: ["username", "userName"])
+        phone = Self.decodeString(from: container, keys: ["phone", "phoneNumber"])
+        rescuerType = Self.decodeString(from: container, keys: ["rescuerType", "rescuer_type"])
+        email = Self.decodeString(from: container, keys: ["email"])
+        isEmailVerified = Self.decodeBool(from: container, keys: ["isEmailVerified", "emailVerified", "is_email_verified"]) ?? false
+        isOnboarded = Self.decodeBool(from: container, keys: ["isOnboarded", "onboarded", "is_onboarded"]) ?? false
+        isEligibleRescuer = Self.decodeBool(from: container, keys: ["isEligibleRescuer", "eligibleRescuer", "is_eligible_rescuer"]) ?? false
+        avatarUrl = Self.decodeString(from: container, keys: ["avatarUrl", "avatarURL", "avatar", "photoUrl", "photoURL"])
+    }
+
+    private static func decodeNestedUser(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        key rawKey: String
+    ) -> CurrentUserResponse? {
+        let key = DynamicCodingKey(rawValue: rawKey)
+        return try? container.decode(CurrentUserResponse.self, forKey: key)
+    }
+
+    private static func decodeString(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> String? {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let value = try? container.decode(String.self, forKey: key) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                return trimmed
+            }
+
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return String(value)
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeInt(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> Int? {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return value
+            }
+
+            if let rawValue = try? container.decode(String.self, forKey: key),
+               let parsed = Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return parsed
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeBool(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> Bool? {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let value = try? container.decode(Bool.self, forKey: key) {
+                return value
+            }
+
+            if let rawValue = try? container.decode(String.self, forKey: key) {
+                switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                case "true", "1":
+                    return true
+                case "false", "0":
+                    return false
+                default:
+                    continue
+                }
+            }
+
+            if let rawValue = try? container.decode(Int.self, forKey: key) {
+                return rawValue != 0
+            }
+        }
+
+        return nil
+    }
+
+    private struct DynamicCodingKey: CodingKey {
+        let stringValue: String
+        let intValue: Int?
+
+        init(rawValue: String) {
+            self.stringValue = rawValue
+            self.intValue = nil
+        }
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+            self.intValue = nil
+        }
+
+        init?(intValue: Int) {
+            self.stringValue = "\(intValue)"
+            self.intValue = intValue
+        }
+    }
 }
 
 // MARK: - Auth Service

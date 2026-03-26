@@ -59,6 +59,7 @@ struct RescueTeamMember: Codable, Identifiable {
 
 struct RescueTeam: Codable, Identifiable {
     let id: Int
+    let eventId: Int?
     let code: String
     let name: String
     let teamType: String
