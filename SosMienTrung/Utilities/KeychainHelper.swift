@@ -36,27 +36,48 @@ struct KeychainHelper {
 }
 
 enum AppConfig {
-    private static let fallbackBaseURL = "http://localhost:8080"
+    private static let fallbackBaseURLDevice = "http://192.168.1.41:8080"
+    private static let fallbackBaseURLSimulator = "http://127.0.0.1:8080"
+
+    private static func normalizedURLString(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+    }
 
     static var baseURLString: String {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String else {
-            assertionFailure("Missing BASE_URL in Info.plist")
-            return fallbackBaseURL
+        if let env = normalizedURLString(ProcessInfo.processInfo.environment["BACKEND_BASE_URL"]) {
+            return env
         }
 
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            assertionFailure("BASE_URL in Info.plist is empty")
-            return fallbackBaseURL
+        #if targetEnvironment(simulator)
+        if let simulator = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_SIMULATOR") as? String) {
+            return simulator
         }
-
-        return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        if let shared = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
+            return shared
+        }
+        return fallbackBaseURLSimulator
+        #else
+        if let device = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_DEVICE") as? String) {
+            return device
+        }
+        if let shared = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
+            return shared
+        }
+        return fallbackBaseURLDevice
+        #endif
     }
 
     static var baseURL: URL {
         guard let url = URL(string: baseURLString) else {
             assertionFailure("BASE_URL is not a valid URL: \(baseURLString)")
-            return URL(string: fallbackBaseURL)!
+            #if targetEnvironment(simulator)
+            return URL(string: fallbackBaseURLSimulator)!
+            #else
+            return URL(string: fallbackBaseURLDevice)!
+            #endif
         }
         return url
     }

@@ -122,6 +122,19 @@ final class PhoneAuthManager: ObservableObject {
 
     // MARK: - Error mapping
 
+    private func firebaseHTTPErrorPayload(from nsError: NSError) -> [String: Any]? {
+        if let direct = nsError.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any] {
+            return direct
+        }
+
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+           let nested = underlying.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any] {
+            return nested
+        }
+
+        return nil
+    }
+
     private func mapFirebaseError(_ error: Error) -> String {
         let nsError = error as NSError
         let localizedDescription = nsError.localizedDescription.lowercased()
@@ -130,10 +143,25 @@ final class PhoneAuthManager: ObservableObject {
             return "Thiết bị chưa nhận APNs token. Hãy chờ vài giây sau khi mở app rồi gửi lại OTP trên thiết bị thật."
         }
 
+        if let payload = firebaseHTTPErrorPayload(from: nsError),
+           let httpCode = payload["code"] as? Int {
+            let message = (payload["message"] as? String) ?? ""
+            let details = payload["details"] as? [[String: Any]] ?? []
+            let reason = details
+                .first(where: { ($0["@type"] as? String)?.contains("ErrorInfo") == true })?["reason"] as? String
+
+            if httpCode == 403, reason == "API_KEY_HTTP_REFERRER_BLOCKED" {
+                return "Firebase API key hiện đang bị chặn theo HTTP referrer nên iOS không gọi được Phone Auth. Vào Google Cloud Console > APIs & Services > Credentials > chọn API key của Firebase và bỏ Application restriction kiểu HTTP referrers (hoặc tạo key mới cho iOS/Firebase), sau đó tải lại GoogleService-Info.plist và thay vào app."
+            }
+
+            if httpCode == 403, message.localizedCaseInsensitiveContains("PERMISSION_DENIED") {
+                return "Firebase từ chối quyền truy cập (403). Hãy kiểm tra API key trong GoogleService-Info.plist và cấu hình restriction của key trên Google Cloud/Firebase Console."
+            }
+        }
+
         // Firebase backend error 503: parse inner error code for more specific messages
         if nsError.code == 17999,
-           let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
-           let responseDict = underlying.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any],
+           let responseDict = firebaseHTTPErrorPayload(from: nsError),
            let httpCode = responseDict["code"] as? Int, httpCode == 503 {
             let innerMessage = (responseDict["message"] as? String) ?? ""
             print("🔴 Firebase 503 inner message: \(innerMessage)")

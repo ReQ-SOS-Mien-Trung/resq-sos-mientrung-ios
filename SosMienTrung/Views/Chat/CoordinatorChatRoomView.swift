@@ -1,9 +1,16 @@
 import SwiftUI
 import Foundation
+import PhotosUI
+import UIKit
 
 struct CoordinatorChatRoomView: View {
     @ObservedObject var vm: VictimChatViewModel
     @State private var showPreview = false
+    @State private var showImageSourceSheet = false
+    @State private var showPhotoPicker = false
+    @State private var showCameraPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var pickedCameraImage: UIImage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +44,51 @@ struct CoordinatorChatRoomView: View {
         .background(DS.Colors.background)
         .navigationTitle("Chat hỗ trợ")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Gửi ảnh", isPresented: $showImageSourceSheet, titleVisibility: .visible) {
+            Button {
+                showPhotoPicker = true
+            } label: {
+                Label("Chọn từ thư viện", systemImage: "photo.on.rectangle")
+            }
+
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button {
+                    showCameraPicker = true
+                } label: {
+                    Label("Chụp từ camera", systemImage: "camera")
+                }
+            }
+
+            Button("Huỷ", role: .cancel) { }
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotoItem,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .sheet(isPresented: $showCameraPicker) {
+            ChatCameraPicker(image: $pickedCameraImage)
+                .ignoresSafeArea()
+        }
+        .onChange(of: selectedPhotoItem) { newItem in
+            guard let item = newItem else { return }
+            Task {
+                await handlePhotoLibrarySelection(item)
+                await MainActor.run {
+                    selectedPhotoItem = nil
+                }
+            }
+        }
+        .onChange(of: pickedCameraImage) { image in
+            guard let image else { return }
+            Task {
+                await vm.sendImage(image)
+                await MainActor.run {
+                    pickedCameraImage = nil
+                }
+            }
+        }
     }
 
     // MARK: - Status banner
@@ -108,7 +160,33 @@ struct CoordinatorChatRoomView: View {
                     .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
             }
 
+            if vm.isUploadingImage {
+                HStack(spacing: DS.Spacing.xs) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Đang tải ảnh lên...")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                    Spacer()
+                }
+            }
+
             HStack(spacing: DS.Spacing.sm) {
+                Button {
+                    showImageSourceSheet = true
+                } label: {
+                    Image(systemName: "photo.badge.plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .frame(width: 40, height: 40)
+                        .background(DS.Colors.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.Radius.sm)
+                                .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
+                        )
+                }
+                .disabled(vm.isUploadingImage)
+
                 ResQTextField(placeholder: "Nhập tin nhắn...", text: $vm.inputText)
                     .onSubmit { vm.sendMessage() }
 
@@ -133,6 +211,23 @@ struct CoordinatorChatRoomView: View {
 
     private var canSend: Bool {
         !vm.inputText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func handlePhotoLibrarySelection(_ item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                await MainActor.run {
+                    vm.errorMessage = "Không thể đọc ảnh từ thư viện"
+                }
+                return
+            }
+            await vm.sendImage(image)
+        } catch {
+            await MainActor.run {
+                vm.errorMessage = "Không thể chọn ảnh: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func markdownWrapButton(title: String, token: String) -> some View {
@@ -175,6 +270,44 @@ struct CoordinatorChatRoomView: View {
                     RoundedRectangle(cornerRadius: DS.Radius.xs)
                         .stroke(DS.Colors.border, lineWidth: DS.Border.thin)
                 )
+        }
+    }
+}
+
+private struct ChatCameraPicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        picker.allowsEditing = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) { }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let parent: ChatCameraPicker
+
+        init(_ parent: ChatCameraPicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let captured = info[.originalImage] as? UIImage {
+                parent.image = captured
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }

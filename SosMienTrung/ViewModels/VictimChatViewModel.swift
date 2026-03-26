@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class VictimChatViewModel: ObservableObject {
@@ -14,6 +15,7 @@ final class VictimChatViewModel: ObservableObject {
     // MARK: - UI state
     @Published var phase: ChatPhase = .loading
     @Published var isLoading = false
+    @Published var isUploadingImage = false
     @Published var errorMessage: String?
     @Published var inputText = ""
 
@@ -22,6 +24,11 @@ final class VictimChatViewModel: ObservableObject {
 
     private let api: ConversationAPIService
     private let token: String
+    private let cloudinaryUploader = CloudinaryUploader(
+        cloudName: "dezgwdrfs",
+        uploadPreset: "ResQ_SOS",
+        folder: "resq/chat"
+    )
     private var statusCancellable: AnyCancellable?
     private var chatServiceChangesCancellable: AnyCancellable?
     private var historySyncTask: Task<Void, Never>?
@@ -159,6 +166,21 @@ final class VictimChatViewModel: ObservableObject {
         inputText = ""
     }
 
+    func sendImage(_ image: UIImage) async {
+        guard let convId = conversationId else { return }
+
+        isUploadingImage = true
+        defer { isUploadingImage = false }
+
+        do {
+            let imageURL = try await cloudinaryUploader.upload(image: image)
+            let markdownImage = "![Anh chat](\(imageURL))"
+            sendMessageContent(markdownImage, conversationId: convId)
+        } catch {
+            errorMessage = "Upload ảnh thất bại: \(error.localizedDescription)"
+        }
+    }
+
     func cleanup() {
         historySyncTask?.cancel()
         historySyncTask = nil
@@ -270,6 +292,25 @@ final class VictimChatViewModel: ObservableObject {
         chatService.messages.append(msg)
     }
 
+    private func sendMessageContent(_ content: String, conversationId: Int) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let tempId = -Int(Date().timeIntervalSince1970 * 1000) % Int.max
+        let session = AuthSessionStore.shared.session
+        let localMsg = CoordinatorChatMessage(
+            id: tempId,
+            conversationId: conversationId,
+            senderId: session?.userId,
+            senderName: session?.fullName ?? session?.username ?? "Tôi",
+            content: trimmed,
+            messageType: CoordinatorMessageType.userMessage.rawValue,
+            createdAt: ISO8601DateFormatter().string(from: Date())
+        )
+        chatService.messages.append(localMsg)
+        chatService.sendMessage(conversationId: conversationId, content: trimmed)
+    }
+
     private func startHistorySyncLoop() {
         historySyncTask?.cancel()
         historySyncTask = Task { [weak self] in
@@ -307,5 +348,128 @@ final class VictimChatViewModel: ObservableObject {
             phase = .chatting
             await loadHistory(showError: false)
         }
+    }
+}
+
+private struct CloudinaryUploadResponse: Decodable {
+    let secure_url: String
+}
+
+private enum CloudinaryUploaderError: LocalizedError {
+    case invalidImageData
+    case invalidResponse
+    case uploadFailed(statusCode: Int, message: String?)
+    case missingURL
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImageData:
+            return "Không thể xử lý dữ liệu ảnh"
+        case .invalidResponse:
+            return "Phản hồi upload không hợp lệ"
+        case .uploadFailed(let statusCode, let message):
+            return message ?? "Upload ảnh lỗi (HTTP \(statusCode))"
+        case .missingURL:
+            return "Cloudinary không trả về URL ảnh"
+        }
+    }
+}
+
+private final class CloudinaryUploader {
+    private let cloudName: String
+    private let uploadPreset: String
+    private let folder: String
+    private let session: URLSession
+
+    init(cloudName: String, uploadPreset: String, folder: String, session: URLSession = .shared) {
+        self.cloudName = cloudName
+        self.uploadPreset = uploadPreset
+        self.folder = folder
+        self.session = session
+    }
+
+    func upload(image: UIImage) async throws -> String {
+        guard let imageData = normalizedJPEGData(from: image) else {
+            throw CloudinaryUploaderError.invalidImageData
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        guard let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudName)/image/upload") else {
+            throw CloudinaryUploaderError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        request.httpBody = makeBody(
+            boundary: boundary,
+            uploadPreset: uploadPreset,
+            folder: folder,
+            fileData: imageData,
+            fileName: "chat_\(Int(Date().timeIntervalSince1970)).jpg"
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw CloudinaryUploaderError.invalidResponse
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw CloudinaryUploaderError.uploadFailed(statusCode: http.statusCode, message: message)
+        }
+
+        let decoded = try JSONDecoder().decode(CloudinaryUploadResponse.self, from: data)
+        guard !decoded.secure_url.isEmpty else {
+            throw CloudinaryUploaderError.missingURL
+        }
+        return decoded.secure_url
+    }
+
+    private func normalizedJPEGData(from image: UIImage) -> Data? {
+        let maxDimension: CGFloat = 2048
+        let largest = max(image.size.width, image.size.height)
+
+        guard largest > maxDimension else {
+            return image.jpegData(compressionQuality: 0.82)
+        }
+
+        let scale = maxDimension / largest
+        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resized = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return resized.jpegData(compressionQuality: 0.82)
+    }
+
+    private func makeBody(boundary: String, uploadPreset: String, folder: String, fileData: Data, fileName: String) -> Data {
+        var body = Data()
+        let lineBreak = "\r\n"
+
+        func append(_ string: String) {
+            if let data = string.data(using: .utf8) {
+                body.append(data)
+            }
+        }
+
+        append("--\(boundary)\(lineBreak)")
+        append("Content-Disposition: form-data; name=\"upload_preset\"\(lineBreak)\(lineBreak)")
+        append("\(uploadPreset)\(lineBreak)")
+
+        append("--\(boundary)\(lineBreak)")
+        append("Content-Disposition: form-data; name=\"folder\"\(lineBreak)\(lineBreak)")
+        append("\(folder)\(lineBreak)")
+
+        append("--\(boundary)\(lineBreak)")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\(lineBreak)")
+        append("Content-Type: image/jpeg\(lineBreak)\(lineBreak)")
+        body.append(fileData)
+        append(lineBreak)
+
+        append("--\(boundary)--\(lineBreak)")
+        return body
     }
 }
