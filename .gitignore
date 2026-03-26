@@ -1,6 +1,10 @@
 SosMienTrung/APIKeys.swift
 SosMienTrung/Keys.plist
 SosMienTrung/GoogleService-Info.plist
+GoogleService-Info.plist
+Info.plist
+SosMienTrung/Info.plist
+SosMienTrung.xcodeproj/project.pbxproj
 **/xcuserdata/
 **/*.xcscheme
 
