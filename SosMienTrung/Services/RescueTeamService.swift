@@ -3,28 +3,6 @@ import Foundation
 final class RescueTeamService {
     static let shared = RescueTeamService()
 
-    private struct AssemblyPointEventsPage: Codable {
-        let items: [AssemblyPointEvent]
-        let pageNumber: Int?
-        let pageSize: Int?
-        let totalCount: Int?
-        let totalPages: Int?
-        let hasPreviousPage: Bool?
-        let hasNextPage: Bool?
-    }
-
-    private struct AssemblyPointEvent: Codable {
-        let eventId: Int
-        let assemblyPointId: Int
-        let assemblyDate: String?
-        let status: String?
-        let createdBy: String?
-        let createdAt: String?
-        let updatedAt: String?
-        let participantCount: Int?
-        let checkedInCount: Int?
-    }
-
     enum RescueTeamServiceError: LocalizedError {
         case invalidURL
         case notAuthenticated
@@ -154,11 +132,11 @@ final class RescueTeamService {
             return preferredEventId
         }
 
-        if let gatheringEvent = events.first(where: { normalizedStatus($0.status) == "gathering" }) {
+        if let gatheringEvent = events.first(where: { normalizedStatus($0.eventStatus) == "gathering" }) {
             return gatheringEvent.eventId
         }
 
-        if let ongoingEvent = events.first(where: { normalizedStatus($0.status) == "ongoing" }) {
+        if let ongoingEvent = events.first(where: { normalizedStatus($0.eventStatus) == "ongoing" }) {
             return ongoingEvent.eventId
         }
 
@@ -209,6 +187,53 @@ final class RescueTeamService {
             do {
                 let page = try JSONDecoder().decode(AssemblyPointEventsPage.self, from: data)
                 return page.items
+            } catch {
+                throw RescueTeamServiceError.decodingError(error)
+            }
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
+    // MARK: - GET /personnel/assembly-point/events/my
+    func getMyAssemblyPointEvents(pageNumber: Int = 1, pageSize: Int = 10) async throws -> AssemblyPointEventsPage {
+        guard var components = URLComponents(string: "\(baseURL)/personnel/assembly-point/events/my") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "pageNumber", value: String(pageNumber)),
+            URLQueryItem(name: "pageSize", value: String(pageSize))
+        ]
+
+        guard let url = components.url else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
+
+        print("[RescueTeamService] → GET \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            do {
+                return try JSONDecoder().decode(AssemblyPointEventsPage.self, from: data)
             } catch {
                 throw RescueTeamServiceError.decodingError(error)
             }

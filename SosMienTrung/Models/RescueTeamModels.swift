@@ -80,3 +80,51 @@ struct RescueTeam: Codable, Identifiable {
 struct CheckInResponse: Codable {
     let message: String?
 }
+
+struct AssemblyPointEvent: Decodable, Identifiable {
+    let eventId: Int
+    let assemblyPointId: Int
+    let assemblyPointName: String?
+    let assemblyDate: String?
+    let eventStatus: String?
+    let isCheckedIn: Bool
+    let checkInTime: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventId
+        case assemblyPointId
+        case assemblyPointName
+        case assemblyDate
+        case eventStatus
+        case status
+        case isCheckedIn
+        case checkInTime
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        eventId = try container.decode(Int.self, forKey: .eventId)
+        assemblyPointId = try container.decode(Int.self, forKey: .assemblyPointId)
+        assemblyPointName = try container.decodeIfPresent(String.self, forKey: .assemblyPointName)
+        assemblyDate = try container.decodeIfPresent(String.self, forKey: .assemblyDate)
+        eventStatus = try container.decodeIfPresent(String.self, forKey: .eventStatus)
+            ?? container.decodeIfPresent(String.self, forKey: .status)
+        isCheckedIn = try container.decodeIfPresent(Bool.self, forKey: .isCheckedIn) ?? false
+        checkInTime = try container.decodeIfPresent(String.self, forKey: .checkInTime)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+
+    var id: Int { eventId }
+}
+
+struct AssemblyPointEventsPage: Decodable {
+    let items: [AssemblyPointEvent]
+    let pageNumber: Int
+    let pageSize: Int
+    let totalCount: Int
+    let totalPages: Int
+    let hasPreviousPage: Bool
+    let hasNextPage: Bool
+}

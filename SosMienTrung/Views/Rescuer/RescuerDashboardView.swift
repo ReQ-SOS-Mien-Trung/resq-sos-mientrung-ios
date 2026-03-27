@@ -82,6 +82,7 @@ struct RescuerDashboardView: View {
     @StateObject private var vm = RescuerMissionViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
+    @State private var showAssemblyEvents = false
 
     private var currentUserId: String? {
         AuthSessionStore.shared.session?.userId
@@ -153,6 +154,11 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(vm.successMessage ?? "")
             }
+            .sheet(isPresented: $showAssemblyEvents) {
+                NavigationStack {
+                    RescuerAssemblyEventsView()
+                }
+            }
         }
         .onAppear {
             vm.refreshDashboard()
@@ -196,10 +202,26 @@ struct RescuerDashboardView: View {
                     memberDropdown(members: members)
                 }
 
+                Button {
+                    showAssemblyEvents = true
+                } label: {
+                    HStack(spacing: DS.Spacing.xs) {
+                        Image(systemName: "calendar.badge.clock")
+                        Text("SỰ KIỆN ĐIỂM TẬP KẾT")
+                            .font(DS.Typography.subheadline).tracking(1)
+                    }
+                    .foregroundColor(DS.Colors.text)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(DS.Colors.background)
+                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+                }
+                .padding(.top, DS.Spacing.xs)
+
                 Button { vm.checkIn() } label: {
                     HStack(spacing: DS.Spacing.xs) {
                         Image(systemName: hasCheckedIn ? "checkmark.circle.fill" : "checkmark.circle")
-                        Text(hasCheckedIn ? "ĐÃ XÁC NHẬN CÓ MẶT" : "XÁC NHẬN CÓ MẶT")
+                        Text(hasCheckedIn ? "ĐÃ CHECK-IN" : "CHECK-IN NHANH")
                             .font(DS.Typography.subheadline).tracking(1)
                     }
                     .foregroundColor(.white)
@@ -337,5 +359,229 @@ struct RescuerDashboardView: View {
                 }
             }
         }
+    }
+}
+
+struct RescuerAssemblyEventsView: View {
+    @StateObject private var vm = RescuerAssemblyEventsViewModel()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+                headerSection
+                    .padding(.top, DS.Spacing.md)
+
+                Text("SỰ KIỆN CỦA BẠN").sectionHeader()
+
+                contentSection
+
+                Spacer(minLength: 80)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+        }
+        .background(DS.Colors.background)
+        .navigationTitle("Điểm Tập Kết")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Đóng") { dismiss() }
+                    .foregroundColor(DS.Colors.accent)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    vm.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .foregroundColor(DS.Colors.warning)
+                .disabled(vm.isLoading)
+            }
+        }
+        .alert("Lỗi", isPresented: Binding(
+            get: { vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+        .alert("Thông báo", isPresented: Binding(
+            get: { vm.successMessage != nil },
+            set: { if !$0 { vm.successMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { vm.successMessage = nil }
+        } message: {
+            Text(vm.successMessage ?? "")
+        }
+        .onAppear {
+            if vm.events.isEmpty {
+                vm.refresh()
+            }
+        }
+        .refreshable {
+            vm.refresh()
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            EyebrowLabel(text: "CHECK-IN SỰ KIỆN")
+            Text("Theo dõi sự kiện điểm tập kết và check-in đúng phiên tập trung của bạn.")
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.5), lineWidth: DS.Border.medium))
+    }
+
+    @ViewBuilder
+    private var contentSection: some View {
+        if vm.isLoading && vm.events.isEmpty {
+            HStack(spacing: DS.Spacing.sm) {
+                ProgressView()
+                Text("Đang tải sự kiện...")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, DS.Spacing.lg)
+        } else if vm.events.isEmpty {
+            VStack(spacing: DS.Spacing.md) {
+                Image(systemName: "calendar.badge.exclamationmark")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundColor(DS.Colors.textTertiary)
+                Text("Hiện chưa có sự kiện tập kết")
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.textSecondary)
+                Text("Khi tổng đài tạo phiên tập trung cho đội của bạn, sự kiện sẽ hiển thị tại đây.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, DS.Spacing.lg)
+        } else {
+            VStack(spacing: DS.Spacing.sm) {
+                ForEach(vm.events) { event in
+                    AssemblyEventRowView(
+                        event: event,
+                        isCheckingIn: vm.loadingEventId == event.eventId,
+                        onCheckIn: { vm.checkIn(event: event) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct AssemblyEventRowView: View {
+    let event: AssemblyPointEvent
+    let isCheckingIn: Bool
+    let onCheckIn: () -> Void
+
+    private var statusText: String {
+        event.eventStatus ?? "Unknown"
+    }
+
+    private var canCheckIn: Bool {
+        event.isCheckedIn == false && ["gathering", "ongoing", "planned"].contains(normalizedStatus)
+    }
+
+    private var normalizedStatus: String {
+        (event.eventStatus ?? "")
+            .replacingOccurrences(of: "_", with: "")
+            .lowercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(event.assemblyPointName ?? "Điểm tập kết #\(event.assemblyPointId)")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
+                    Text("Mã sự kiện #\(event.eventId)")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+                Spacer()
+                StatusBadge(text: statusText, color: statusColor)
+            }
+
+            if let assemblyDateText = formattedDate(event.assemblyDate) {
+                Label(assemblyDateText, systemImage: "calendar")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+
+            if event.isCheckedIn {
+                Label(
+                    formattedDate(event.checkInTime).map { "Đã check-in lúc \($0)" } ?? "Đã check-in",
+                    systemImage: "checkmark.seal.fill"
+                )
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.success)
+            }
+
+            Button(action: onCheckIn) {
+                HStack(spacing: DS.Spacing.xs) {
+                    if isCheckingIn {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: event.isCheckedIn ? "checkmark.circle.fill" : "location.fill")
+                    }
+
+                    Text(event.isCheckedIn ? "ĐÃ CHECK-IN" : "CHECK-IN SỰ KIỆN")
+                        .font(DS.Typography.caption)
+                        .tracking(1)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(event.isCheckedIn ? DS.Colors.textTertiary : DS.Colors.success)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+            }
+            .disabled(isCheckingIn || canCheckIn == false)
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+    }
+
+    private var statusColor: Color {
+        switch normalizedStatus {
+        case "gathering":
+            return DS.Colors.warning
+        case "ongoing":
+            return DS.Colors.success
+        case "planned":
+            return DS.Colors.info
+        case "finished", "completed":
+            return DS.Colors.textSecondary
+        case "cancelled":
+            return DS.Colors.accent
+        default:
+            return DS.Colors.textSecondary
+        }
+    }
+
+    private func formattedDate(_ rawValue: String?) -> String? {
+        guard let rawValue, rawValue.isEmpty == false else { return nil }
+
+        let isoWithFraction = ISO8601DateFormatter()
+        isoWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoNoFraction = ISO8601DateFormatter()
+        isoNoFraction.formatOptions = [.withInternetDateTime]
+
+        guard let date = isoWithFraction.date(from: rawValue) ?? isoNoFraction.date(from: rawValue) else {
+            return rawValue
+        }
+
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
