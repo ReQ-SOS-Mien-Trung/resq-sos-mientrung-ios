@@ -7,6 +7,43 @@ enum RemoteNotificationHandling {
     case ignored
     case syncOnly
     case display
+    case silent
+}
+
+@MainActor
+final class CoordinatorChatVisibilityState {
+    static let shared = CoordinatorChatVisibilityState()
+
+    private(set) var isChatVisible = false
+    private(set) var activeConversationId: Int?
+
+    private init() { }
+
+    func enter(conversationId: Int?) {
+        isChatVisible = true
+        activeConversationId = conversationId
+    }
+
+    func update(conversationId: Int?) {
+        activeConversationId = conversationId
+    }
+
+    func leave() {
+        isChatVisible = false
+        activeConversationId = nil
+    }
+
+    func shouldSuppressNotification(_ notification: RealtimeNotification) -> Bool {
+        guard notification.isChatMessage else { return false }
+        guard isChatVisible else { return false }
+
+        guard let activeConversationId,
+              let notificationConversationId = notification.conversationId else {
+            return true
+        }
+
+        return activeConversationId == notificationConversationId
+    }
 }
 
 @MainActor
@@ -17,7 +54,6 @@ final class NotificationHubService: ObservableObject {
     @Published private(set) var unreadCount = 0
     @Published private(set) var isConnected = false
     @Published private(set) var isSyncing = false
-    @Published var presentedNotification: RealtimeNotification?
     @Published var errorMessage: String?
 
     private var connection: HubConnection?
@@ -94,17 +130,12 @@ final class NotificationHubService: ObservableObject {
         activeAccessToken = nil
         isConnected = false
         errorMessage = nil
-        presentedNotification = nil
 
         if clearNotifications {
             notifications.removeAll()
             backendUnreadCount = 0
             updateUnreadCount()
         }
-    }
-
-    func dismissPresentedNotification() {
-        presentedNotification = nil
     }
 
     func applicationDidBecomeActive() async {
@@ -176,12 +207,6 @@ final class NotificationHubService: ObservableObject {
         }
     }
 
-    func handlePresentedNotificationDismissal() async {
-        guard let notification = presentedNotification else { return }
-        await markAsRead(notification)
-        dismissPresentedNotification()
-    }
-
     func updateDevicePushToken(_ token: String) {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -221,14 +246,17 @@ final class NotificationHubService: ObservableObject {
                 title: extractNotificationTitle(from: userInfo),
                 body: extractNotificationBody(from: userInfo, fallbackPayload: alertPayload),
                 type: type,
+                conversationId: extractInt(for: "conversationId", in: userInfo)
+                    ?? extractInt(for: "conversation_id", in: userInfo),
                 messageId: extractString(for: "gcm.message_id", in: userInfo)
                     ?? extractString(for: "google.c.a.c_id", in: userInfo)
                     ?? extractString(for: "message_id", in: userInfo),
                 alertPayload: alertPayload
             )
 
-            handle(notification: broadcastNotification, shouldPresent: true, adjustsBackendUnread: false)
-            return .display
+            let shouldPresent = shouldPresentInAppNotification(broadcastNotification)
+            handle(notification: broadcastNotification, adjustsBackendUnread: false)
+            return shouldPresent ? .display : .silent
         }
 
         await syncNotifications()
@@ -261,7 +289,6 @@ final class NotificationHubService: ObservableObject {
 
     private func handle(
         notification: RealtimeNotification,
-        shouldPresent: Bool = true,
         adjustsBackendUnread: Bool = true
     ) {
         isConnected = true
@@ -277,10 +304,6 @@ final class NotificationHubService: ObservableObject {
         }
 
         updateUnreadCount()
-
-        if shouldPresent {
-            presentedNotification = notification
-        }
     }
 
     private func upsert(_ notification: RealtimeNotification) {
@@ -455,6 +478,26 @@ final class NotificationHubService: ObservableObject {
         }
 
         return nil
+    }
+
+    private func extractInt(for key: String, in dictionary: [AnyHashable: Any]) -> Int? {
+        if let value = dictionary[key] as? Int {
+            return value
+        }
+
+        if let value = dictionary[key] as? NSNumber {
+            return value.intValue
+        }
+
+        if let value = dictionary[key] as? String {
+            return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+
+    private func shouldPresentInAppNotification(_ notification: RealtimeNotification) -> Bool {
+        !CoordinatorChatVisibilityState.shared.shouldSuppressNotification(notification)
     }
 
     private func makeConnectionDelegate() -> ConnectionDelegateProxy {

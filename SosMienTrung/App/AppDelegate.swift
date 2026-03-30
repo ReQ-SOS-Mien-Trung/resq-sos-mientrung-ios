@@ -125,7 +125,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         Task { @MainActor in
             let handling = await NotificationHubService.shared.handleRemoteNotification(userInfo: userInfo)
             switch handling {
-            case .ignored:
+            case .ignored, .silent:
                 completionHandler([])
             case .syncOnly, .display:
                 completionHandler([.banner, .sound, .badge])

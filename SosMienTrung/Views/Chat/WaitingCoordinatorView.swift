@@ -33,7 +33,8 @@ struct WaitingCoordinatorView: View {
                         ForEach(vm.chatService.messages) { msg in
                             CoordinatorMessageBubble(
                                 message: msg,
-                                currentUserId: AuthSessionStore.shared.session?.userId
+                                currentUserId: AuthSessionStore.shared.session?.userId,
+                                onImageTap: { _, _ in }
                             )
                         }
                     }

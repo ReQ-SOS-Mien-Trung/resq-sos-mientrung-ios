@@ -101,6 +101,27 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(notification.displayMessage.contains("Hue"))
     }
 
+    func testChatNotificationDecodesConversationId() throws {
+        let json = """
+        {
+          "notificationId": 120,
+          "conversationId": "456",
+          "type": "chat_message",
+          "title": "Tin nhắn mới",
+          "body": "Coordinator vừa nhắn bạn",
+          "createdAt": "2026-03-20T04:00:32.373Z"
+        }
+        """
+
+        let notification = try RealtimeNotification.decoder().decode(
+            RealtimeNotification.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(notification.conversationId, 456)
+        XCTAssertTrue(notification.isChatMessage)
+    }
+
     func testSharedPeopleRegenerationPreservesNamesAndFiltersReliefSelections() throws {
         let formData = SOSFormData()
 

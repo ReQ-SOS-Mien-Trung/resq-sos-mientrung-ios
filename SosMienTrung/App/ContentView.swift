@@ -88,17 +88,6 @@ struct ContentView: View {
         notificationHub.disconnect()
     }
 
-    private var notificationAlertBinding: Binding<RealtimeNotification?> {
-        Binding(
-            get: { notificationHub.presentedNotification },
-            set: { newValue in
-                if newValue == nil {
-                    notificationHub.dismissPresentedNotification()
-                }
-            }
-        )
-    }
-
     @ViewBuilder
     private var rootView: some View {
         if isFullyAuthenticated {
@@ -171,17 +160,6 @@ struct ContentView: View {
     var body: some View {
         configuredView
             .preferredColorScheme(appearance.computedColorScheme)
-            .alert(item: notificationAlertBinding) { notification in
-                Alert(
-                    title: Text(notification.displayTitle),
-                    message: Text(notification.displayMessage),
-                    dismissButton: .default(Text("OK")) {
-                        Task {
-                            await notificationHub.handlePresentedNotificationDismissal()
-                        }
-                    }
-                )
-            }
             .onChange(of: isSetupComplete) { newValue in
                 if newValue {
                     refreshAuthenticatedAccess()

@@ -426,7 +426,7 @@ struct RescuerAssemblyEventsView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "CHECK-IN SỰ KIỆN")
+            EyebrowLabel(text: "Xác nhận có mặt")
             Text("Theo dõi sự kiện điểm tập kết và check-in đúng phiên tập trung của bạn.")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.textSecondary)

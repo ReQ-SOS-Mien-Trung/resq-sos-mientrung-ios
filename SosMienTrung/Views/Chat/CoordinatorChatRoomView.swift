@@ -11,6 +11,7 @@ struct CoordinatorChatRoomView: View {
     @State private var showCameraPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pickedCameraImage: UIImage?
+    @State private var selectedImagePreview: ChatImagePreview?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +25,10 @@ struct CoordinatorChatRoomView: View {
                         ForEach(vm.chatService.messages) { msg in
                             CoordinatorMessageBubble(
                                 message: msg,
-                                currentUserId: AuthSessionStore.shared.session?.userId
+                                currentUserId: AuthSessionStore.shared.session?.userId,
+                                onImageTap: { url, alt in
+                                    selectedImagePreview = ChatImagePreview(url: url, alt: alt)
+                                }
                             )
                             .id(msg.id)
                         }
@@ -44,6 +48,16 @@ struct CoordinatorChatRoomView: View {
         .background(DS.Colors.background)
         .navigationTitle("Chat hỗ trợ")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            CoordinatorChatVisibilityState.shared.enter(conversationId: vm.conversationId)
+        }
+        .onDisappear {
+            CoordinatorChatVisibilityState.shared.leave()
+        }
+        .onChange(of: vm.conversationId) { newConversationId in
+            guard CoordinatorChatVisibilityState.shared.isChatVisible else { return }
+            CoordinatorChatVisibilityState.shared.update(conversationId: newConversationId)
+        }
         .confirmationDialog("Gửi ảnh", isPresented: $showImageSourceSheet, titleVisibility: .visible) {
             Button {
                 showPhotoPicker = true
@@ -70,6 +84,9 @@ struct CoordinatorChatRoomView: View {
         .sheet(isPresented: $showCameraPicker) {
             ChatCameraPicker(image: $pickedCameraImage)
                 .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $selectedImagePreview) { preview in
+            ChatImagePreviewView(preview: preview)
         }
         .onChange(of: selectedPhotoItem) { newItem in
             guard let item = newItem else { return }
@@ -153,7 +170,7 @@ struct CoordinatorChatRoomView: View {
             }
 
             if showPreview && !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                MarkdownRichText(content: vm.inputText, textColor: DS.Colors.text)
+                MarkdownRichText(content: vm.inputText, textColor: DS.Colors.text, onImageTap: { _, _ in })
                     .font(DS.Typography.body)
                     .padding(DS.Spacing.sm)
                     .background(DS.Colors.surface)
@@ -317,6 +334,7 @@ private struct ChatCameraPicker: UIViewControllerRepresentable {
 struct CoordinatorMessageBubble: View {
     let message: CoordinatorChatMessage
     let currentUserId: String?
+    let onImageTap: (URL, String) -> Void
 
     private var isFromMe: Bool {
         message.messageType == CoordinatorMessageType.userMessage.rawValue
@@ -327,7 +345,7 @@ struct CoordinatorMessageBubble: View {
     var body: some View {
         if isSystem {
             // System message: centered pill
-            MarkdownRichText(content: message.content, textColor: DS.Colors.textSecondary)
+            MarkdownRichText(content: message.content, textColor: DS.Colors.textSecondary, onImageTap: { _, _ in })
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -348,7 +366,8 @@ struct CoordinatorMessageBubble: View {
                     }
                     MarkdownRichText(
                         content: message.content,
-                        textColor: isFromMe ? .white : DS.Colors.text
+                        textColor: isFromMe ? .white : DS.Colors.text,
+                        onImageTap: onImageTap
                     )
                         .font(DS.Typography.body)
                         .padding(DS.Spacing.sm)
@@ -372,6 +391,7 @@ struct CoordinatorMessageBubble: View {
 private struct MarkdownRichText: View {
     let content: String
     let textColor: Color
+    let onImageTap: (URL, String) -> Void
 
     private var segments: [MarkdownSegment] {
         MarkdownSegment.parse(content)
@@ -391,24 +411,38 @@ private struct MarkdownRichText: View {
                     }
                 case .image(let url, let alt):
                     VStack(alignment: .leading, spacing: 4) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                                    .frame(maxWidth: .infinity, minHeight: 120)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                            case .failure:
-                                Text("Khong tai duoc anh")
-                                    .foregroundColor(textColor.opacity(0.8))
-                            @unknown default:
-                                EmptyView()
+                        Button {
+                            onImageTap(url, alt)
+                        } label: {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity, minHeight: 120)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                case .failure:
+                                    Text("Khong tai duoc anh")
+                                        .foregroundColor(textColor.opacity(0.8))
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .frame(maxWidth: 240)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(8)
+                                    .background(Color.black.opacity(0.45))
+                                    .clipShape(Circle())
+                                    .padding(8)
                             }
                         }
-                        .frame(maxWidth: 240)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .buttonStyle(.plain)
 
                         if !alt.isEmpty {
                             Text(alt)
@@ -418,6 +452,83 @@ private struct MarkdownRichText: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct ChatImagePreview: Identifiable {
+    let url: URL
+    let alt: String
+
+    var id: String { url.absoluteString }
+}
+
+private struct ChatImagePreviewView: View {
+    let preview: ChatImagePreview
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismiss()
+                }
+
+            VStack(spacing: DS.Spacing.md) {
+                Spacer(minLength: 0)
+
+                AsyncImage(url: preview.url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.2)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .failure:
+                        VStack(spacing: DS.Spacing.sm) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 30, weight: .semibold))
+                            Text("Khong tai duoc anh")
+                                .font(DS.Typography.body)
+                        }
+                        .foregroundColor(.white.opacity(0.9))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .padding(.horizontal, DS.Spacing.md)
+
+                if !preview.alt.isEmpty {
+                    Text(preview.alt)
+                        .font(DS.Typography.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, DS.Spacing.lg)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, DS.Spacing.xl)
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(Circle())
+            }
+            .padding(.top, DS.Spacing.lg)
+            .padding(.trailing, DS.Spacing.md)
         }
     }
 }

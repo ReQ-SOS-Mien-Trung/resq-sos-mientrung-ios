@@ -81,12 +81,12 @@ struct BroadcastAlertPayload: Codable, Equatable {
         }
     }
 
-    static func decode(fromJSONObject object: Any) -> BroadcastAlertPayload? {
+    nonisolated static func decode(fromJSONObject object: Any) -> BroadcastAlertPayload? {
         guard let data = makeJSONData(from: object) else { return nil }
         return try? RealtimeNotification.decoder().decode(BroadcastAlertPayload.self, from: data)
     }
 
-    private static func makeJSONData(from object: Any) -> Data? {
+    nonisolated private static func makeJSONData(from object: Any) -> Data? {
         if let rawString = object as? String {
             let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.isEmpty == false,
@@ -104,7 +104,7 @@ struct BroadcastAlertPayload: Codable, Equatable {
         return try? JSONSerialization.data(withJSONObject: normalizedObject)
     }
 
-    private static func normalizedJSONObject(_ object: Any) -> Any {
+    nonisolated private static func normalizedJSONObject(_ object: Any) -> Any {
         if let dictionary = object as? [AnyHashable: Any] {
             return dictionary.reduce(into: [String: Any]()) { partialResult, item in
                 guard let key = item.key as? String else { return }
@@ -119,13 +119,13 @@ struct BroadcastAlertPayload: Codable, Equatable {
         return object
     }
 
-    private static func trim(_ value: String?) -> String? {
+    nonisolated private static func trim(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func normalizedType(_ value: String?) -> String? {
+    nonisolated private static func normalizedType(_ value: String?) -> String? {
         trim(value)?
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
@@ -136,6 +136,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
     let id: String
     let userNotificationId: Int?
     let notificationId: Int?
+    let conversationId: Int?
     let title: String?
     let type: String?
     let body: String?
@@ -161,6 +162,10 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         userNotificationId != nil
     }
 
+    var isChatMessage: Bool {
+        type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "chat_message"
+    }
+
     var isBroadcastOnly: Bool {
         origin == .broadcastPush && userNotificationId == nil
     }
@@ -168,6 +173,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
     init(
         userNotificationId: Int? = nil,
         notificationId: Int? = nil,
+        conversationId: Int? = nil,
         title: String? = nil,
         type: String? = nil,
         body: String? = nil,
@@ -180,6 +186,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
     ) {
         self.userNotificationId = userNotificationId
         self.notificationId = notificationId
+        self.conversationId = conversationId
         self.title = title
         self.type = type
         self.body = body
@@ -204,6 +211,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
 
         let userNotificationId = Self.decodeInt(from: container, keys: ["userNotificationId"])
         let notificationId = Self.decodeInt(from: container, keys: ["notificationId"])
+        let conversationId = Self.decodeInt(from: container, keys: ["conversationId", "conversation_id"])
         let title = Self.decodeString(from: container, keys: ["title"])
         let type = Self.decodeString(from: container, keys: ["type"])
         let bodyValue = Self.decodeBodyValue(from: container, keys: ["body", "content", "message", "description"])
@@ -214,6 +222,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         self.init(
             userNotificationId: userNotificationId,
             notificationId: notificationId,
+            conversationId: conversationId,
             title: title,
             type: type,
             body: bodyValue.text,
@@ -225,15 +234,17 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         )
     }
 
-    static func makeBroadcastPush(
+    nonisolated static func makeBroadcastPush(
         title: String?,
         body: String?,
         type: String?,
+        conversationId: Int?,
         messageId: String?,
         alertPayload: BroadcastAlertPayload? = nil,
         createdAt: Date = Date()
     ) -> RealtimeNotification {
         RealtimeNotification(
+            conversationId: conversationId,
             title: title,
             type: type,
             body: body,
@@ -245,7 +256,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         )
     }
 
-    static func decoder() -> JSONDecoder {
+    nonisolated static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { nestedDecoder in
             let container = try nestedDecoder.singleValueContainer()
@@ -272,7 +283,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return decoder
     }
 
-    private static func makeIdentifier(
+    nonisolated private static func makeIdentifier(
         userNotificationId: Int?,
         notificationId: Int?,
         title: String?,
@@ -302,13 +313,13 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return "\(origin.rawValue)-\(UUID().uuidString)"
     }
 
-    private static func firstNonEmpty(_ values: String?...) -> String? {
+    nonisolated private static func firstNonEmpty(_ values: String?...) -> String? {
         values
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first(where: { !$0.isEmpty })
     }
 
-    private static func decodeBodyValue(
+    nonisolated private static func decodeBodyValue(
         from container: KeyedDecodingContainer<DynamicCodingKey>,
         keys: [String]
     ) -> (text: String?, payload: BroadcastAlertPayload?) {
@@ -338,7 +349,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return (nil, nil)
     }
 
-    private static func decodeString(
+    nonisolated private static func decodeString(
         from container: KeyedDecodingContainer<DynamicCodingKey>,
         keys: [String]
     ) -> String? {
@@ -358,7 +369,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return nil
     }
 
-    private static func decodeInt(
+    nonisolated private static func decodeInt(
         from container: KeyedDecodingContainer<DynamicCodingKey>,
         keys: [String]
     ) -> Int? {
@@ -377,7 +388,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return nil
     }
 
-    private static func decodeBool(
+    nonisolated private static func decodeBool(
         from container: KeyedDecodingContainer<DynamicCodingKey>,
         keys: [String]
     ) -> Bool? {
@@ -406,7 +417,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return nil
     }
 
-    private static func decodeDate(
+    nonisolated private static func decodeDate(
         from container: KeyedDecodingContainer<DynamicCodingKey>,
         keys: [String]
     ) -> Date? {
@@ -430,7 +441,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         return nil
     }
 
-    private static func parseDate(_ rawValue: String) -> Date? {
+    nonisolated private static func parseDate(_ rawValue: String) -> Date? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
