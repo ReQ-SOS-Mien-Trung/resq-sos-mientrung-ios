@@ -84,6 +84,16 @@ final class RescueTeamService {
         }
     }
 
+    // MARK: - POST /personnel/rescue-teams/{id}/set-available
+    func setTeamAvailable(teamId: Int) async throws -> String? {
+        try await updateTeamAvailability(teamId: teamId, action: "set-available")
+    }
+
+    // MARK: - POST /personnel/rescue-teams/{id}/set-unavailable
+    func setTeamUnavailable(teamId: Int) async throws -> String? {
+        try await updateTeamAvailability(teamId: teamId, action: "set-unavailable")
+    }
+
     // MARK: - POST /personnel/assembly-point/events/{eventId}/check-in
     func checkIn(eventId: Int, latitude: Double, longitude: Double) async throws -> CheckInResponse {
         guard let url = URL(string: "\(baseURL)/personnel/assembly-point/events/\(eventId)/check-in") else {
@@ -116,6 +126,39 @@ final class RescueTeamService {
 
             return (try? JSONDecoder().decode(CheckInResponse.self, from: data))
                 ?? CheckInResponse(message: "Check-in thành công")
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
+    private func updateTeamAvailability(teamId: Int, action: String) async throws -> String? {
+        guard let url = URL(string: "\(baseURL)/personnel/rescue-teams/\(teamId)/\(action)") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
+
+        print("[RescueTeamService] → POST \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            return Self.extractBackendSuccessMessage(from: data)
         } catch let serviceError as RescueTeamServiceError {
             throw serviceError
         } catch {
@@ -297,5 +340,30 @@ final class RescueTeamService {
         }
 
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static func extractBackendSuccessMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+
+        if let decoded = try? JSONDecoder().decode(CheckInResponse.self, from: data),
+           let message = decoded.message,
+           message.isEmpty == false {
+            return message
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "detail", "title"] {
+                if let value = object[key] as? String, value.isEmpty == false {
+                    return value
+                }
+            }
+        }
+
+        if let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           text.isEmpty == false {
+            return text
+        }
+
+        return nil
     }
 }
