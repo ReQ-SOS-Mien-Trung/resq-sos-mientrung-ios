@@ -23,7 +23,10 @@ struct ActivityRowView: View {
                     }
                 }
                 Spacer()
-                StatusBadge(text: activity.status, color: activityStatusColor(activity.activityStatus))
+                StatusBadge(
+                    text: RescuerStatusBadgeText.activity(activity.activityStatus),
+                    color: activityStatusColor(activity.activityStatus)
+                )
             }
 
             // Action buttons — only when activity can still progress

@@ -17,6 +17,118 @@ struct StatusBadge: View {
     }
 }
 
+// MARK: - Status Badge Text Mapping
+enum RescuerStatusBadgeText {
+    static func mission(_ status: String) -> String {
+        switch normalized(status) {
+        case "ongoing":
+            return "Đang thực hiện"
+        case "planned":
+            return "Đã lên kế hoạch"
+        case "completed", "finished":
+            return "Đã hoàn thành"
+        case "incompleted", "incomplete":
+            return "Chưa hoàn thành"
+        case "cancelled":
+            return "Đã hủy"
+        default:
+            return fallbackLabel(from: status)
+        }
+    }
+
+    static func team(_ status: String) -> String {
+        switch normalized(status) {
+        case "ready", "available":
+            return "Sẵn sàng"
+        case "gathering":
+            return "Tập kết"
+        case "assigned":
+            return "Đã phân công"
+        case "onmission":
+            return "Đang làm nhiệm vụ"
+        case "stuck":
+            return "Gặp sự cố"
+        case "awaitingacceptance":
+            return "Chờ xác nhận"
+        case "unavailable":
+            return "Không sẵn sàng"
+        case "disbanded":
+            return "Đã giải tán"
+        default:
+            return fallbackLabel(from: status)
+        }
+    }
+
+    static func activity(_ status: ActivityStatus) -> String {
+        switch status {
+        case .planned:
+            return "Đã lên kế hoạch"
+        case .onGoing:
+            return "Đang thực hiện"
+        case .succeed:
+            return "Hoàn thành"
+        case .failed:
+            return "Thất bại"
+        case .cancelled:
+            return "Đã hủy"
+        }
+    }
+
+    static func assemblyEvent(_ status: String?) -> String {
+        switch normalized(status) {
+        case "scheduled", "planned":
+            return "Đã lên lịch"
+        case "gathering", "ongoing":
+            return "Đang tập trung"
+        case "completed", "finished":
+            return "Đã hoàn tất"
+        case "cancelled":
+            return "Đã hủy"
+        default:
+            return fallbackLabel(from: status)
+        }
+    }
+
+    static func incident(_ status: String) -> String {
+        switch normalized(status) {
+        case "reported":
+            return "Đã báo cáo"
+        case "acknowledged":
+            return "Đã tiếp nhận"
+        case "inprogress":
+            return "Đang xử lý"
+        case "resolved":
+            return "Đã xử lý"
+        case "closed":
+            return "Đã đóng"
+        default:
+            return fallbackLabel(from: status)
+        }
+    }
+
+    static func normalized(_ status: String?) -> String {
+        (status ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+    }
+
+    private static func fallbackLabel(from status: String?) -> String {
+        let raw = (status ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard raw.isEmpty == false else {
+            return "Không xác định"
+        }
+
+        return raw
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+    }
+}
+
 // MARK: - Mission Row
 struct MissionRowView: View {
     let mission: Mission
@@ -41,7 +153,10 @@ struct MissionRowView: View {
             }
 
             HStack(spacing: DS.Spacing.sm) {
-                StatusBadge(text: mission.status, color: missionStatusColor(mission.status))
+                StatusBadge(
+                    text: RescuerStatusBadgeText.mission(mission.status),
+                    color: missionStatusColor(mission.status)
+                )
 
                 if mission.activityCount > 0 {
                     Label("\(mission.activityCount) hoạt động", systemImage: "checklist")
@@ -71,9 +186,7 @@ struct MissionRowView: View {
     }
 
     private func normalizedStatus(_ status: String) -> String {
-        status
-            .replacingOccurrences(of: "_", with: "")
-            .lowercased()
+        RescuerStatusBadgeText.normalized(status)
     }
 }
 
@@ -88,13 +201,64 @@ struct RescuerDashboardView: View {
         AuthSessionStore.shared.session?.userId
     }
 
-    private var currentMember: RescueTeamMember? {
-        guard let currentUserId else { return nil }
-        return vm.team?.members?.first(where: { $0.userId == currentUserId })
+    private var currentUserFullName: String? {
+        AuthSessionStore.shared.session?.fullName
     }
 
-    private var hasCheckedIn: Bool {
-        currentMember?.checkedIn == true
+    private func normalizedIdentity(_ value: String?) -> String {
+        (value ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    }
+
+    private var currentMember: RescueTeamMember? {
+        guard let members = vm.team?.members, members.isEmpty == false else { return nil }
+
+        let normalizedUserId = normalizedIdentity(currentUserId)
+        if normalizedUserId.isEmpty == false,
+           let byUserId = members.first(where: { normalizedIdentity($0.userId) == normalizedUserId }) {
+            return byUserId
+        }
+
+        let normalizedName = normalizedIdentity(currentUserFullName)
+        if normalizedName.isEmpty == false,
+           let byFullName = members.first(where: { normalizedIdentity($0.fullName) == normalizedName }) {
+            return byFullName
+        }
+
+        return nil
+    }
+
+    private var isCurrentUserLeader: Bool {
+        currentMember?.isLeader == true
+    }
+
+    private var normalizedTeamStatus: String {
+        RescuerStatusBadgeText.normalized(vm.team?.status)
+    }
+
+    private var canSetTeamAvailable: Bool {
+        ["gathering", "unavailable"].contains(normalizedTeamStatus)
+    }
+
+    private var canSetTeamUnavailable: Bool {
+        ["available", "ready"].contains(normalizedTeamStatus)
+    }
+
+    private func isCurrentUser(_ member: RescueTeamMember) -> Bool {
+        let normalizedSessionId = normalizedIdentity(currentUserId)
+        if normalizedSessionId.isEmpty == false,
+           normalizedIdentity(member.userId) == normalizedSessionId {
+            return true
+        }
+
+        let normalizedSessionName = normalizedIdentity(currentUserFullName)
+        if normalizedSessionName.isEmpty == false,
+           normalizedIdentity(member.fullName) == normalizedSessionName {
+            return true
+        }
+
+        return false
     }
 
     var body: some View {
@@ -175,7 +339,7 @@ struct RescuerDashboardView: View {
                 EyebrowLabel(text: "TEAM CỦA BẠN")
                 Spacer()
                 if let status = vm.team?.status {
-                    StatusBadge(text: status, color: teamStatusColor(status))
+                    StatusBadge(text: RescuerStatusBadgeText.team(status), color: teamStatusColor(status))
                 }
             }
 
@@ -218,32 +382,104 @@ struct RescuerDashboardView: View {
                 }
                 .padding(.top, DS.Spacing.xs)
 
-                Button { vm.checkIn() } label: {
-                    HStack(spacing: DS.Spacing.xs) {
-                        Image(systemName: hasCheckedIn ? "checkmark.circle.fill" : "checkmark.circle")
-                        Text(hasCheckedIn ? "ĐÃ CHECK-IN" : "CHECK-IN NHANH")
-                            .font(DS.Typography.subheadline).tracking(1)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(hasCheckedIn ? DS.Colors.textTertiary : DS.Colors.success)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+                if isCurrentUserLeader {
+                    teamAvailabilityButton
+                    .padding(.top, DS.Spacing.xs)
+                } else {
+                    Label("Chỉ đội trưởng có thể đổi trạng thái sẵn sàng của team", systemImage: "lock.fill")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .padding(.top, DS.Spacing.xs)
                 }
-                .padding(.top, DS.Spacing.xs)
-                .disabled(vm.isLoading || hasCheckedIn)
-            } else {
+            } else if vm.isLoadingTeam {
                 HStack(spacing: DS.Spacing.sm) {
                     ProgressView()
                     Text("Đang tải thông tin team...")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
+            } else {
+                HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                    ZStack {
+                        Circle()
+                            .fill(DS.Colors.warning.opacity(0.12))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Circle().stroke(DS.Colors.warning.opacity(0.28), lineWidth: 1)
+                            )
+
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(DS.Colors.warning)
+                    }
+                    .frame(width: 40, height: 40)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Bạn chưa có team")
+                            .font(DS.Typography.subheadline.bold())
+                            .foregroundColor(DS.Colors.text)
+
+                        Text(vm.noTeamMessage ?? "Hiện tại bạn chưa được phân vào đội cứu hộ. Vui lòng chờ điều phối viên phân công.")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
         .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.5), lineWidth: DS.Border.medium))
+    }
+
+    @ViewBuilder
+    private var teamAvailabilityButton: some View {
+        if canSetTeamAvailable {
+            Button { vm.setTeamAvailable() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle")
+                    Text(vm.isUpdatingTeamAvailability ? "ĐANG CẬP NHẬT" : "SẴN SÀNG NHẬN NHIỆM VỤ")
+                        .font(DS.Typography.caption.bold())
+                        .tracking(0.8)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .foregroundColor(.white)
+                .background(DS.Colors.success)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+            }
+            .disabled(vm.isUpdatingTeamAvailability)
+        } else if canSetTeamUnavailable {
+            Button { vm.setTeamUnavailable() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "pause.circle")
+                    Text(vm.isUpdatingTeamAvailability ? "ĐANG CẬP NHẬT" : "TẠM NGƯNG NHẬN NHIỆM VỤ")
+                        .font(DS.Typography.caption.bold())
+                        .tracking(0.8)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .foregroundColor(.white)
+                .background(DS.Colors.accent)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+            }
+            .disabled(vm.isUpdatingTeamAvailability)
+        } else {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.seal")
+                Text("TRẠNG THÁI ĐÃ CẬP NHẬT")
+                    .font(DS.Typography.caption.bold())
+                    .tracking(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Spacing.sm)
+            .foregroundColor(DS.Colors.textTertiary)
+            .background(DS.Colors.background)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+        }
     }
 
     // MARK: Missions List
@@ -294,9 +530,7 @@ struct RescuerDashboardView: View {
     }
 
     private func normalizedStatus(_ status: String) -> String {
-        status
-            .replacingOccurrences(of: "_", with: "")
-            .lowercased()
+        RescuerStatusBadgeText.normalized(status)
     }
 
     @ViewBuilder
@@ -335,15 +569,15 @@ struct RescuerDashboardView: View {
             if isMembersExpanded {
                 VStack(spacing: DS.Spacing.xxs) {
                     ForEach(sortedMembers) { member in
+                        let isCurrentUserMember = isCurrentUser(member)
+
                         HStack(spacing: DS.Spacing.xs) {
-                            Image(systemName: member.isLeader ? "crown.fill" : "person.fill")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(member.isLeader ? DS.Colors.warning : DS.Colors.textSecondary)
-                                .frame(width: 14)
+                            TeamMemberAvatarView(member: member)
 
                             Text(member.fullName)
                                 .font(DS.Typography.caption)
                                 .foregroundColor(DS.Colors.text)
+                                .lineLimit(1)
 
                             Spacer()
 
@@ -353,12 +587,123 @@ struct RescuerDashboardView: View {
                         }
                         .padding(.horizontal, DS.Spacing.sm)
                         .padding(.vertical, 6)
-                        .background(DS.Colors.background)
-                        .overlay(Rectangle().stroke(DS.Colors.border.opacity(0.8), lineWidth: DS.Border.thin))
+                        .background(isCurrentUserMember ? DS.Colors.accent.opacity(0.06) : DS.Colors.background)
+                        .overlay(
+                            Rectangle().stroke(
+                                isCurrentUserMember ? DS.Colors.accent.opacity(0.5) : DS.Colors.border.opacity(0.8),
+                                lineWidth: DS.Border.thin
+                            )
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+private struct TeamMemberAvatarView: View {
+    let member: RescueTeamMember
+
+    private var avatarSize: CGFloat { 30 }
+    private let defaultAvatarURLString = "https://res.cloudinary.com/dezgwdrfs/image/upload/v1773504004/611251674_1432765175119052_6622750233977483141_n_sgxqxd.png"
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if let avatarURL {
+                    AsyncImage(url: avatarURL) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(DS.Colors.warning)
+                                .scaleEffect(0.7)
+                                .frame(width: avatarSize, height: avatarSize)
+                                .background(DS.Colors.background)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: avatarSize, height: avatarSize)
+                        case .failure:
+                            initialsFallback
+                        @unknown default:
+                            initialsFallback
+                        }
+                    }
+                } else {
+                    initialsFallback
+                }
+            }
+            .frame(width: avatarSize, height: avatarSize)
+            .clipShape(Circle())
+            .overlay(
+                Circle().stroke(
+                    member.isLeader ? DS.Colors.warning.opacity(0.9) : DS.Colors.border,
+                    lineWidth: member.isLeader ? 1.5 : 1
+                )
+            )
+
+            if member.isLeader {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(DS.Colors.warning)
+                    .padding(3)
+                    .background(DS.Colors.surface)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(DS.Colors.warning.opacity(0.7), lineWidth: 1))
+                    .offset(x: 2, y: 2)
+            }
+        }
+    }
+
+    private var avatarURL: URL? {
+        if let raw = member.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+           raw.isEmpty == false,
+           let memberURL = makeURL(from: raw) {
+            return memberURL
+        }
+
+        return makeURL(from: defaultAvatarURLString)
+    }
+
+    private func makeURL(from raw: String) -> URL? {
+        if let directURL = URL(string: raw) {
+            return directURL
+        }
+
+        if let encoded = raw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            return URL(string: encoded)
+        }
+
+        return nil
+    }
+
+    private var initialsFallback: some View {
+        ZStack {
+            Circle()
+                .fill(DS.Colors.warning.opacity(0.14))
+
+            if initials.isEmpty {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.warning)
+            } else {
+                Text(initials)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(DS.Colors.warning)
+            }
+        }
+        .frame(width: avatarSize, height: avatarSize)
+    }
+
+    private var initials: String {
+        member.fullName
+            .split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first.map(String.init) }
+            .joined()
+            .uppercased()
     }
 }
 
@@ -482,18 +827,7 @@ private struct AssemblyEventRowView: View {
     let onCheckIn: () -> Void
 
     private var statusText: String {
-        switch normalizedStatus {
-        case "scheduled", "planned":
-            return "Đã lên lịch"
-        case "gathering", "ongoing":
-            return "Đang tập trung"
-        case "completed", "finished":
-            return "Đã hoàn tất"
-        case "cancelled":
-            return "Đã hủy"
-        default:
-            return "Không xác định"
-        }
+        RescuerStatusBadgeText.assemblyEvent(event.eventStatus)
     }
 
     private var canCheckIn: Bool {
@@ -501,9 +835,7 @@ private struct AssemblyEventRowView: View {
     }
 
     private var normalizedStatus: String {
-        (event.eventStatus ?? "")
-            .replacingOccurrences(of: "_", with: "")
-            .lowercased()
+        RescuerStatusBadgeText.normalized(event.eventStatus)
     }
 
     var body: some View {

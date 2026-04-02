@@ -85,7 +85,10 @@ struct MissionDetailView: View {
     // MARK: - Mission Header
     private var missionHeader: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            StatusBadge(text: mission.status, color: missionStatusColor(mission.status))
+            StatusBadge(
+                text: RescuerStatusBadgeText.mission(mission.status),
+                color: missionStatusColor(mission.status)
+            )
 
             Text(mission.title)
                 .font(DS.Typography.largeTitle)
@@ -243,8 +246,6 @@ struct MissionDetailView: View {
     }
 
     private func normalizedStatus(_ status: String) -> String {
-        status
-            .replacingOccurrences(of: "_", with: "")
-            .lowercased()
+        RescuerStatusBadgeText.normalized(status)
     }
 }

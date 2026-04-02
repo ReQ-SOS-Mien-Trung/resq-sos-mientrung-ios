@@ -5,6 +5,9 @@ import CoreLocation
 @MainActor
 final class RescuerMissionViewModel: ObservableObject {
     @Published var team: RescueTeam?
+    @Published var isLoadingTeam = false
+    @Published var noTeamMessage: String?
+    @Published var isUpdatingTeamAvailability = false
     @Published var missions: [Mission] = []
     @Published var activities: [Activity] = []
     @Published var isLoading = false
@@ -24,11 +27,31 @@ final class RescuerMissionViewModel: ObservableObject {
 
     func loadTeam() {
         beginLoading()
+        isLoadingTeam = true
+        noTeamMessage = nil
         Task {
-            defer { endLoading() }
+            defer {
+                isLoadingTeam = false
+                endLoading()
+            }
             do {
                 team = try await RescueTeamService.shared.getMyTeam()
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                team = nil
+
+                if case .httpError(let status, let message) = serviceError, status == 404 {
+                    // 404 from /my means rescuer is not assigned to any team yet.
+                    if message.isEmpty {
+                        noTeamMessage = "Bạn chưa được phân vào đội cứu hộ."
+                    } else {
+                        noTeamMessage = message
+                    }
+                    return
+                }
+
+                errorMessage = serviceError.localizedDescription
             } catch {
+                team = nil
                 errorMessage = "Không thể tải thông tin team: \(error.localizedDescription)"
             }
         }
@@ -85,6 +108,58 @@ final class RescuerMissionViewModel: ObservableObject {
         }
 
         return (location.coordinate.latitude, location.coordinate.longitude)
+    }
+
+    func setTeamAvailable() {
+        guard let currentTeam = team else { return }
+        guard isUpdatingTeamAvailability == false else { return }
+
+        errorMessage = nil
+        successMessage = nil
+        isUpdatingTeamAvailability = true
+        beginLoading()
+
+        Task {
+            defer {
+                isUpdatingTeamAvailability = false
+                endLoading()
+            }
+            do {
+                let message = try await RescueTeamService.shared.setTeamAvailable(teamId: currentTeam.id)
+                team = try await RescueTeamService.shared.getMyTeam()
+                successMessage = message ?? "Đội đã sẵn sàng nhận nhiệm vụ"
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                errorMessage = serviceError.localizedDescription
+            } catch {
+                errorMessage = "Không thể cập nhật trạng thái đội: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func setTeamUnavailable() {
+        guard let currentTeam = team else { return }
+        guard isUpdatingTeamAvailability == false else { return }
+
+        errorMessage = nil
+        successMessage = nil
+        isUpdatingTeamAvailability = true
+        beginLoading()
+
+        Task {
+            defer {
+                isUpdatingTeamAvailability = false
+                endLoading()
+            }
+            do {
+                let message = try await RescueTeamService.shared.setTeamUnavailable(teamId: currentTeam.id)
+                team = try await RescueTeamService.shared.getMyTeam()
+                successMessage = message ?? "Đội đã chuyển sang trạng thái không sẵn sàng"
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                errorMessage = serviceError.localizedDescription
+            } catch {
+                errorMessage = "Không thể cập nhật trạng thái đội: \(error.localizedDescription)"
+            }
+        }
     }
 
     func loadMissions() {

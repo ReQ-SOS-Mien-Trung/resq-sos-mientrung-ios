@@ -48,7 +48,7 @@ struct IncidentRowView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        StatusBadge(text: incident.status, color: statusColor)
+                        StatusBadge(text: RescuerStatusBadgeText.incident(incident.status), color: statusColor)
                         Spacer()
                         if let raw = incident.createdAt {
                             Text(formattedDate(raw))
@@ -85,7 +85,7 @@ struct IncidentRowView: View {
     }
 
     private var statusColor: Color {
-        switch incident.status.lowercased() {
+        switch RescuerStatusBadgeText.normalized(incident.status) {
         case "reported":    return DS.Colors.warning
         case "acknowledged":return DS.Colors.info
         case "inprogress":  return DS.Colors.warning
