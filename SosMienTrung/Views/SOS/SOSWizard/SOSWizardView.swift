@@ -20,6 +20,7 @@ struct SOSWizardView: View {
     @State private var sentToServer = false
     @State private var showLocationRequiredAlert = false
     @State private var showTermsSheet = false
+    @State private var showRelativeProfilePicker = false
     
     init(bridgefyManager: BridgefyNetworkManager) {
         self.bridgefyManager = bridgefyManager
@@ -36,10 +37,17 @@ struct SOSWizardView: View {
                 
                 // Step content
                 TabView(selection: $formData.currentStep) {
+                        Step0ReportingModeView(formData: formData)
+                            .tag(SOSWizardStep.reportingMode)
+
                         Step0AutoInfoView(formData: formData, bridgefyManager: bridgefyManager, networkMonitor: networkMonitor)
                             .tag(SOSWizardStep.autoInfo)
                         
-                        Step1SelectTypeView(formData: formData)
+                        Step1SelectTypeView(
+                            formData: formData,
+                            onChangeSavedProfiles: { showRelativeProfilePicker = true },
+                            onSwitchToManual: { formData.switchToManualPersonSelection() }
+                        )
                             .tag(SOSWizardStep.selectType)
                         
                         Step2AReliefView(formData: formData)
@@ -82,7 +90,7 @@ struct SOSWizardView: View {
             .alert("⚠️ Chưa có vị trí", isPresented: $showLocationRequiredAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Hệ thống chưa lấy được vị trí GPS. Vui lòng đợi hoặc kiểm tra quyền truy cập vị trí trong Cài đặt.")
+                Text("Chưa có toạ độ hợp lệ. Vui lòng đợi GPS hoặc nhập địa chỉ để tra cứu vị trí.")
             }
             .onAppear {
                 // Enable battery monitoring sớm để có thời gian cập nhật
@@ -116,7 +124,7 @@ struct SOSWizardView: View {
             }
             
             HStack(spacing: DS.Spacing.md) {
-                if formData.currentStep != .autoInfo {
+                if formData.currentStep != .reportingMode {
                     Button { formData.goToPreviousStep() } label: {
                         HStack {
                             Image(systemName: "chevron.left")
@@ -148,8 +156,8 @@ struct SOSWizardView: View {
                         .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thick))
                         .shadow(color: .black.opacity(0.25), radius: 0, x: 3, y: 3)
                     }
-                    .disabled(isSending || !locationManager.hasValidLocation)
-                    .opacity(locationManager.hasValidLocation ? 1.0 : 0.5)
+                    .disabled(isSending || formData.effectiveLocation == nil)
+                    .opacity(formData.effectiveLocation == nil ? 0.5 : 1.0)
                 } else {
                     Button { formData.goToNextStep() } label: {
                         HStack {
@@ -172,6 +180,11 @@ struct SOSWizardView: View {
         .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
         .sheet(isPresented: $showTermsSheet) {
             SOSTermsSheet()
+        }
+        .sheet(isPresented: $showRelativeProfilePicker) {
+            RelativeProfilePickerSheet(initialSelectedProfileIds: formData.selectedRelativeProfileIds) { profiles in
+                formData.applySelectedRelativeProfiles(profiles)
+            }
         }
     }
     
@@ -270,7 +283,7 @@ struct SOSWizardView: View {
     
     private func sendSOS() {
         // Bắt buộc phải có vị trí
-        guard formData.autoInfo?.latitude != nil, formData.autoInfo?.longitude != nil else {
+        guard formData.effectiveLocation != nil else {
             showLocationRequiredAlert = true
             return
         }
@@ -304,7 +317,7 @@ struct SOSWizardView: View {
 struct SOSProgressBar: View {
     let currentStep: SOSWizardStep
     
-    private let totalSteps = 5
+    private let totalSteps = 6
     
     var body: some View {
         VStack(spacing: DS.Spacing.xs) {

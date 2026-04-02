@@ -93,11 +93,13 @@ class SettingsManager: ObservableObject {
 // MARK: - Settings View
 struct SettingsView: View {
     @ObservedObject var userProfile = UserProfile.shared
+    @ObservedObject private var relativeProfileStore = RelativeProfileStore.shared
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var keyManager = IdentityKeyManager.shared
     @StateObject private var identityStore = IdentityStore.shared
 
     @State private var showEditProfile = false
+    @State private var showRelativeProfiles = false
     @State private var showThemePicker = false
     @State private var showLanguagePicker = false
     @State private var showAbout = false
@@ -134,6 +136,15 @@ struct SettingsView: View {
                     settingsSection {
                         SettingsRow(icon: "person.fill", iconColor: DS.Colors.info, title: "Cập nhật thông tin", subtitle: "Tên, số điện thoại") {
                             showEditProfile = true
+                        }
+                        EditorialDivider()
+                        SettingsRow(
+                            icon: "person.3.fill",
+                            iconColor: DS.Colors.success,
+                            title: "Người thân & hồ sơ SOS",
+                            subtitle: relativeProfileSubtitle
+                        ) {
+                            showRelativeProfiles = true
                         }
                         EditorialDivider()
                         SettingsRow(icon: "arrow.left.arrow.right", iconColor: DS.Colors.warning, title: "Chuyển tài khoản", subtitle: identityStore.isTransferred ? "Đã chuyển sang thiết bị khác" : "Chuyển sang thiết bị mới") {
@@ -195,6 +206,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showEditProfile) {
             EditProfileView()
         }
+        .sheet(isPresented: $showRelativeProfiles) {
+            RelativeProfilesView()
+        }
         .fullScreenCover(isPresented: $showIdentityHandover) {
             IdentityHandoverView()
         }
@@ -240,6 +254,14 @@ struct SettingsView: View {
         case .transferred: return "Đã chuyển"
         case .revoked: return "Đã thu hồi"
         }
+    }
+
+    private var relativeProfileSubtitle: String {
+        let count = relativeProfileStore.profiles.count
+        if count == 0 {
+            return "Lưu sẵn người thân để chọn nhanh khi gửi SOS"
+        }
+        return "\(count) hồ sơ đã lưu"
     }
 
     // MARK: - Identity Transferred Banner

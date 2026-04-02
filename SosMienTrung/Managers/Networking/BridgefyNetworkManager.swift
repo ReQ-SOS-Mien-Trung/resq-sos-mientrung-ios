@@ -420,10 +420,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             ?? UIDevice.current.identifierForVendor?.uuidString
             ?? UUID().uuidString
 
-        // Lấy toạ độ nếu có, fallback về (0,0) để không block gửi API
-        let coords = locationManager.coordinates
-        let latitude  = coords?.latitude  ?? 0.0
-        let longitude = coords?.longitude ?? 0.0
+        // Ưu tiên toạ độ đã resolve từ địa chỉ, fallback GPS hiện tại.
+        let effectiveLocation = formData.effectiveLocation
+        let latitude = effectiveLocation?.latitude ?? 0.0
+        let longitude = effectiveLocation?.longitude ?? 0.0
 
         let timestamp = Date()
 

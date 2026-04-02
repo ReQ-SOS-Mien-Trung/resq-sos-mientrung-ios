@@ -20,6 +20,8 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     
     // Structured data
     var sharedPeople: [Person]
+    var personSourceMode: SOSPersonSourceMode
+    var selectedRelativeSnapshots: [SelectedRelativeSnapshot]
     var reliefData: ReliefData?
     var rescueData: SavedRescueData?
     var additionalDescription: String
@@ -31,9 +33,15 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     // Lịch sử gửi
     var sendHistory: [SOSSendEvent]
     
-    // Sender info
-    let senderName: String?
-    let senderPhone: String?
+    // Victim / reporter info
+    let reportingTarget: SOSReportingTarget
+    let victimName: String?
+    let victimPhone: String?
+    let reporterName: String?
+    let reporterPhone: String?
+    let addressQuery: String
+    let resolvedAddress: String?
+    let manualLocation: SOSManualLocation?
     
     /// Kiểm tra có phải của mình không
     var isMine: Bool
@@ -47,6 +55,8 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.longitude = longitude
         self.message = formData.toSOSMessage()
         self.sharedPeople = formData.sharedPeople
+        self.personSourceMode = formData.personSourceMode
+        self.selectedRelativeSnapshots = formData.selectedRelativeSnapshots
         
         // Lưu cả relief và rescue data nếu có
         if formData.needsReliefStep {
@@ -65,8 +75,14 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.status = .pending
         self.lastUpdated = Date()
         self.sendHistory = [SOSSendEvent(type: .created)]
-        self.senderName = formData.autoInfo?.userName
-        self.senderPhone = formData.autoInfo?.userPhone
+        self.reportingTarget = formData.reportingTarget
+        self.victimName = formData.effectiveVictimName
+        self.victimPhone = formData.effectiveVictimPhone
+        self.reporterName = formData.autoInfo?.userName
+        self.reporterPhone = formData.autoInfo?.userPhone
+        self.addressQuery = formData.addressQuery
+        self.resolvedAddress = formData.resolvedAddress
+        self.manualLocation = formData.manualLocation
         self.isMine = true
     }
     
@@ -98,6 +114,9 @@ struct SavedSOS: Codable, Identifiable, Equatable {
             formData.sharedPeopleCount = rescue.peopleCount
         }
 
+        formData.personSourceMode = personSourceMode
+        formData.selectedRelativeSnapshots = selectedRelativeSnapshots
+
         let restoredPeople = !sharedPeople.isEmpty
             ? sharedPeople
             : (rescueData?.people ?? [])
@@ -107,13 +126,20 @@ struct SavedSOS: Codable, Identifiable, Equatable {
             formData.syncPeopleCount()
         }
         
+        formData.reportingTarget = reportingTarget
+        formData.victimName = victimName ?? ""
+        formData.victimPhone = victimPhone ?? ""
+        formData.addressQuery = addressQuery
+        formData.resolvedAddress = resolvedAddress
+        formData.manualLocation = manualLocation
+
         // Set auto info nếu có location
         if let lat = latitude, let lon = longitude {
             formData.autoInfo = AutoCollectedInfo(
                 deviceId: UserProfile.shared.currentUser?.id.uuidString ?? "",
                 userId: AuthSessionStore.shared.session?.userId,
-                userName: senderName,
-                userPhone: senderPhone,
+                userName: reporterName,
+                userPhone: reporterPhone,
                 timestamp: timestamp,
                 latitude: lat,
                 longitude: lon
@@ -132,14 +158,28 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.longitude   = record.longitude
         self.message     = record.rawMessage
         self.sharedPeople = []
+        self.personSourceMode = .manual
+        self.selectedRelativeSnapshots = []
         self.reliefData  = nil
         self.rescueData  = nil
         self.additionalDescription = record.structuredData?.additionalDescription ?? ""
         self.status      = SOSServerRecord.mapStatus(record.status)
         self.lastUpdated = Date()
         self.sendHistory = [SOSSendEvent(type: .serverAcknowledged, note: "Đồng bộ từ server (trạng thái: \(record.status ?? "unknown"))")]
-        self.senderName  = record.senderInfo?.userName
-        self.senderPhone = record.senderInfo?.userPhone
+        self.reportingTarget = record.isSentOnBehalf == true ? .other : .self
+        self.victimName  = record.victimInfo?.userName ?? record.senderInfo?.userName
+        self.victimPhone = record.victimInfo?.userPhone ?? record.senderInfo?.userPhone
+        self.reporterName = record.reporterInfo?.userName ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userName)
+        self.reporterPhone = record.reporterInfo?.userPhone ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userPhone)
+        self.addressQuery = record.structuredData?.address ?? ""
+        self.resolvedAddress = record.structuredData?.address
+        if record.structuredData?.address != nil,
+           let latitude = record.latitude,
+           let longitude = record.longitude {
+            self.manualLocation = SOSManualLocation(latitude: latitude, longitude: longitude, accuracy: record.locationAccuracy)
+        } else {
+            self.manualLocation = nil
+        }
         self.isMine      = true
     }
     
@@ -147,13 +187,17 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     
     enum CodingKeys: String, CodingKey {
         case id, timestamp, sosType, latitude, longitude, message
-        case sharedPeople, reliefData, rescueData, additionalDescription
+        case sharedPeople, personSourceMode, selectedRelativeSnapshots, reliefData, rescueData, additionalDescription
         case status, lastUpdated, sendHistory
+        case reportingTarget, victimName, victimPhone, reporterName, reporterPhone
+        case addressQuery, resolvedAddress, manualLocation
         case senderName, senderPhone, isMine
     }
     
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        let legacySenderName = try c.decodeIfPresent(String.self, forKey: .senderName)
+        let legacySenderPhone = try c.decodeIfPresent(String.self, forKey: .senderPhone)
         id                   = try c.decode(String.self, forKey: .id)
         timestamp            = try c.decode(Date.self, forKey: .timestamp)
         sosType              = try c.decodeIfPresent(SOSType.self, forKey: .sosType)
@@ -161,6 +205,8 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         longitude            = try c.decodeIfPresent(Double.self, forKey: .longitude)
         message              = try c.decode(String.self, forKey: .message)
         sharedPeople         = (try? c.decodeIfPresent([Person].self, forKey: .sharedPeople)) ?? []
+        personSourceMode     = try c.decodeIfPresent(SOSPersonSourceMode.self, forKey: .personSourceMode) ?? .manual
+        selectedRelativeSnapshots = (try? c.decodeIfPresent([SelectedRelativeSnapshot].self, forKey: .selectedRelativeSnapshots)) ?? []
         reliefData           = try c.decodeIfPresent(ReliefData.self, forKey: .reliefData)
         rescueData           = try c.decodeIfPresent(SavedRescueData.self, forKey: .rescueData)
         additionalDescription = try c.decode(String.self, forKey: .additionalDescription)
@@ -168,9 +214,46 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         lastUpdated          = try c.decode(Date.self, forKey: .lastUpdated)
         // sendHistory không tồn tại ở dữ liệu cũ → mặc định []
         sendHistory          = (try? c.decodeIfPresent([SOSSendEvent].self, forKey: .sendHistory)) ?? []
-        senderName           = try c.decodeIfPresent(String.self, forKey: .senderName)
-        senderPhone          = try c.decodeIfPresent(String.self, forKey: .senderPhone)
+        reportingTarget      = try c.decodeIfPresent(SOSReportingTarget.self, forKey: .reportingTarget) ?? .self
+        victimName           = try c.decodeIfPresent(String.self, forKey: .victimName) ?? legacySenderName
+        victimPhone          = try c.decodeIfPresent(String.self, forKey: .victimPhone) ?? legacySenderPhone
+        reporterName         = try c.decodeIfPresent(String.self, forKey: .reporterName) ?? legacySenderName
+        reporterPhone        = try c.decodeIfPresent(String.self, forKey: .reporterPhone) ?? legacySenderPhone
+        addressQuery         = try c.decodeIfPresent(String.self, forKey: .addressQuery) ?? ""
+        resolvedAddress      = try c.decodeIfPresent(String.self, forKey: .resolvedAddress)
+        manualLocation       = try c.decodeIfPresent(SOSManualLocation.self, forKey: .manualLocation)
         isMine               = try c.decode(Bool.self, forKey: .isMine)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sosType, forKey: .sosType)
+        try c.encodeIfPresent(latitude, forKey: .latitude)
+        try c.encodeIfPresent(longitude, forKey: .longitude)
+        try c.encode(message, forKey: .message)
+        try c.encode(sharedPeople, forKey: .sharedPeople)
+        try c.encode(personSourceMode, forKey: .personSourceMode)
+        try c.encode(selectedRelativeSnapshots, forKey: .selectedRelativeSnapshots)
+        try c.encodeIfPresent(reliefData, forKey: .reliefData)
+        try c.encodeIfPresent(rescueData, forKey: .rescueData)
+        try c.encode(additionalDescription, forKey: .additionalDescription)
+        try c.encode(status, forKey: .status)
+        try c.encode(lastUpdated, forKey: .lastUpdated)
+        try c.encode(sendHistory, forKey: .sendHistory)
+        try c.encode(reportingTarget, forKey: .reportingTarget)
+        try c.encodeIfPresent(victimName, forKey: .victimName)
+        try c.encodeIfPresent(victimPhone, forKey: .victimPhone)
+        try c.encodeIfPresent(reporterName, forKey: .reporterName)
+        try c.encodeIfPresent(reporterPhone, forKey: .reporterPhone)
+        try c.encode(addressQuery, forKey: .addressQuery)
+        try c.encodeIfPresent(resolvedAddress, forKey: .resolvedAddress)
+        try c.encodeIfPresent(manualLocation, forKey: .manualLocation)
+        // Keep legacy keys so older local payloads can still read the victim identity.
+        try c.encodeIfPresent(victimName, forKey: .senderName)
+        try c.encodeIfPresent(victimPhone, forKey: .senderPhone)
+        try c.encode(isMine, forKey: .isMine)
     }
 }
 
@@ -330,6 +413,9 @@ struct SOSServerRecord: Codable {
     let rawMessage: String
     let structuredData: SOSStructuredData?
     let networkMetadata: SOSNetworkMetadata?
+    let victimInfo: SOSVictimInfo?
+    let reporterInfo: SOSReporterInfo?
+    let isSentOnBehalf: Bool?
     let senderInfo: SOSSenderInfo?
     let originId: String?
     let status: String?
@@ -348,6 +434,9 @@ struct SOSServerRecord: Codable {
         case id, packetId, clusterId, userId, sosType, rawMessage
         case structuredData = "structuredData"
         case networkMetadata = "networkMetadata"
+        case victimInfo = "victimInfo"
+        case reporterInfo = "reporterInfo"
+        case isSentOnBehalf = "isSentOnBehalf"
         case senderInfo = "senderInfo"
         case originId, status, priorityLevel, waitTimeMinutes
         case latitude, longitude, locationAccuracy, timestamp

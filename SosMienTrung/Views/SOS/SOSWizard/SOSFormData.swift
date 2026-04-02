@@ -10,6 +10,24 @@ import Combine
 import CoreLocation
 import SwiftUI
 
+fileprivate extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+fileprivate extension Optional where Wrapped == String {
+    var nilIfBlank: String? {
+        switch self {
+        case .some(let value):
+            return value.nilIfBlank
+        case .none:
+            return nil
+        }
+    }
+}
+
 // MARK: - Priority Level
 
 /// Mức ưu tiên P1–P4 theo triage rule
@@ -39,6 +57,43 @@ enum PriorityLevel: String, Codable {
 }
 
 // MARK: - Enums
+
+enum SOSReportingTarget: String, Codable, CaseIterable, Identifiable {
+    case `self` = "SELF"
+    case other = "OTHER"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .self: return "Tôi đang cần cứu"
+        case .other: return "Tôi báo hộ người khác"
+        }
+    }
+
+    var optionLabel: String {
+        switch self {
+        case .self: return "Lựa chọn A"
+        case .other: return "Lựa chọn B"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .self:
+            return "Tạo 1 yêu cầu SOS cho bản thân bạn hoặc nhóm người đang ở cùng bạn."
+        case .other:
+            return "Tạo 1 yêu cầu SOS cho 1 hoặc nhiều người khác đang cần cứu nhưng không thể tự gửi."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .self: return "person.crop.circle.badge.exclamationmark"
+        case .other: return "person.2.wave.2.fill"
+        }
+    }
+}
 
 /// Loại SOS chính
 enum SOSType: String, Codable, CaseIterable {
@@ -541,7 +596,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
 
 /// Thông tin số người
 struct PeopleCount: Codable, Equatable {
-    var adults: Int = 1        // Người lớn (15-60)
+    var adults: Int = 0        // Người lớn (15-60)
     var children: Int = 0      // Trẻ em (< 15 tuổi)
     var elderly: Int = 0       // Người già (> 60 tuổi)
     
@@ -562,10 +617,18 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
         customName.isEmpty ? "\(type.title) \(index)" : customName
     }
     
-    enum PersonType: String, Codable {
+    enum PersonType: String, Codable, Hashable {
         case adult = "ADULT"
         case child = "CHILD"
         case elderly = "ELDERLY"
+
+        var idPrefix: String {
+            switch self {
+            case .adult: return "adult"
+            case .child: return "child"
+            case .elderly: return "elderly"
+            }
+        }
         
         var title: String {
             switch self {
@@ -662,6 +725,19 @@ struct AutoCollectedInfo: Codable {
         self.isOnline = isOnline
         self.batteryLevel = batteryLevel
     }
+}
+
+struct SOSManualLocation: Codable, Equatable {
+    let latitude: Double
+    let longitude: Double
+    let accuracy: Double?
+}
+
+struct SavedRelativeProfileNoteItem: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let personType: Person.PersonType
+    let summaryLines: [String]
 }
 
 /// Dữ liệu cứu trợ (relief)
@@ -773,12 +849,12 @@ struct RescueData: Codable, Equatable {
         
         var newPeople: [Person] = []
         
-        // Tạo người lớn (luôn ít nhất 1)
-        let adultCount = max(1, peopleCount.adults)
-        for i in 1...adultCount {
-            var person = Person(id: "adult_\(i)", type: .adult, index: i)
-            person.customName = existingNames[person.id] ?? ""
-            newPeople.append(person)
+        if peopleCount.adults > 0 {
+            for i in 1...peopleCount.adults {
+                var person = Person(id: "adult_\(i)", type: .adult, index: i)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
+            }
         }
         
         // Tạo trẻ em
@@ -840,13 +916,27 @@ struct RescueData: Codable, Equatable {
 // MARK: - Main Form Data
 
 /// Form data chính cho SOS Wizard
-class SOSFormData: ObservableObject {
+@MainActor
+final class SOSFormData: ObservableObject {
     // Step tracking
-    @Published var currentStep: SOSWizardStep = .autoInfo
+    @Published var currentStep: SOSWizardStep = .reportingMode
     @Published var completedSteps: Set<SOSWizardStep> = []
     
     // Auto-collected (Step 0)
     @Published var autoInfo: AutoCollectedInfo?
+    @Published var reportingTarget: SOSReportingTarget = .self {
+        didSet {
+            reportingTargetSelectionMade = true
+        }
+    }
+    @Published private(set) var reportingTargetSelectionMade: Bool = false
+    @Published var victimName: String = ""
+    @Published var victimPhone: String = ""
+    @Published var addressQuery: String = ""
+    @Published var resolvedAddress: String?
+    @Published var manualLocation: SOSManualLocation?
+    @Published var personSourceMode: SOSPersonSourceMode = .manual
+    @Published var selectedRelativeSnapshots: [SelectedRelativeSnapshot] = []
     
     // Step 1: Loại SOS - có thể chọn 1 hoặc cả 2
     @Published var selectedTypes: Set<SOSType> = []
@@ -862,6 +952,7 @@ class SOSFormData: ObservableObject {
     // Số người cần hỗ trợ (shared giữa rescue và relief)
     @Published var sharedPeopleCount: PeopleCount = PeopleCount() {
         didSet {
+            guard !isUpdatingSharedPeopleCount else { return }
             syncPeopleCount()
         }
     }
@@ -878,6 +969,8 @@ class SOSFormData: ObservableObject {
     
     // Quick preset applied
     @Published var appliedPreset: QuickPreset?
+    
+    private var isUpdatingSharedPeopleCount = false
 
     init() {
         syncPeopleCount()
@@ -886,13 +979,18 @@ class SOSFormData: ObservableObject {
     // MARK: - Computed Properties
     
     var canSendMinimalSOS: Bool {
-        // Có thể gửi SOS tối thiểu nếu có vị trí
-        autoInfo?.latitude != nil && autoInfo?.longitude != nil
+        effectiveLocation != nil
     }
     
     var canProceedToNextStep: Bool {
         switch currentStep {
+        case .reportingMode:
+            return reportingTargetSelectionMade
         case .autoInfo:
+            guard effectiveLocation != nil else { return false }
+            if reportingTarget == .other {
+                return victimName.nilIfBlank != nil
+            }
             return autoInfo != nil
         case .selectType:
             return !selectedTypes.isEmpty && sharedPeopleCount.total > 0
@@ -922,6 +1020,257 @@ class SOSFormData: ObservableObject {
     
     var needsReliefStep: Bool {
         selectedTypes.contains(.relief)
+    }
+
+    var usesSavedRelativeProfiles: Bool {
+        !selectedRelativeSnapshots.isEmpty
+    }
+
+    var savedRelativeProfileBaseCount: PeopleCount {
+        selectedRelativeSnapshots.reduce(into: PeopleCount()) { partialResult, snapshot in
+            switch snapshot.personType {
+            case .adult:
+                partialResult.adults += 1
+            case .child:
+                partialResult.children += 1
+            case .elderly:
+                partialResult.elderly += 1
+            }
+        }
+    }
+
+    var hasManualAdditionalPeople: Bool {
+        guard usesSavedRelativeProfiles else { return false }
+        return sharedPeopleCount.adults > savedRelativeProfileBaseCount.adults ||
+            sharedPeopleCount.children > savedRelativeProfileBaseCount.children ||
+            sharedPeopleCount.elderly > savedRelativeProfileBaseCount.elderly
+    }
+
+    var selectedRelativeProfileIds: Set<String> {
+        Set(selectedRelativeSnapshots.map(\.profileId))
+    }
+
+    var effectiveLocation: SOSManualLocation? {
+        if let manualLocation {
+            return manualLocation
+        }
+        guard let latitude = autoInfo?.latitude, let longitude = autoInfo?.longitude else {
+            return nil
+        }
+        return SOSManualLocation(
+            latitude: latitude,
+            longitude: longitude,
+            accuracy: autoInfo?.accuracy
+        )
+    }
+
+    var locationSourceTitle: String {
+        if manualLocation != nil {
+            return "Vị trí đã chọn"
+        }
+        return reportingTarget == .other ? "Vị trí SOS" : "GPS thiết bị"
+    }
+
+    var addressToSend: String? {
+        resolvedAddress?.nilIfBlank ?? addressQuery.nilIfBlank
+    }
+
+    var effectiveStatusBatteryLevel: Int? {
+        switch reportingTarget {
+        case .self:
+            return autoInfo?.batteryLevel
+        case .other:
+            return nil
+        }
+    }
+
+    var effectiveStatusIsOnline: Bool? {
+        switch reportingTarget {
+        case .self:
+            return autoInfo?.isOnline
+        case .other:
+            return false
+        }
+    }
+
+    var effectiveVictimName: String? {
+        if usesSavedRelativeProfiles {
+            return victimName.nilIfBlank
+        }
+
+        switch reportingTarget {
+        case .self:
+            return autoInfo?.userName?.nilIfBlank ?? UserProfile.shared.currentUser?.name.nilIfBlank
+        case .other:
+            return victimName.nilIfBlank
+        }
+    }
+
+    var effectiveVictimPhone: String? {
+        if usesSavedRelativeProfiles {
+            return victimPhone.nilIfBlank
+        }
+
+        switch reportingTarget {
+        case .self:
+            return autoInfo?.userPhone?.nilIfBlank ?? UserProfile.shared.currentUser?.phoneNumber.nilIfBlank
+        case .other:
+            return victimPhone.nilIfBlank
+        }
+    }
+
+    var effectiveVictimInfo: SOSVictimInfo? {
+        let userId = (reportingTarget == .self && !usesSavedRelativeProfiles) ? autoInfo?.userId : nil
+        let name = effectiveVictimName
+        let phone = effectiveVictimPhone
+        if userId == nil && name == nil && phone == nil {
+            return nil
+        }
+        return SOSVictimInfo(
+            userId: userId,
+            userName: name,
+            userPhone: phone
+        )
+    }
+
+    var effectiveReporterInfo: SOSReporterInfo? {
+        guard let info = autoInfo else { return nil }
+        return SOSReporterInfo(
+            deviceId: info.deviceId,
+            userId: info.userId,
+            userName: info.userName,
+            userPhone: info.userPhone,
+            batteryLevel: effectiveStatusBatteryLevel,
+            isOnline: effectiveStatusIsOnline
+        )
+    }
+
+    var legacySenderInfo: SOSSenderInfo? {
+        guard let info = autoInfo else { return nil }
+        return SOSSenderInfo(
+            deviceId: info.deviceId,
+            userId: info.userId,
+            userName: effectiveVictimName,
+            userPhone: effectiveVictimPhone,
+            batteryLevel: effectiveStatusBatteryLevel,
+            isOnline: effectiveStatusIsOnline
+        )
+    }
+
+    var packetReporterInfo: SOSReporterInfo? {
+        let currentUser = UserProfile.shared.currentUser
+        let userId = autoInfo?.userId ?? AuthSessionStore.shared.session?.userId
+        let userName = autoInfo?.userName?.nilIfBlank ?? currentUser?.name.nilIfBlank
+        let userPhone = autoInfo?.userPhone?.nilIfBlank ?? currentUser?.phoneNumber.nilIfBlank
+        let deviceId = autoInfo?.deviceId
+
+        if deviceId == nil && userId == nil && userName == nil && userPhone == nil {
+            return nil
+        }
+
+        return SOSReporterInfo(
+            deviceId: deviceId,
+            userId: userId,
+            userName: userName,
+            userPhone: userPhone,
+            batteryLevel: effectiveStatusBatteryLevel,
+            isOnline: effectiveStatusIsOnline
+        )
+    }
+
+    var packetSenderInfo: SOSSenderInfo? {
+        packetReporterInfo
+    }
+
+    var packetVictimName: String? {
+        let totalCount = sharedPeopleCount.total
+        if totalCount > 1 {
+            return "Nhóm \(totalCount) người"
+        }
+        return effectiveVictimName
+    }
+
+    var packetVictimPhone: String? {
+        packetReporterInfo?.userPhone?.nilIfBlank
+    }
+
+    var packetVictimInfo: SOSVictimInfo? {
+        let totalCount = sharedPeopleCount.total
+        let userId: String? = (totalCount <= 1 && reportingTarget == .self && !usesSavedRelativeProfiles)
+            ? packetReporterInfo?.userId
+            : nil
+        let userName = packetVictimName
+        let userPhone = packetVictimPhone
+
+        if userId == nil && userName == nil && userPhone == nil {
+            return nil
+        }
+
+        return SOSVictimInfo(
+            userId: userId,
+            userName: userName,
+            userPhone: userPhone
+        )
+    }
+
+    var savedProfileNoteItems: [SavedRelativeProfileNoteItem] {
+        selectedRelativeSnapshots.compactMap { snapshot in
+            let summaryLines = snapshot.storedInfoLines
+            guard !summaryLines.isEmpty else { return nil }
+
+            return SavedRelativeProfileNoteItem(
+                id: snapshot.personId,
+                displayName: person(for: snapshot.personId)?.displayName ?? snapshot.displayName,
+                personType: snapshot.personType,
+                summaryLines: summaryLines
+            )
+        }
+    }
+
+    var savedProfileContextMessage: String? {
+        let lines = savedProfileNoteItems.compactMap { item -> String? in
+            guard !item.summaryLines.isEmpty else { return nil }
+            return "\(item.displayName) (\(item.summaryLines.joined(separator: "; ")))"
+        }
+
+        guard !lines.isEmpty else { return nil }
+        return "Hồ sơ đã lưu: \(lines.joined(separator: " | "))"
+    }
+
+    var savedProfileMedicalContextMessage: String? {
+        let lines = selectedRelativeSnapshots.compactMap { snapshot -> String? in
+            let summaryLines = packetMedicalContextLines(for: snapshot)
+            guard !summaryLines.isEmpty else { return nil }
+            let displayName = person(for: snapshot.personId)?.displayName ?? snapshot.displayName
+            return "\(displayName) (\(summaryLines.joined(separator: "; ")))"
+        }
+
+        guard !lines.isEmpty else { return nil }
+        return "Thông tin y tế nền: \(lines.joined(separator: " | "))"
+    }
+
+    var mergedAdditionalDescription: String? {
+        let userNote = additionalDescription.nilIfBlank
+        let savedProfileNote = savedProfileMedicalContextMessage.nilIfBlank
+
+        switch (userNote, savedProfileNote) {
+        case let (.some(userNote), .some(savedProfileNote)):
+            return "\(userNote)\n\(savedProfileNote)"
+        case let (.some(userNote), .none):
+            return userNote
+        case let (.none, .some(savedProfileNote)):
+            return savedProfileNote
+        case (.none, .none):
+            return nil
+        }
+    }
+
+    var packetAdditionalDescription: String? {
+        mergedAdditionalDescription.nilIfBlank
+    }
+
+    var userEnteredAdditionalDescription: String? {
+        additionalDescription.nilIfBlank
     }
     
     /// PriorityScore = (Σ(requestTypeScore) + Σ(personMedicalScore)) × situationMultiplier, capped at 100
@@ -964,8 +1313,17 @@ class SOSFormData: ObservableObject {
     // MARK: - Methods
     
     func reset() {
-        currentStep = .autoInfo
+        currentStep = .reportingMode
         completedSteps = []
+        reportingTarget = .self
+        reportingTargetSelectionMade = false
+        victimName = ""
+        victimPhone = ""
+        addressQuery = ""
+        resolvedAddress = nil
+        manualLocation = nil
+        personSourceMode = .manual
+        selectedRelativeSnapshots = []
         selectedTypes = []
         reliefData = ReliefData()
         rescueData = RescueData()
@@ -986,6 +1344,8 @@ class SOSFormData: ObservableObject {
         syncPeopleCount()
         
         switch currentStep {
+        case .reportingMode:
+            currentStep = .autoInfo
         case .autoInfo:
             currentStep = .selectType
         case .selectType:
@@ -1015,8 +1375,10 @@ class SOSFormData: ObservableObject {
     
     func goToPreviousStep() {
         switch currentStep {
-        case .autoInfo:
+        case .reportingMode:
             break
+        case .autoInfo:
+            currentStep = .reportingMode
         case .selectType:
             currentStep = .autoInfo
         case .relief:
@@ -1044,14 +1406,76 @@ class SOSFormData: ObservableObject {
     
     /// Sync shared people count vào rescue và relief data
     func syncPeopleCount() {
+        if usesSavedRelativeProfiles {
+            syncPeopleFromSelectedSnapshots()
+        } else {
+            personSourceMode = .manual
+            syncManualPeopleCount()
+        }
+    }
+
+    func applySelectedRelativeProfiles(_ profiles: [EmergencyRelativeProfile]) {
+        guard !profiles.isEmpty else {
+            switchToManualPersonSelection()
+            return
+        }
+
+        var typeCounters: [Person.PersonType: Int] = [:]
+        selectedRelativeSnapshots = profiles.map { profile in
+            let nextIndex = (typeCounters[profile.personType] ?? 0) + 1
+            typeCounters[profile.personType] = nextIndex
+            return SelectedRelativeSnapshot(profile: profile, personIndex: nextIndex)
+        }
+
+        setSharedPeopleCountSilently(savedRelativeProfileBaseCount)
+        syncPeopleCount()
+        prefillSpecialDietFromSavedProfiles()
+        prefillClothingInfoFromSavedProfiles()
+    }
+
+    func switchToManualPersonSelection() {
+        let currentPeople = sharedPeople
+        let currentCount = PeopleCount(
+            adults: currentPeople.filter { $0.type == .adult }.count,
+            children: currentPeople.filter { $0.type == .child }.count,
+            elderly: currentPeople.filter { $0.type == .elderly }.count
+        )
+
+        var typeCounters: [Person.PersonType: Int] = [:]
+        var idMap: [String: String] = [:]
+        let convertedPeople = currentPeople.map { person -> Person in
+            let nextIndex = (typeCounters[person.type] ?? 0) + 1
+            typeCounters[person.type] = nextIndex
+
+            let newId = "\(person.type.idPrefix)_\(nextIndex)"
+            idMap[person.id] = newId
+
+            var converted = Person(id: newId, type: person.type, index: nextIndex)
+            converted.customName = person.customName
+            return converted
+        }
+
+        personSourceMode = .manual
+        selectedRelativeSnapshots = []
+        setSharedPeopleCountSilently(currentCount)
+        sharedPeople = convertedPeople
+        rescueData.peopleCount = currentCount
+        reliefData.peopleCount = currentCount
+        rescueData.people = convertedPeople
+
+        remapPersonScopedData(using: idMap, validIds: Set(convertedPeople.map(\.id)))
+    }
+
+    private func syncManualPeopleCount() {
         let existingNames = Dictionary(uniqueKeysWithValues: sharedPeople.map { ($0.id, $0.customName) })
         var newPeople: [Person] = []
 
-        let adultCount = max(1, sharedPeopleCount.adults)
-        for index in 1...adultCount {
-            var person = Person(id: "adult_\(index)", type: .adult, index: index)
-            person.customName = existingNames[person.id] ?? ""
-            newPeople.append(person)
+        if sharedPeopleCount.adults > 0 {
+            for index in 1...sharedPeopleCount.adults {
+                var person = Person(id: "adult_\(index)", type: .adult, index: index)
+                person.customName = existingNames[person.id] ?? ""
+                newPeople.append(person)
+            }
         }
 
         if sharedPeopleCount.children > 0 {
@@ -1079,8 +1503,54 @@ class SOSFormData: ObservableObject {
         reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
     }
 
+    private func syncPeopleFromSelectedSnapshots() {
+        let currentNames = Dictionary(uniqueKeysWithValues: sharedPeople.map { ($0.id, $0.customName) })
+        let minimumCount = savedRelativeProfileBaseCount
+        let counts = PeopleCount(
+            adults: max(sharedPeopleCount.adults, minimumCount.adults),
+            children: max(sharedPeopleCount.children, minimumCount.children),
+            elderly: max(sharedPeopleCount.elderly, minimumCount.elderly)
+        )
+
+        let selectedPeople = selectedRelativeSnapshots.map { snapshot -> Person in
+            var person = Person(
+                id: snapshot.personId,
+                type: snapshot.personType,
+                index: snapshot.personIndex
+            )
+            person.customName = currentNames[snapshot.personId] ?? snapshot.displayName
+            return person
+        }
+
+        let manualSupplementalPeople = makeManualSupplementalPeople(
+            totalCount: counts,
+            minimumCount: minimumCount,
+            existingNames: currentNames
+        )
+        let allPeople = selectedPeople + manualSupplementalPeople
+
+        setSharedPeopleCountSilently(counts)
+        sharedPeople = allPeople
+        rescueData.peopleCount = counts
+        reliefData.peopleCount = counts
+        rescueData.people = allPeople
+
+        let validIds = Set(allPeople.map(\.id))
+        rescueData.syncToValidPeople(validIds: validIds)
+        reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: counts.total)
+        personSourceMode = hasManualAdditionalPeople ? .mixed : .savedProfiles
+        refreshVictimIdentityFromSavedSelection()
+    }
+
     func restoreSharedPeople(_ people: [Person]) {
         sharedPeople = people
+        setSharedPeopleCountSilently(
+            PeopleCount(
+                adults: people.filter { $0.type == .adult }.count,
+                children: people.filter { $0.type == .child }.count,
+                elderly: people.filter { $0.type == .elderly }.count
+            )
+        )
         syncPeopleCount()
     }
 
@@ -1099,6 +1569,179 @@ class SOSFormData: ObservableObject {
 
     func orderedPeople(for personIds: Set<String>) -> [Person] {
         sharedPeople.filter { personIds.contains($0.id) }
+    }
+
+    func selectedRelativeSnapshot(for personId: String) -> SelectedRelativeSnapshot? {
+        selectedRelativeSnapshots.first(where: { $0.personId == personId })
+    }
+
+    func packetMedicalContextLines(for snapshot: SelectedRelativeSnapshot) -> [String] {
+        var lines = snapshot.medicalProfile.summaryLines
+        if let medicalBaselineNote = snapshot.medicalBaselineNote.nilIfBlank {
+            lines.append("Ghi chú y tế nền: \(medicalBaselineNote)")
+        }
+        if let specialNeedsNote = snapshot.specialNeedsNote.nilIfBlank {
+            lines.append("Yêu cầu đặc biệt: \(specialNeedsNote)")
+        }
+        return lines
+    }
+
+    func prefillSpecialDietFromSavedProfiles() {
+        guard usesSavedRelativeProfiles else { return }
+
+        for snapshot in selectedRelativeSnapshots {
+            guard let specialDietNote = snapshot.specialDietNote.nilIfBlank else { continue }
+
+            let currentDescription = reliefData.specialDietInfoByPerson[snapshot.personId]?
+                .dietDescription
+                .nilIfBlank
+            reliefData.specialDietPersonIds.insert(snapshot.personId)
+            reliefData.specialDietInfoByPerson[snapshot.personId] = PersonSpecialDietInfo(
+                personId: snapshot.personId,
+                dietDescription: currentDescription ?? specialDietNote
+            )
+        }
+
+        reliefData.syncToValidPeople(
+            validIds: Set(sharedPeople.map(\.id)),
+            maxPeopleCount: sharedPeopleCount.total
+        )
+    }
+
+    func prefillClothingInfoFromSavedProfiles() {
+        guard usesSavedRelativeProfiles else { return }
+
+        for snapshot in selectedRelativeSnapshots {
+            guard let gender = snapshot.gender else { continue }
+            let currentGender = reliefData.clothingInfoByPerson[snapshot.personId]?.gender
+            reliefData.clothingInfoByPerson[snapshot.personId] = ClothingPersonInfo(
+                personId: snapshot.personId,
+                gender: currentGender ?? gender
+            )
+        }
+
+        reliefData.syncToValidPeople(
+            validIds: Set(sharedPeople.map(\.id)),
+            maxPeopleCount: sharedPeopleCount.total
+        )
+    }
+
+    private func setSharedPeopleCountSilently(_ count: PeopleCount) {
+        guard sharedPeopleCount != count else { return }
+        isUpdatingSharedPeopleCount = true
+        sharedPeopleCount = count
+        isUpdatingSharedPeopleCount = false
+    }
+
+    private func makeManualSupplementalPeople(
+        totalCount: PeopleCount,
+        minimumCount: PeopleCount,
+        existingNames: [String: String]
+    ) -> [Person] {
+        var people: [Person] = []
+        appendManualSupplementalPeople(
+            to: &people,
+            type: .adult,
+            totalCount: totalCount.adults,
+            minimumCount: minimumCount.adults,
+            existingNames: existingNames
+        )
+        appendManualSupplementalPeople(
+            to: &people,
+            type: .child,
+            totalCount: totalCount.children,
+            minimumCount: minimumCount.children,
+            existingNames: existingNames
+        )
+        appendManualSupplementalPeople(
+            to: &people,
+            type: .elderly,
+            totalCount: totalCount.elderly,
+            minimumCount: minimumCount.elderly,
+            existingNames: existingNames
+        )
+        return people
+    }
+
+    private func appendManualSupplementalPeople(
+        to people: inout [Person],
+        type: Person.PersonType,
+        totalCount: Int,
+        minimumCount: Int,
+        existingNames: [String: String]
+    ) {
+        guard totalCount > minimumCount else { return }
+
+        for index in (minimumCount + 1)...totalCount {
+            let personId = "manual_\(type.idPrefix)_\(index)"
+            var person = Person(id: personId, type: type, index: index)
+            person.customName = existingNames[personId] ?? ""
+            people.append(person)
+        }
+    }
+
+    private func refreshVictimIdentityFromSavedSelection() {
+        guard usesSavedRelativeProfiles else { return }
+
+        let totalCount = sharedPeopleCount.total
+        guard totalCount > 0 else {
+            victimName = ""
+            victimPhone = ""
+            return
+        }
+
+        if totalCount == 1,
+           selectedRelativeSnapshots.count == 1,
+           !hasManualAdditionalPeople,
+           let snapshot = selectedRelativeSnapshots.first {
+            victimName = snapshot.displayName
+            victimPhone = snapshot.phoneNumber ?? ""
+        } else {
+            victimName = "Nhóm \(totalCount) người"
+            victimPhone = ""
+        }
+    }
+
+    private func remapPersonScopedData(using idMap: [String: String], validIds: Set<String>) {
+        reliefData.specialDietPersonIds = Set(
+            reliefData.specialDietPersonIds.compactMap { idMap[$0] }
+        )
+        reliefData.specialDietInfoByPerson = Dictionary(
+            uniqueKeysWithValues: reliefData.specialDietInfoByPerson.compactMap { key, value in
+                guard let newKey = idMap[key] else { return nil }
+                return (newKey, PersonSpecialDietInfo(personId: newKey, dietDescription: value.dietDescription))
+            }
+        )
+
+        reliefData.clothingPersonIds = Set(
+            reliefData.clothingPersonIds.compactMap { idMap[$0] }
+        )
+        reliefData.clothingInfoByPerson = Dictionary(
+            uniqueKeysWithValues: reliefData.clothingInfoByPerson.compactMap { key, value in
+                guard let newKey = idMap[key] else { return nil }
+                return (newKey, ClothingPersonInfo(personId: newKey, gender: value.gender))
+            }
+        )
+
+        rescueData.injuredPersonIds = Set(
+            rescueData.injuredPersonIds.compactMap { idMap[$0] }
+        )
+        rescueData.medicalInfoByPerson = Dictionary(
+            uniqueKeysWithValues: rescueData.medicalInfoByPerson.compactMap { key, value in
+                guard let newKey = idMap[key] else { return nil }
+                return (
+                    newKey,
+                    PersonMedicalInfo(
+                        personId: newKey,
+                        medicalIssues: value.medicalIssues,
+                        otherDescription: value.otherDescription
+                    )
+                )
+            }
+        )
+
+        rescueData.syncToValidPeople(validIds: validIds)
+        reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
     }
     
     /// Apply quick preset
@@ -1225,8 +1868,8 @@ class SOSFormData: ObservableObject {
         }
         
         // Mô tả thêm
-        if !additionalDescription.isEmpty {
-            parts.append("Ghi chú: \(additionalDescription)")
+        if let userEnteredAdditionalDescription {
+            parts.append("Ghi chú: \(userEnteredAdditionalDescription.replacingOccurrences(of: "\n", with: "; "))")
         }
         
         return parts.joined(separator: " | ")
@@ -1238,7 +1881,7 @@ class SOSFormData: ObservableObject {
             sosType: sosType?.rawValue,
             reliefData: needsReliefStep ? reliefData : nil,
             rescueData: needsRescueStep ? rescueData : nil,
-            additionalDescription: additionalDescription.isEmpty ? nil : additionalDescription,
+            additionalDescription: packetAdditionalDescription,
             priorityScore: priorityScore,
             autoInfo: autoInfo
         )
@@ -1248,12 +1891,13 @@ class SOSFormData: ObservableObject {
 // MARK: - Wizard Steps
 
 enum SOSWizardStep: Int, CaseIterable, Comparable {
-    case autoInfo = 0
-    case selectType = 1
-    case relief = 2     // 2A
-    case rescue = 3     // 2B (same step number conceptually)
-    case additionalInfo = 4
-    case review = 5
+    case reportingMode = 0
+    case autoInfo = 1
+    case selectType = 2
+    case relief = 3     // 2A
+    case rescue = 4     // 2B (same step number conceptually)
+    case additionalInfo = 5
+    case review = 6
     
     static func < (lhs: SOSWizardStep, rhs: SOSWizardStep) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -1261,7 +1905,8 @@ enum SOSWizardStep: Int, CaseIterable, Comparable {
     
     var title: String {
         switch self {
-        case .autoInfo: return "Thông tin tự động"
+        case .reportingMode: return "Phương thức gửi SOS"
+        case .autoInfo: return "Nạn nhân & vị trí"
         case .selectType: return "Loại SOS"
         case .relief: return "Chi tiết cứu trợ"
         case .rescue: return "Chi tiết cứu hộ"
@@ -1272,11 +1917,12 @@ enum SOSWizardStep: Int, CaseIterable, Comparable {
     
     var stepNumber: Int {
         switch self {
-        case .autoInfo: return 0
-        case .selectType: return 1
-        case .relief, .rescue: return 2
-        case .additionalInfo: return 3
-        case .review: return 4
+        case .reportingMode: return 0
+        case .autoInfo: return 1
+        case .selectType: return 2
+        case .relief, .rescue: return 3
+        case .additionalInfo: return 4
+        case .review: return 5
         }
     }
 }
@@ -1342,10 +1988,10 @@ struct SOSStructuredPayload: Codable {
 
 extension SOSFormData {
     /// Convert to unified SOSPacket for server upload
-    func toSOSPacket() -> SOSPacket {
-        let latitude = autoInfo?.latitude ?? 0
-        let longitude = autoInfo?.longitude ?? 0
-        let accuracy = autoInfo?.accuracy
+    func toSOSPacket(originIdOverride: String? = nil) -> SOSPacket {
+        let latitude = effectiveLocation?.latitude ?? 0
+        let longitude = effectiveLocation?.longitude ?? 0
+        let accuracy = effectiveLocation?.accuracy
         
         // Determine SOS type string
         let sosTypeString: String
@@ -1358,148 +2004,166 @@ extension SOSFormData {
         } else {
             sosTypeString = "UNKNOWN"
         }
-        
-        // Build unified structured data
+
         let structuredData = SOSStructuredData(
-            // Rescue fields
-            situation: needsRescueStep ? rescueData.situation?.rawValue : nil,
-            otherSituationDescription: needsRescueStep && !rescueData.otherSituationDescription.isEmpty 
-                ? rescueData.otherSituationDescription 
-                : nil,
-            hasInjured: needsRescueStep ? rescueData.hasInjured : nil,
-            medicalIssues: needsRescueStep ? {
-                let perPerson = rescueData.medicalInfoByPerson.values
-                    .flatMap { $0.medicalIssues }
-                    .map { $0.rawValue }
-                return perPerson.isEmpty ? nil : Array(Set(perPerson))
-            }() : nil,
-            otherMedicalDescription: needsRescueStep && !rescueData.otherMedicalDescription.isEmpty 
-                ? rescueData.otherMedicalDescription 
-                : nil,
-            othersAreStable: needsRescueStep ? rescueData.othersAreStable : nil,
-            canMove: needsRescueStep ? (rescueData.situation != .cannotMove) : nil,
-            needMedical: needsRescueStep ? rescueData.hasInjured : nil,
-            injuredPersons: needsRescueStep && !rescueData.injuredPersonIds.isEmpty ? {
-                var persons: [SOSInjuredPerson] = []
-                for personId in rescueData.injuredPersonIds {
-                    if let person = person(for: personId),
-                       let info = rescueData.medicalInfoByPerson[personId] {
-                        persons.append(SOSInjuredPerson(
-                            personType: person.type.rawValue,
-                            index: person.index,
-                            name: person.displayName,
-                            customName: person.customName.isEmpty ? nil : person.customName,
-                            medicalIssues: info.medicalIssues.map { $0.rawValue },
-                            severity: "NONE"
-                        ))
-                    }
-                }
-                return persons.isEmpty ? nil : persons
-            }() : nil,
-            
-            // Relief fields
-            supplies: needsReliefStep && !reliefData.supplies.isEmpty 
-                ? reliefData.supplies.map { $0.rawValue } 
-                : nil,
-            otherSupplyDescription: needsReliefStep && !reliefData.otherSupplyDescription.isEmpty 
-                ? reliefData.otherSupplyDescription 
-                : nil,
-            supplyDetails: needsReliefStep ? {
-                let specialDietPersons = orderedPeople(for: reliefData.specialDietPersonIds).compactMap { person -> SOSSpecialDietPerson? in
-                    guard let info = reliefData.specialDietInfoByPerson[person.id] else { return nil }
-                    return SOSSpecialDietPerson(
-                        personType: person.type.rawValue,
-                        index: person.index,
-                        name: person.displayName,
-                        customName: person.customName.isEmpty ? nil : person.customName,
-                        dietDescription: info.dietDescription.isEmpty ? nil : info.dietDescription
-                    )
-                }
-
-                let clothingPersons = orderedPeople(for: reliefData.clothingPersonIds).compactMap { person -> SOSClothingPerson? in
-                    guard let info = reliefData.clothingInfoByPerson[person.id],
-                          let gender = info.gender else { return nil }
-                    return SOSClothingPerson(
-                        personType: person.type.rawValue,
-                        index: person.index,
-                        name: person.displayName,
-                        customName: person.customName.isEmpty ? nil : person.customName,
-                        gender: gender.rawValue
-                    )
-                }
-
-                let hasSomeDetail =
-                    reliefData.waterDuration != nil ||
-                    reliefData.waterRemaining != nil ||
-                    reliefData.foodDuration != nil ||
-                    !specialDietPersons.isEmpty ||
-                    !reliefData.medicalNeeds.isEmpty ||
-                    !reliefData.medicalDescription.isEmpty ||
-                    reliefData.areBlanketsEnough != nil ||
-                    reliefData.blanketRequestCount != nil ||
-                    !clothingPersons.isEmpty
-
-                guard hasSomeDetail else { return nil }
-
-                return SOSSupplyDetailData(
-                    waterDuration: reliefData.waterDuration?.rawValue,
-                    waterRemaining: reliefData.waterRemaining?.rawValue,
-                    foodDuration: reliefData.foodDuration?.rawValue,
-                    specialDietNeed: reliefData.specialDietNeed?.rawValue,
-                    specialDietPersons: specialDietPersons.isEmpty ? nil : specialDietPersons,
-                    needsUrgentMedicine: reliefData.needsUrgentMedicine,
-                    medicineConditions: reliefData.medicineConditions.isEmpty ? nil : reliefData.medicineConditions.map { $0.rawValue },
-                    medicineOtherDescription: reliefData.medicineOtherDescription.isEmpty ? nil : reliefData.medicineOtherDescription,
-                    medicalNeeds: reliefData.medicalNeeds.isEmpty ? nil : reliefData.medicalNeeds.map { $0.rawValue },
-                    medicalDescription: reliefData.medicalDescription.isEmpty ? nil : reliefData.medicalDescription,
-                    isColdOrWet: reliefData.isColdOrWet,
-                    blanketAvailability: reliefData.blanketAvailability?.rawValue,
-                    areBlanketsEnough: reliefData.areBlanketsEnough,
-                    blanketRequestCount: reliefData.blanketRequestCount,
-                    clothingStatus: reliefData.clothingStatus?.rawValue,
-                    clothingPersons: clothingPersons.isEmpty ? nil : clothingPersons
-                )
-            }() : nil,
-            
-            // Common fields
-            peopleCount: SOSPeopleCount(
-                adult: sharedPeopleCount.adults,
-                child: sharedPeopleCount.children,
-                elderly: sharedPeopleCount.elderly
+            incident: SOSIncidentData(
+                situation: needsRescueStep ? rescueData.situation?.rawValue : nil,
+                otherSituationDescription: needsRescueStep ? rescueData.otherSituationDescription.nilIfBlank : nil,
+                address: addressToSend,
+                additionalDescription: packetAdditionalDescription,
+                peopleCount: SOSPeopleCount(
+                    adult: sharedPeopleCount.adults,
+                    child: sharedPeopleCount.children,
+                    elderly: sharedPeopleCount.elderly
+                ),
+                hasInjured: needsRescueStep ? rescueData.hasInjured : nil,
+                othersAreStable: needsRescueStep ? rescueData.othersAreStable : nil,
+                canMove: needsRescueStep ? (rescueData.situation != .cannotMove) : nil,
+                needMedical: needsRescueStep ? rescueData.hasInjured : nil,
+                otherMedicalDescription: needsRescueStep ? rescueData.otherMedicalDescription.nilIfBlank : nil
             ),
-            additionalDescription: additionalDescription.isEmpty ? nil : additionalDescription
+            groupNeeds: packetGroupNeeds(),
+            victims: sharedPeople.isEmpty ? nil : packetVictimEntries()
         )
-        
-        // Build sender info from auto collected data
-        let senderInfo: SOSSenderInfo?
-        if let info = autoInfo {
-            senderInfo = SOSSenderInfo(
-                deviceId: info.deviceId,
-                userId: info.userId,
-                userName: info.userName,
-                userPhone: info.userPhone,
-                batteryLevel: info.batteryLevel,
-                isOnline: info.isOnline
-            )
-        } else {
-            senderInfo = nil
-        }
-        
-        // Use deviceId as originId for mesh routing
-        let originId = autoInfo?.deviceId ?? UUID().uuidString
-        
+
+        let originId = originIdOverride ?? autoInfo?.deviceId ?? UUID().uuidString
+
         return SOSPacket(
             originId: originId,
             timestamp: Date(),
             latitude: latitude,
             longitude: longitude,
             accuracy: accuracy,
+            address: addressToSend,
             sosType: sosTypeString,
             message: toSOSMessage(),
             structuredData: structuredData,
-            senderInfo: senderInfo,
+            victimInfo: packetVictimInfo,
+            reporterInfo: packetReporterInfo,
+            isSentOnBehalf: reportingTarget == .other,
+            senderInfo: packetSenderInfo,
             hopCount: 0,
             path: []
         )
+    }
+
+    private func packetGroupNeeds() -> SOSGroupNeedsData? {
+        guard needsReliefStep else { return nil }
+
+        let orderedSupplies = SupplyNeed.allCases
+            .filter { reliefData.supplies.contains($0) }
+            .map(\.rawValue)
+        let orderedMedicineConditions = MedicineCondition.allCases
+            .filter { reliefData.medicineConditions.contains($0) }
+            .map(\.rawValue)
+        let orderedMedicalNeeds = MedicalSupportNeed.allCases
+            .filter { reliefData.medicalNeeds.contains($0) }
+            .map(\.rawValue)
+
+        let water = reliefData.waterDuration != nil || reliefData.waterRemaining != nil
+            ? SOSWaterNeedData(
+                duration: reliefData.waterDuration?.rawValue,
+                remaining: reliefData.waterRemaining?.rawValue
+            )
+            : nil
+
+        let food = reliefData.foodDuration != nil
+            ? SOSFoodNeedData(duration: reliefData.foodDuration?.rawValue)
+            : nil
+
+        let blanket = reliefData.isColdOrWet != nil ||
+            reliefData.blanketAvailability != nil ||
+            reliefData.blanketRequestCount != nil
+            ? SOSBlanketNeedData(
+                isColdOrWet: reliefData.isColdOrWet,
+                availability: reliefData.blanketAvailability?.rawValue,
+                requestCount: reliefData.areBlanketsEnough == true ? nil : reliefData.blanketRequestCount
+            )
+            : nil
+
+        let medicine = reliefData.needsUrgentMedicine != nil ||
+            !orderedMedicineConditions.isEmpty ||
+            reliefData.medicineOtherDescription.nilIfBlank != nil ||
+            !orderedMedicalNeeds.isEmpty ||
+            reliefData.medicalDescription.nilIfBlank != nil
+            ? SOSMedicineNeedData(
+                needsUrgentMedicine: reliefData.needsUrgentMedicine,
+                conditions: orderedMedicineConditions.isEmpty ? nil : orderedMedicineConditions,
+                otherDescription: reliefData.medicineOtherDescription.nilIfBlank,
+                medicalNeeds: orderedMedicalNeeds.isEmpty ? nil : orderedMedicalNeeds,
+                medicalDescription: reliefData.medicalDescription.nilIfBlank
+            )
+            : nil
+
+        let clothing = reliefData.clothingStatus != nil
+            ? SOSClothingGroupNeedData(status: reliefData.clothingStatus?.rawValue)
+            : nil
+
+        let hasContent = !orderedSupplies.isEmpty ||
+            water != nil ||
+            food != nil ||
+            blanket != nil ||
+            medicine != nil ||
+            clothing != nil ||
+            reliefData.otherSupplyDescription.nilIfBlank != nil
+
+        guard hasContent else { return nil }
+
+        return SOSGroupNeedsData(
+            supplies: orderedSupplies.isEmpty ? nil : orderedSupplies,
+            water: water,
+            food: food,
+            blanket: blanket,
+            medicine: medicine,
+            clothing: clothing,
+            otherSupplyDescription: reliefData.otherSupplyDescription.nilIfBlank
+        )
+    }
+
+    private func packetVictimEntries() -> [SOSVictimEntry] {
+        sharedPeople.map { person in
+            let snapshot = selectedRelativeSnapshot(for: person.id)
+            let isInjured = needsRescueStep && rescueData.injuredPersonIds.contains(person.id)
+            let issues = isInjured
+                ? Array((rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []).map(\.rawValue))
+                : []
+            let severity: String? = {
+                guard isInjured else { return nil }
+                let personIssues = rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []
+                return personIssues.contains(where: \.isSevere) ? "SEVERE" : "MODERATE"
+            }()
+            let resolvedName = person.displayName.nilIfBlank
+                ?? snapshot?.displayName.nilIfBlank
+                ?? "\(person.type.title) \(person.index)"
+            let dietDescription = needsReliefStep
+                ? reliefData.specialDietInfoByPerson[person.id]?.dietDescription.nilIfBlank
+                : nil
+
+            return SOSVictimEntry(
+                personId: person.id,
+                personType: person.type.rawValue,
+                index: person.index,
+                customName: resolvedName,
+                personPhone: snapshot?.phoneNumber?.nilIfBlank,
+                incidentStatus: SOSVictimIncidentStatus(
+                    isInjured: isInjured,
+                    severity: severity,
+                    medicalIssues: issues
+                ),
+                personalNeeds: SOSVictimPersonalNeeds(
+                    clothing: SOSVictimClothingNeed(
+                        needed: needsReliefStep && reliefData.clothingPersonIds.contains(person.id),
+                        gender: reliefData.clothingInfoByPerson[person.id]?.gender?.rawValue ?? snapshot?.gender?.rawValue
+                    ),
+                    diet: SOSVictimDietNeed(
+                        hasSpecialDiet: needsReliefStep && (
+                            reliefData.specialDietPersonIds.contains(person.id) ||
+                            dietDescription != nil
+                        ),
+                        description: dietDescription
+                    )
+                )
+            )
+        }
     }
 }

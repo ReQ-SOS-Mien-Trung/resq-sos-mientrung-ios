@@ -285,7 +285,9 @@ final class ServerRequestGateway: ObservableObject {
         // Nếu packet không phải từ thiết bị này → relay, truyền userId gốc để BE biết
         // Dùng isLocalOrigin thay vì so sánh myDeviceId (vì myDeviceId có thể thay đổi sau khi BT bật)
         let isRelay = !isLocalOrigin
-        let originalUserId: String? = isRelay ? envelope.sosPacket?.senderInfo?.userId
+        let originalUserId: String? = isRelay ? envelope.sosPacket?.reporterInfo?.userId
+            ?? envelope.sosEnhanced?.reporterInfo?.userId
+            ?? envelope.sosPacket?.senderInfo?.userId
             ?? envelope.sosEnhanced?.senderInfo?.userId
             : nil
 
@@ -302,9 +304,12 @@ final class ServerRequestGateway: ObservableObject {
   isRelay       : \(isRelay)
   hopCount      : \(packet.hopCount)
   path          : \(packet.path)
-  senderInfo
+  reporterInfo
+    user_id     : \(packet.reporterInfo?.userId ?? "nil")
+    user_name   : \(packet.reporterInfo?.userName ?? "nil")
+  legacySenderInfo
     device_id   : \(packet.senderInfo?.deviceId ?? "nil")
-    user_id     : \(packet.senderInfo?.userId ?? "nil")  ← phải là userId của người gửi gốc
+    user_id     : \(packet.senderInfo?.userId ?? "nil")  ← fallback cho BE cũ
     user_name   : \(packet.senderInfo?.userName ?? "nil")
   mySession
     userId(BE)  : \(AuthSessionStore.shared.session?.userId ?? "nil")  ← userId của máy relay
@@ -324,7 +329,10 @@ final class ServerRequestGateway: ObservableObject {
   isRelay       : \(isRelay)
   hopCount      : \(packet.hopCount)
   path          : \(packet.path)
-  senderInfo
+  reporterInfo
+    user_id     : \(packet.reporterInfo?.userId ?? "nil")
+    user_name   : \(packet.reporterInfo?.userName ?? "nil")
+  legacySenderInfo
     device_id   : \(packet.senderInfo?.deviceId ?? "nil")
     user_id     : \(packet.senderInfo?.userId ?? "nil")
   mySession

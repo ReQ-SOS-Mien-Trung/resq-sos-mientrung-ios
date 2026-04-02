@@ -856,6 +856,9 @@ struct SOSEditView: View {
             var updated = savedSOS
             updated.lastUpdated = Date()
             updated.sharedPeople = formData.sharedPeople
+            updated.personSourceMode = formData.personSourceMode
+            updated.selectedRelativeSnapshots = formData.selectedRelativeSnapshots
+            updated.additionalDescription = formData.additionalDescription
             
             // Lưu cả relief và rescue data nếu có
             if formData.needsReliefStep {
@@ -890,8 +893,10 @@ struct SOSEditView: View {
 struct SOSWizardContent: View {
     @ObservedObject var formData: SOSFormData
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @Binding var isSending: Bool
     var onSend: () -> Void
+    @State private var showRelativeProfilePicker = false
     
     var body: some View {
         ZStack {
@@ -906,7 +911,21 @@ struct SOSWizardContent: View {
                 
                 // Content
                 TabView(selection: $formData.currentStep) {
-                    Step1SelectTypeView(formData: formData)
+                    Step0ReportingModeView(formData: formData)
+                        .tag(SOSWizardStep.reportingMode)
+
+                    Step0AutoInfoView(
+                        formData: formData,
+                        bridgefyManager: bridgefyManager,
+                        networkMonitor: networkMonitor
+                    )
+                        .tag(SOSWizardStep.autoInfo)
+
+                    Step1SelectTypeView(
+                        formData: formData,
+                        onChangeSavedProfiles: { showRelativeProfilePicker = true },
+                        onSwitchToManual: { formData.switchToManualPersonSelection() }
+                    )
                         .tag(SOSWizardStep.selectType)
                     
                     Step2AReliefView(formData: formData)
@@ -922,10 +941,15 @@ struct SOSWizardContent: View {
                         .tag(SOSWizardStep.review)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .sheet(isPresented: $showRelativeProfilePicker) {
+                    RelativeProfilePickerSheet(initialSelectedProfileIds: formData.selectedRelativeProfileIds) { profiles in
+                        formData.applySelectedRelativeProfiles(profiles)
+                    }
+                }
                 
                 // Navigation
                 HStack {
-                    if formData.currentStep != .selectType {
+                    if formData.currentStep != .reportingMode {
                         Button {
                             withAnimation {
                                 formData.goToPreviousStep()

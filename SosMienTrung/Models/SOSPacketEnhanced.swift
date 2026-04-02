@@ -2,419 +2,115 @@
 //  SOSPacketEnhanced.swift
 //  SosMienTrung
 //
-//  Enhanced SOS Packet với structured data từ Wizard form
+//  Thin wrapper để giữ compatibility nội bộ quanh SOSPacket mới
 //
 
 import Foundation
 
-/// Extended SOS Packet với structured data
 struct SOSPacketEnhanced: Codable {
-    // Base fields (compatible với SOSPacket cũ)
-    let packetId: String
-    let originId: String
-    let ts: Int64
-    let createdAt: String
-    let loc: String
-    let msg: String
-    var hopCount: Int
-    var path: [String]
-    
-    // Enhanced structured data
-    let sosType: String?                    // "RESCUE" or "RELIEF"
-    let priorityScore: Int?                 // Computed priority score
-    let structuredData: StructuredData?     // Type-specific data
-    let senderInfo: SenderInfo?             // User info
-    
+    let packet: SOSPacket
+    let priorityScore: Int?
+
     enum CodingKeys: String, CodingKey {
         case packetId = "packet_id"
         case originId = "origin_id"
         case ts
         case createdAt = "created_at"
-        case loc
-        case msg
-        case hopCount = "hop_count"
-        case path
+        case location
         case sosType = "sos_type"
-        case priorityScore = "priority_score"
+        case msg
         case structuredData = "structured_data"
+        case networkMetadata = "network_metadata"
+        case victimInfo = "victim_info"
+        case reporterInfo = "reporter_info"
+        case isSentOnBehalf = "is_sent_on_behalf"
         case senderInfo = "sender_info"
+        case priorityScore = "priority_score"
     }
-    
-    // MARK: - Nested Types
-    
-    struct StructuredData: Codable {
-        // Relief data
-        let supplies: [String]?
-        let otherSupplyDescription: String?
-        let supplyDetails: SOSSupplyDetailData?
-        
-        // Rescue data
-        let situation: String?
-        let otherSituationDescription: String?
-        let hasInjured: Bool?
-        let medicalIssues: [String]?
-        let otherMedicalDescription: String?
-        let othersAreStable: Bool?
-        let injuredPersons: [InjuredPersonData]?
-        
-        // Common
-        let canMove: Bool?
-        let peopleCount: PeopleCountData?
-        let additionalDescription: String?
-        
-        enum CodingKeys: String, CodingKey {
-            case supplies
-            case otherSupplyDescription = "other_supply_description"
-            case supplyDetails = "supply_details"
-            case situation
-            case otherSituationDescription = "other_situation_description"
-            case hasInjured = "has_injured"
-            case medicalIssues = "medical_issues"
-            case otherMedicalDescription = "other_medical_description"
-            case othersAreStable = "others_are_stable"
-            case injuredPersons = "injured_persons"
-            case canMove = "can_move"
-            case peopleCount = "people_count"
-            case additionalDescription = "additional_description"
-        }
-    }
-    
-    struct InjuredPersonData: Codable {
-        let personType: String
-        let index: Int
-        let name: String
-        let customName: String?
-        let medicalIssues: [String]
-        let severity: String
-        
-        enum CodingKeys: String, CodingKey {
-            case personType = "person_type"
-            case index
-            case name
-            case customName = "custom_name"
-            case medicalIssues = "medical_issues"
-            case severity
-        }
-    }
-    
-    struct PeopleCountData: Codable {
-        let total: Int
-        let adults: Int
-        let children: Int
-        let elderly: Int
-        let injured: Int
-        
-        enum CodingKeys: String, CodingKey {
-            case total
-            case adults
-            case children
-            case elderly
-            case injured
-        }
-    }
-    
-    struct SenderInfo: Codable {
-        let deviceId: String?
-        let userId: String?
-        let userName: String?
-        let userPhone: String?
-        let batteryLevel: Int?
-        let gpsAccuracy: Double?
-        let isOnline: Bool
-        
-        enum CodingKeys: String, CodingKey {
-            case deviceId = "device_id"
-            case userId = "user_id"
-            case userName = "user_name"
-            case userPhone = "user_phone"
-            case batteryLevel = "battery_level"
-            case gpsAccuracy = "gps_accuracy"
-            case isOnline = "is_online"
-        }
-    }
-    
-    // MARK: - Initialization from FormData
-    
+
+    var packetId: String { packet.packetId }
+    var originId: String { packet.originId }
+    var ts: Int64 { packet.ts }
+    var createdAt: String { packet.createdAt }
+    var location: SOSLocation { packet.location }
+    var msg: String { packet.msg }
+    var hopCount: Int { packet.hopCount }
+    var path: [String] { packet.path }
+    var sosType: String? { packet.sosType }
+    var structuredData: SOSStructuredData? { packet.structuredData }
+    var victimInfo: SOSVictimInfo? { packet.victimInfo }
+    var reporterInfo: SOSReporterInfo? { packet.reporterInfo }
+    var isSentOnBehalf: Bool? { packet.isSentOnBehalf }
+    var senderInfo: SOSSenderInfo? { packet.senderInfo }
+
     init(from formData: SOSFormData, originId: String, latitude: Double, longitude: Double) {
-        self.packetId = UUID().uuidString
-        self.originId = originId
-        self.ts = Int64(Date().timeIntervalSince1970)
-        self.createdAt = ISO8601DateFormatter().string(from: Date())
-        self.loc = "\(latitude),\(longitude)"
-        self.msg = formData.toSOSMessage()
-        self.hopCount = 0
-        self.path = [originId]
-        
-        self.sosType = formData.sosType?.rawValue
+        self.packet = formData.toSOSPacket(originIdOverride: originId)
         self.priorityScore = formData.priorityScore
-        
-        // Build structured data
-        var supplies: [String]? = nil
-        var otherSupplyDescription: String? = nil
-        var situation: String? = nil
-        var otherSituationDescription: String? = nil
-        var hasInjured: Bool? = nil
-        var medicalIssues: [String]? = nil
-        var otherMedicalDescription: String? = nil
-        var othersAreStable: Bool? = nil
-        var peopleCount: PeopleCountData? = nil
-        
-        // Sử dụng shared people count
-        peopleCount = PeopleCountData(
-            total: formData.sharedPeopleCount.total,
-            adults: formData.sharedPeopleCount.adults,
-            children: formData.sharedPeopleCount.children,
-            elderly: formData.sharedPeopleCount.elderly,
-            injured: formData.needsRescueStep ? formData.rescueData.injuredPersonIds.count : 0
-        )
-        
-        // Relief data - nếu có chọn relief
-        var supplyDetails: SOSSupplyDetailData? = nil
-        if formData.needsReliefStep {
-            supplies = formData.reliefData.supplies.map { $0.rawValue }
-            otherSupplyDescription = formData.reliefData.otherSupplyDescription.isEmpty ? nil : formData.reliefData.otherSupplyDescription
-            
-            let relief = formData.reliefData
-            let specialDietPersons = formData.orderedPeople(for: relief.specialDietPersonIds).compactMap { person -> SOSSpecialDietPerson? in
-                guard let info = relief.specialDietInfoByPerson[person.id] else { return nil }
-                return SOSSpecialDietPerson(
-                    personType: person.type.rawValue,
-                    index: person.index,
-                    name: person.displayName,
-                    customName: person.customName.isEmpty ? nil : person.customName,
-                    dietDescription: info.dietDescription.isEmpty ? nil : info.dietDescription
-                )
-            }
-
-            let clothingPersons = formData.orderedPeople(for: relief.clothingPersonIds).compactMap { person -> SOSClothingPerson? in
-                guard let info = relief.clothingInfoByPerson[person.id],
-                      let gender = info.gender else { return nil }
-                return SOSClothingPerson(
-                    personType: person.type.rawValue,
-                    index: person.index,
-                    name: person.displayName,
-                    customName: person.customName.isEmpty ? nil : person.customName,
-                    gender: gender.rawValue
-                )
-            }
-
-            let hasSomeDetail = relief.waterDuration != nil || relief.waterRemaining != nil ||
-                relief.foodDuration != nil || relief.specialDietNeed != nil ||
-                !specialDietPersons.isEmpty ||
-                relief.needsUrgentMedicine != nil || !relief.medicineConditions.isEmpty ||
-                !relief.medicalNeeds.isEmpty || !relief.medicalDescription.isEmpty ||
-                relief.isColdOrWet != nil || relief.blanketAvailability != nil ||
-                relief.areBlanketsEnough != nil || relief.blanketRequestCount != nil ||
-                relief.clothingStatus != nil || !clothingPersons.isEmpty
-            
-            if hasSomeDetail {
-                supplyDetails = SOSSupplyDetailData(
-                    waterDuration: relief.waterDuration?.rawValue,
-                    waterRemaining: relief.waterRemaining?.rawValue,
-                    foodDuration: relief.foodDuration?.rawValue,
-                    specialDietNeed: relief.specialDietNeed?.rawValue,
-                    specialDietPersons: specialDietPersons.isEmpty ? nil : specialDietPersons,
-                    needsUrgentMedicine: relief.needsUrgentMedicine,
-                    medicineConditions: relief.medicineConditions.isEmpty ? nil : relief.medicineConditions.map { $0.rawValue },
-                    medicineOtherDescription: relief.medicineOtherDescription.isEmpty ? nil : relief.medicineOtherDescription,
-                    medicalNeeds: relief.medicalNeeds.isEmpty ? nil : relief.medicalNeeds.map { $0.rawValue },
-                    medicalDescription: relief.medicalDescription.isEmpty ? nil : relief.medicalDescription,
-                    isColdOrWet: relief.isColdOrWet,
-                    blanketAvailability: relief.blanketAvailability?.rawValue,
-                    areBlanketsEnough: relief.areBlanketsEnough,
-                    blanketRequestCount: relief.blanketRequestCount,
-                    clothingStatus: relief.clothingStatus?.rawValue,
-                    clothingPersons: clothingPersons.isEmpty ? nil : clothingPersons
-                )
-            }
-        }
-        
-        // Rescue data - nếu có chọn rescue
-        var canMove: Bool? = nil
-        if formData.needsRescueStep {
-            situation = formData.rescueData.situation?.rawValue
-            otherSituationDescription = formData.rescueData.otherSituationDescription.isEmpty ? nil : formData.rescueData.otherSituationDescription
-            hasInjured = formData.rescueData.hasInjured
-            // Collect medical issues từ per-person data (new approach)
-            let allMedicalIssues = formData.rescueData.medicalInfoByPerson.values
-                .flatMap { $0.medicalIssues }
-                .map { $0.rawValue }
-            medicalIssues = allMedicalIssues.isEmpty ? nil : Array(Set(allMedicalIssues))
-            otherMedicalDescription = formData.rescueData.otherMedicalDescription.isEmpty ? nil : formData.rescueData.otherMedicalDescription
-            othersAreStable = formData.rescueData.othersAreStable
-            canMove = formData.rescueData.situation != .cannotMove
-        }
-        
-        // Build per-person injured data
-        var injuredPersons: [InjuredPersonData]? = nil
-        if formData.needsRescueStep && !formData.rescueData.injuredPersonIds.isEmpty {
-            var persons: [InjuredPersonData] = []
-            for personId in formData.rescueData.injuredPersonIds {
-                if let person = formData.person(for: personId),
-                   let info = formData.rescueData.medicalInfoByPerson[personId] {
-                    persons.append(InjuredPersonData(
-                        personType: person.type.rawValue,
-                        index: person.index,
-                        name: person.displayName,
-                        customName: person.customName.isEmpty ? nil : person.customName,
-                        medicalIssues: info.medicalIssues.map { $0.rawValue },
-                        severity: "NONE"
-                    ))
-                }
-            }
-            injuredPersons = persons.isEmpty ? nil : persons
-        }
-        
-        self.structuredData = StructuredData(
-            supplies: supplies,
-            otherSupplyDescription: otherSupplyDescription,
-            supplyDetails: supplyDetails,
-            situation: situation,
-            otherSituationDescription: otherSituationDescription,
-            hasInjured: hasInjured,
-            medicalIssues: medicalIssues,
-            otherMedicalDescription: otherMedicalDescription,
-            othersAreStable: othersAreStable,
-            injuredPersons: injuredPersons,
-            canMove: canMove,
-            peopleCount: peopleCount,
-            additionalDescription: formData.additionalDescription.isEmpty ? nil : formData.additionalDescription
-        )
-        
-        // Build sender info
-        if let autoInfo = formData.autoInfo {
-            self.senderInfo = SenderInfo(
-                deviceId: autoInfo.deviceId,
-                userId: autoInfo.userId,
-                userName: autoInfo.userName,
-                userPhone: autoInfo.userPhone,
-                batteryLevel: autoInfo.batteryLevel,
-                gpsAccuracy: autoInfo.accuracy,
-                isOnline: autoInfo.isOnline
-            )
-        } else {
-            self.senderInfo = nil
-        }
     }
-    
-    // MARK: - Standard init
-    
-    init(
-        packetId: String = UUID().uuidString,
-        originId: String,
-        timestamp: Date = Date(),
-        latitude: Double,
-        longitude: Double,
-        message: String,
-        hopCount: Int = 0,
-        path: [String] = [],
-        sosType: String? = nil,
-        priorityScore: Int? = nil,
-        structuredData: StructuredData? = nil,
-        senderInfo: SenderInfo? = nil
-    ) {
-        self.packetId = packetId
-        self.originId = originId
-        self.ts = Int64(timestamp.timeIntervalSince1970)
-        self.createdAt = ISO8601DateFormatter().string(from: timestamp)
-        self.loc = "\(latitude),\(longitude)"
-        self.msg = message
-        self.hopCount = hopCount
-        self.path = path.isEmpty ? [originId] : path
-        self.sosType = sosType
+
+    init(packet: SOSPacket, priorityScore: Int? = nil) {
+        self.packet = packet
         self.priorityScore = priorityScore
-        self.structuredData = structuredData
-        self.senderInfo = senderInfo
     }
-    
-    /// Convert to basic SOSPacket for mesh relay compatibility
-    func toBasicPacket() -> SOSPacket {
-        // Convert StructuredData to SOSStructuredData
-        let sosStructuredData: SOSStructuredData?
-        if let sd = structuredData {
-            sosStructuredData = SOSStructuredData(
-                situation: sd.situation,
-                otherSituationDescription: sd.otherSituationDescription,
-                hasInjured: sd.hasInjured,
-                medicalIssues: sd.medicalIssues,
-                otherMedicalDescription: sd.otherMedicalDescription,
-                othersAreStable: sd.othersAreStable,
-                canMove: sd.canMove,
-                needMedical: sd.hasInjured,
-                injuredPersons: sd.injuredPersons?.map {
-                    SOSInjuredPerson(
-                        personType: $0.personType,
-                        index: $0.index,
-                        name: $0.name,
-                        customName: $0.customName,
-                        medicalIssues: $0.medicalIssues,
-                        severity: $0.severity
-                    )
-                },
-                supplies: sd.supplies,
-                otherSupplyDescription: sd.otherSupplyDescription,
-                supplyDetails: sd.supplyDetails,
-                peopleCount: sd.peopleCount.map { SOSPeopleCount(adult: $0.adults, child: $0.children, elderly: $0.elderly) },
-                additionalDescription: sd.additionalDescription
-            )
-        } else {
-            sosStructuredData = nil
-        }
-        
-        // Convert SenderInfo to SOSSenderInfo
-        let sosSenderInfo: SOSSenderInfo?
-        if let si = senderInfo {
-            sosSenderInfo = SOSSenderInfo(
-                deviceId: si.deviceId ?? originId,
-                userId: si.userId,
-                userName: si.userName,
-                userPhone: si.userPhone,
-                batteryLevel: si.batteryLevel,
-                isOnline: si.isOnline
-            )
-        } else {
-            sosSenderInfo = nil
-        }
-        
-        var packet = SOSPacket(
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let packetId = try container.decode(String.self, forKey: .packetId)
+        let originId = try container.decode(String.self, forKey: .originId)
+        let ts = try container.decode(Int64.self, forKey: .ts)
+        let createdAt = try container.decode(String.self, forKey: .createdAt)
+        let location = try container.decode(SOSLocation.self, forKey: .location)
+        let sosType = try container.decodeIfPresent(String.self, forKey: .sosType)
+        let msg = try container.decode(String.self, forKey: .msg)
+        let structuredData = try container.decodeIfPresent(SOSStructuredData.self, forKey: .structuredData)
+        let networkMetadata = try container.decodeIfPresent(SOSNetworkMetadata.self, forKey: .networkMetadata) ?? SOSNetworkMetadata()
+        let victimInfo = try container.decodeIfPresent(SOSVictimInfo.self, forKey: .victimInfo)
+        let reporterInfo = try container.decodeIfPresent(SOSReporterInfo.self, forKey: .reporterInfo)
+        let isSentOnBehalf = try container.decodeIfPresent(Bool.self, forKey: .isSentOnBehalf)
+        let senderInfo = try container.decodeIfPresent(SOSSenderInfo.self, forKey: .senderInfo)
+        let priorityScore = try container.decodeIfPresent(Int.self, forKey: .priorityScore)
+
+        self.packet = SOSPacket(
             packetId: packetId,
             originId: originId,
-            timestamp: Date(timeIntervalSince1970: TimeInterval(ts)),
-            latitude: parseLatitude(),
-            longitude: parseLongitude(),
-            accuracy: senderInfo?.gpsAccuracy,
-            sosType: sosType ?? "UNKNOWN",
-            message: msg,
-            structuredData: sosStructuredData,
-            senderInfo: sosSenderInfo,
-            hopCount: hopCount,
-            path: path
+            ts: ts,
+            createdAt: createdAt,
+            location: location,
+            sosType: sosType,
+            msg: msg,
+            structuredData: structuredData,
+            networkMetadata: networkMetadata,
+            victimInfo: victimInfo,
+            reporterInfo: reporterInfo,
+            isSentOnBehalf: isSentOnBehalf,
+            senderInfo: senderInfo
         )
-        // Force the createdAt to match the original packet instead of current Date
-        packet.createdAt = self.createdAt
-        return packet
+        self.priorityScore = priorityScore
     }
-    
-    /// Relay packet
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(packet.packetId, forKey: .packetId)
+        try container.encode(packet.originId, forKey: .originId)
+        try container.encode(packet.ts, forKey: .ts)
+        try container.encode(packet.createdAt, forKey: .createdAt)
+        try container.encode(packet.location, forKey: .location)
+        try container.encodeIfPresent(packet.sosType, forKey: .sosType)
+        try container.encode(packet.msg, forKey: .msg)
+        try container.encodeIfPresent(packet.structuredData, forKey: .structuredData)
+        try container.encode(packet.networkMetadata, forKey: .networkMetadata)
+        try container.encodeIfPresent(packet.victimInfo, forKey: .victimInfo)
+        try container.encodeIfPresent(packet.reporterInfo, forKey: .reporterInfo)
+        try container.encodeIfPresent(packet.isSentOnBehalf, forKey: .isSentOnBehalf)
+        try container.encodeIfPresent(packet.senderInfo, forKey: .senderInfo)
+        try container.encodeIfPresent(priorityScore, forKey: .priorityScore)
+    }
+
+    func toBasicPacket() -> SOSPacket {
+        packet
+    }
+
     func relayed(by relayId: String) -> SOSPacketEnhanced {
-        var newPath = path
-        if !newPath.contains(relayId) {
-            newPath.append(relayId)
-        }
-        
-        var relayed = self
-        relayed.hopCount = hopCount + 1
-        relayed.path = newPath
-        return relayed
-    }
-    
-    private func parseLatitude() -> Double {
-        let parts = loc.split(separator: ",")
-        return Double(parts.first ?? "0") ?? 0
-    }
-    
-    private func parseLongitude() -> Double {
-        let parts = loc.split(separator: ",")
-        return Double(parts.last ?? "0") ?? 0
+        SOSPacketEnhanced(packet: packet.relayed(by: relayId), priorityScore: priorityScore)
     }
 }
