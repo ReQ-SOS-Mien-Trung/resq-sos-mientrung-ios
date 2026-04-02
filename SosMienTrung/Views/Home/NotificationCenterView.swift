@@ -138,9 +138,9 @@ struct NotificationCenterView: View {
             return "exclamationmark.triangle.fill"
         case "chat_message":
             return "message.fill"
-        case "team_invitation", "coordinator_join", "coordinator_leave":
+        case "team_assigned", "team_invitation", "coordinator_join", "coordinator_leave":
             return "person.2.fill"
-        case "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed", "supply_request", "supply_rejected":
+        case "supply_request", "supply_request_urgent", "supply_request_high_escalation", "supply_request_urgent_escalation", "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed", "supply_rejected", "supply_request_auto_rejected", "fund_allocation":
             return "shippingbox.fill"
         default:
             return "bell.fill"
@@ -149,12 +149,14 @@ struct NotificationCenterView: View {
 
     private func iconColor(for notification: RealtimeNotification) -> Color {
         switch notification.type?.lowercased() {
-        case "flood_alert", "supply_rejected":
+        case "flood_alert", "supply_rejected", "supply_request_auto_rejected", "supply_request_urgent", "supply_request_urgent_escalation":
             return DS.Colors.danger
-        case "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed":
+        case "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed", "fund_allocation":
             return DS.Colors.success
         case "chat_message":
             return DS.Colors.info
+        case "supply_request", "supply_request_high_escalation":
+            return DS.Colors.warning
         default:
             return DS.Colors.warning
         }
@@ -162,34 +164,46 @@ struct NotificationCenterView: View {
 
     private func displayTypeLabel(for rawType: String) -> String {
         switch rawType.lowercased() {
+        case "assembly_gathering":
+            return "Thông báo triệu tập"
         case "assembly_point_assignment":
-            return "Điểm tập kết"
-        case "team_invitation":
-            return "Mời vào team"
+            return "Cập nhật điểm tập kết"
+        case "team_assigned", "team_invitation":
+            return "Thông báo đội cứu hộ"
         case "chat_message":
-            return "Tin nhắn"
+            return "Tin nhắn mới"
+        case "fund_allocation":
+            return "Quỹ kho được cấp mới"
         case "flood_alert":
             return "Cảnh báo lũ"
         case "coordinator_join":
-            return "Điều phối viên vào"
+            return "Coordinator đã tham gia"
         case "coordinator_leave":
-            return "Điều phối viên rời"
+            return "Coordinator đã rời"
         case "supply_request":
-            return "Yêu cầu tiếp tế"
+            return "Yêu cầu cung cấp vật tư mới"
+        case "supply_request_urgent":
+            return "Yêu cầu tiếp tế khẩn cấp"
         case "supply_accepted":
-            return "Tiếp tế đã duyệt"
+            return "Yêu cầu tiếp tế được chấp nhận"
+        case "supply_request_auto_rejected":
+            return "Hệ thống tự động từ chối yêu cầu"
+        case "supply_request_high_escalation":
+            return "Yêu cầu vào ngưỡng gấp"
+        case "supply_request_urgent_escalation":
+            return "Yêu cầu vào ngưỡng khẩn cấp"
         case "supply_preparing":
-            return "Đang chuẩn bị tiếp tế"
+            return "Kho nguồn đang chuẩn bị hàng"
         case "supply_shipped":
-            return "Đang vận chuyển"
+            return "Vật tư đang được vận chuyển"
         case "supply_completed":
-            return "Tiếp tế hoàn tất"
+            return "Kho nguồn đã hoàn tất giao hàng"
         case "supply_rejected":
-            return "Tiếp tế bị từ chối"
+            return "Yêu cầu tiếp tế bị từ chối"
+        case "general":
+            return "Thông báo"
         default:
-            return rawType
-                .replacingOccurrences(of: "_", with: " ")
-                .capitalized
+            return "Thông báo"
         }
     }
 

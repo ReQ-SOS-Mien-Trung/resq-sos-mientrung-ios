@@ -49,7 +49,7 @@ struct SetupProfileView: View {
         var errorDescription: String? {
             switch self {
             case .invalidRole:
-                return "Tai khoan nay khong thuoc nhom rescuer."
+                return "Tài khoản này không thuộc nhóm người cứu hộ."
             }
         }
     }
@@ -137,7 +137,7 @@ struct SetupProfileView: View {
                                         Image(systemName: "envelope.fill")
                                             .foregroundColor(DS.Colors.warning)
                                             .frame(width: 20)
-                                        TextField("Nhập email...", text: $rescuerEmail)
+                                        TextField("Nhập email", text: $rescuerEmail)
                                             .textContentType(.emailAddress)
                                             .keyboardType(.emailAddress)
                                             .autocapitalization(.none)
@@ -163,9 +163,9 @@ struct SetupProfileView: View {
                                         
                                         Group {
                                             if showPassword {
-                                                TextField("Nhập mật khẩu...", text: $rescuerPassword)
+                                                TextField("Nhập mật khẩu", text: $rescuerPassword)
                                             } else {
-                                                SecureField("Nhập mật khẩu...", text: $rescuerPassword)
+                                                SecureField("Nhập mật khẩu", text: $rescuerPassword)
                                             }
                                         }
                                         .textContentType(.password)
@@ -182,7 +182,6 @@ struct SetupProfileView: View {
                                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
                                 }
 
-                                rescuerGoogleLoginSection
                             }
                         } else {
                             VStack(spacing: DS.Spacing.md) {
@@ -357,7 +356,9 @@ struct SetupProfileView: View {
                                 }
                                 .disabled(!isFormValid || isLoading)
 
-                                Text("Tai khoan Google rescuer se duoc kiem tra quyen sau khi dang nhap.")
+                                rescuerGoogleLoginSection
+
+                                Text("Tài khoản Google người cứu hộ sẽ được kiểm tra quyền sau khi đăng nhập.")
                                     .font(DS.Typography.caption)
                                     .foregroundColor(DS.Colors.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -564,8 +565,7 @@ struct SetupProfileView: View {
             } label: {
                 HStack(spacing: DS.Spacing.sm) {
                     if isLoading { ProgressView().tint(DS.Colors.text) }
-                    Image(systemName: "globe")
-                        .font(.system(size: 18, weight: .semibold))
+                    googleMark
                     Text("ĐĂNG NHẬP VỚI GOOGLE")
                         .font(DS.Typography.subheadline).tracking(1)
                 }
@@ -577,11 +577,35 @@ struct SetupProfileView: View {
             }
             .disabled(isLoading)
 
-            Text("Neu chua du dieu kien rescuer, app se khoa giao dien va huong dan dang ky tren web.")
+            Text("Nếu chưa đủ điều kiện người cứu hộ, ứng dụng sẽ khóa giao diện và hướng dẫn đăng ký trên website.")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var googleMark: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white)
+
+            Text("G")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.26, green: 0.52, blue: 0.96),
+                            Color(red: 0.91, green: 0.30, blue: 0.24),
+                            Color(red: 0.99, green: 0.71, blue: 0.15),
+                            Color(red: 0.20, green: 0.66, blue: 0.33)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+        .frame(width: 20, height: 20)
+        .overlay(Circle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
     }
 
     // MARK: - OTP Verification Sheet

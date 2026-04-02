@@ -482,11 +482,22 @@ private struct AssemblyEventRowView: View {
     let onCheckIn: () -> Void
 
     private var statusText: String {
-        event.eventStatus ?? "Unknown"
+        switch normalizedStatus {
+        case "scheduled", "planned":
+            return "Đã lên lịch"
+        case "gathering", "ongoing":
+            return "Đang tập trung"
+        case "completed", "finished":
+            return "Đã hoàn tất"
+        case "cancelled":
+            return "Đã hủy"
+        default:
+            return "Không xác định"
+        }
     }
 
     private var canCheckIn: Bool {
-        event.isCheckedIn == false && ["gathering", "ongoing", "planned"].contains(normalizedStatus)
+        event.isCheckedIn == false && ["gathering", "ongoing", "planned", "scheduled"].contains(normalizedStatus)
     }
 
     private var normalizedStatus: String {
@@ -535,7 +546,7 @@ private struct AssemblyEventRowView: View {
                         Image(systemName: event.isCheckedIn ? "checkmark.circle.fill" : "location.fill")
                     }
 
-                    Text(event.isCheckedIn ? "ĐÃ CHECK-IN" : "CHECK-IN SỰ KIỆN")
+                    Text(event.isCheckedIn ? "ĐÃ CHECK-IN" : "Xác nhận có mặt")
                         .font(DS.Typography.caption)
                         .tracking(1)
                 }
@@ -558,7 +569,7 @@ private struct AssemblyEventRowView: View {
             return DS.Colors.warning
         case "ongoing":
             return DS.Colors.success
-        case "planned":
+        case "planned", "scheduled":
             return DS.Colors.info
         case "finished", "completed":
             return DS.Colors.textSecondary
