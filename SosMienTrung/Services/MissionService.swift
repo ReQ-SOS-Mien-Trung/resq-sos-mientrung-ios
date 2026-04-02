@@ -1,5 +1,19 @@
 import Foundation
 
+enum MissionServiceError: LocalizedError {
+    case invalidResponse
+    case httpStatus(Int, String?)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Phan hoi may chu khong hop le"
+        case .httpStatus(let statusCode, let message):
+            return message ?? "May chu tra ve loi (HTTP \(statusCode))"
+        }
+    }
+}
+
 final class MissionService {
     static let shared = MissionService()
 
@@ -25,6 +39,22 @@ final class MissionService {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let auth = authHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
         return req
+    }
+
+    private func send(_ request: URLRequest) async throws -> Data {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw MissionServiceError.invalidResponse
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let message = APIErrorResponse.decode(from: data)?.message
+                ?? String(data: data, encoding: .utf8)
+            print("[MissionService] ✗ HTTP \(http.statusCode): \(message ?? "")")
+            throw MissionServiceError.httpStatus(http.statusCode, message)
+        }
+
+        return data
     }
 
     // MARK: - GET /operations/missions/my-team
@@ -92,5 +122,55 @@ final class MissionService {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(ActivityRoute.self, from: data)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/complete-execution
+    func completeMissionTeamExecution(missionId: Int, missionTeamId: Int, note: String?) async throws -> CompleteMissionTeamExecutionResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/complete-execution") else {
+            throw URLError(.badURL)
+        }
+
+        var req = authorizedRequest(url: url, method: "POST")
+        req.httpBody = try JSONEncoder().encode(CompleteMissionTeamExecutionRequest(note: note))
+        print("[MissionService] → POST \(url.absoluteString)")
+        let data = try await send(req)
+        return try JSONDecoder().decode(CompleteMissionTeamExecutionResponse.self, from: data)
+    }
+
+    // MARK: - GET /operations/missions/{missionId}/teams/{missionTeamId}/report
+    func getMissionTeamReport(missionId: Int, missionTeamId: Int) async throws -> MissionTeamReportResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/report") else {
+            throw URLError(.badURL)
+        }
+
+        print("[MissionService] → GET \(url.absoluteString)")
+        let data = try await send(authorizedRequest(url: url))
+        return try JSONDecoder().decode(MissionTeamReportResponse.self, from: data)
+    }
+
+    // MARK: - PUT /operations/missions/{missionId}/teams/{missionTeamId}/report-draft
+    func saveMissionTeamReportDraft(missionId: Int, missionTeamId: Int, request: SaveMissionTeamReportDraftRequest) async throws -> MissionTeamReportResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/report-draft") else {
+            throw URLError(.badURL)
+        }
+
+        var req = authorizedRequest(url: url, method: "PUT")
+        req.httpBody = try JSONEncoder().encode(request)
+        print("[MissionService] → PUT \(url.absoluteString)")
+        let data = try await send(req)
+        return try JSONDecoder().decode(MissionTeamReportResponse.self, from: data)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/report-submit
+    func submitMissionTeamReport(missionId: Int, missionTeamId: Int, request: SubmitMissionTeamReportRequest) async throws -> MissionTeamReportResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/report-submit") else {
+            throw URLError(.badURL)
+        }
+
+        var req = authorizedRequest(url: url, method: "POST")
+        req.httpBody = try JSONEncoder().encode(request)
+        print("[MissionService] → POST \(url.absoluteString)")
+        let data = try await send(req)
+        return try JSONDecoder().decode(MissionTeamReportResponse.self, from: data)
     }
 }

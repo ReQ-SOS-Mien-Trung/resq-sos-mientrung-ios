@@ -18,6 +18,10 @@ struct MissionDetailView: View {
 
                 activitiesSection
 
+                Text("BAO CAO THUC DIA").sectionHeader()
+
+                reportSection
+
                 incidentSectionHeader
 
                 IncidentTimelineView(incidents: incidentVM.incidents, isLoading: incidentVM.isLoading)
@@ -148,6 +152,58 @@ struct MissionDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var reportSection: some View {
+        if let teamId = missionTeamId {
+            NavigationLink(destination: MissionTeamReportView(
+                missionId: mission.id,
+                missionTeamId: teamId,
+                missionTitle: mission.title
+            )) {
+                HStack(spacing: DS.Spacing.md) {
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        HStack(spacing: DS.Spacing.xs) {
+                            Image(systemName: "doc.text.fill")
+                                .foregroundColor(DS.Colors.accent)
+                            Text("Mo man bao cao doi")
+                                .font(DS.Typography.headline)
+                                .foregroundColor(DS.Colors.text)
+                        }
+
+                        Text("Luu nhap, cap nhat ket qua tung activity va nop bao cao cuoi cho doi.")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+
+                        if let teamStatus = mission.teams?.first?.status, teamStatus.isEmpty == false {
+                            StatusBadge(text: teamStatus, color: missionStatusColor(teamStatus))
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+                .padding(DS.Spacing.md)
+                .background(DS.Colors.surface)
+                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(DS.Colors.warning)
+                Text("Khong tim thay doi duoc gan voi nhiem vu nay de mo bao cao.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+            .padding(DS.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.35), lineWidth: DS.Border.medium))
         }
     }
 
