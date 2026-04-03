@@ -6,6 +6,7 @@ import FirebaseAuth
 @main
 struct SosMienTrungApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    private let relativeProfileStore = RelativeProfileStore.shared
 
     var body: some Scene {
         WindowGroup {
