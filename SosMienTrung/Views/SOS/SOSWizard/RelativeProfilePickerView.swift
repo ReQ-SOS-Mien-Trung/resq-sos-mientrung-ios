@@ -9,14 +9,12 @@ struct RelativeProfilePickerSheet: View {
 
     @State private var searchText = ""
     @State private var selectedGroup: RelationGroup?
-    @State private var selectedTag: String?
     @State private var selectedProfileIds: Set<String> = []
 
     private var filteredProfiles: [EmergencyRelativeProfile] {
         store.filteredProfiles(
             searchText: searchText,
-            relationGroup: selectedGroup,
-            tag: selectedTag
+            relationGroup: selectedGroup
         )
     }
 
@@ -30,14 +28,6 @@ struct RelativeProfilePickerSheet: View {
                             Text(group.title).tag(RelationGroup?.some(group))
                         }
                     }
-
-                    Picker("Tag", selection: $selectedTag) {
-                        Text("Tất cả tag").tag(String?.none)
-                        ForEach(store.availableTags, id: \.self) { tag in
-                            Text(tag).tag(String?.some(tag))
-                        }
-                    }
-                    .disabled(store.availableTags.isEmpty)
                 } header: {
                     Text("Bộ lọc")
                 }
@@ -73,7 +63,7 @@ struct RelativeProfilePickerSheet: View {
                     Text("Có thể chọn nhiều người để tạo sẵn danh sách nạn nhân cho một lần gửi SOS.")
                 }
             }
-            .searchable(text: $searchText, prompt: "Tìm theo tên, tag, số điện thoại")
+            .searchable(text: $searchText, prompt: "Tìm theo tên, số điện thoại")
             .navigationTitle("Chọn từ hồ sơ đã lưu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -269,11 +259,7 @@ struct SavedRelativeSnapshotRow: View {
     }
 
     private var badgeLine: String {
-        var parts = [snapshot.personType.title, snapshot.relationGroup.title]
-        if !snapshot.tags.isEmpty {
-            parts.append(snapshot.tags.map { "#\($0)" }.joined(separator: " "))
-        }
-        return parts.joined(separator: " • ")
+        [snapshot.personType.title, snapshot.relationGroup.title].joined(separator: " • ")
     }
 
     var body: some View {

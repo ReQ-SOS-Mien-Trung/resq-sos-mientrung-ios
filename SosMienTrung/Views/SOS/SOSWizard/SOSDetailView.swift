@@ -182,10 +182,10 @@ struct SOSDetailView: View {
                                     Rectangle()
                                         .fill(timelineConnectorColor(current: visualState))
                                         .frame(width: 2)
-                                        .frame(minHeight: 30)
+                                        .frame(minHeight: 24)
                                 }
                             }
-                            .frame(width: 40) // Tăng width để chứa đủ được vòng Ripple
+                            .frame(width: timelineColumnWidth)
 
                             
                             // Nội dung sự kiện
@@ -229,6 +229,10 @@ struct SOSDetailView: View {
         case pastInProgress
     }
 
+    private let timelineMarkerDiameter: CGFloat = 22
+    private let timelineColumnWidth: CGFloat = 36
+    private let timelineRippleBoxSize: CGFloat = 36
+
     private func timelineVisualState(for event: SOSSendEvent, isPast: Bool) -> TimelineVisualState {
         switch event.type {
         case .created, .sentViaNetwork, .sentViaMesh, .serverAcknowledged:
@@ -246,13 +250,9 @@ struct SOSDetailView: View {
     @ViewBuilder
     private func timelineMarker(for state: TimelineVisualState, isLast: Bool) -> some View {
         ZStack {
-            if isLast {
-                RippleCircle(color: timelineConnectorColor(current: state))
-            }
-            
             Circle()
                 .fill(markerBackgroundColor(for: state))
-                .frame(width: 22, height: 22)
+                .frame(width: timelineMarkerDiameter, height: timelineMarkerDiameter)
 
             switch state {
             case .success:
@@ -268,9 +268,17 @@ struct SOSDetailView: View {
                     .controlSize(.small)
                     .tint(.blue)
             case .pastInProgress:
-                Image(systemName: "clock") // Icon cho trạng thái cũ đang chờ
+                Image(systemName: "clock")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.blue)
+            }
+        }
+        .frame(width: timelineMarkerDiameter, height: timelineMarkerDiameter)
+        .overlay {
+            if isLast {
+                RippleCircle(color: timelineConnectorColor(current: state))
+                    .frame(width: timelineRippleBoxSize, height: timelineRippleBoxSize)
+                    .allowsHitTesting(false)
             }
         }
         .padding(.top, 2)
@@ -1014,19 +1022,35 @@ struct SOSWizardContent: View {
 // MARK: - Ripple Effect
 struct RippleCircle: View {
     let color: Color
-    @State private var isAnimating = false
+    private let baseDiameter: CGFloat = 22
+    private let maxScale: CGFloat = 1.6
+    private let duration: TimeInterval = 1.5
     
     var body: some View {
-        Circle()
-            .stroke(color.opacity(0.6), lineWidth: 2)
-            .scaleEffect(isAnimating ? 1.8 : 1.0)
-            .opacity(isAnimating ? 0 : 1)
-            .frame(width: 22, height: 22)
-            .onAppear {
-                withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                    isAnimating = true
-                }
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let elapsed = timeline.date.timeIntervalSinceReferenceDate
+            let progress = (elapsed.truncatingRemainder(dividingBy: duration)) / duration
+            let diameter = baseDiameter * (1 + (maxScale - 1) * progress)
+
+            Canvas { context, size in
+                let rect = CGRect(
+                    x: (size.width - diameter) / 2,
+                    y: (size.height - diameter) / 2,
+                    width: diameter,
+                    height: diameter
+                )
+
+                context.stroke(
+                    Path(ellipseIn: rect),
+                    with: .color(color.opacity(0.6 * (1 - progress))),
+                    lineWidth: 2
+                )
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .drawingGroup()
+            .accessibilityHidden(true)
+        }
+        .frame(width: baseDiameter * maxScale, height: baseDiameter * maxScale)
     }
 }
 

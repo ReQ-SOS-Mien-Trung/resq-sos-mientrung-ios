@@ -1,20 +1,29 @@
 import SwiftUI
 
+fileprivate struct MedicationFocusTarget: Hashable {
+    enum Field: Hashable {
+        case name
+        case frequency
+        case note
+    }
+
+    let entryId: String
+    let field: Field
+}
+
 struct RelativeProfilesView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = RelativeProfileStore.shared
 
     @State private var searchText = ""
     @State private var selectedGroup: RelationGroup?
-    @State private var selectedTag: String?
     @State private var editingProfile: EmergencyRelativeProfile?
     @State private var isCreatingProfile = false
 
     private var filteredProfiles: [EmergencyRelativeProfile] {
         store.filteredProfiles(
             searchText: searchText,
-            relationGroup: selectedGroup,
-            tag: selectedTag
+            relationGroup: selectedGroup
         )
     }
 
@@ -22,20 +31,25 @@ struct RelativeProfilesView: View {
         NavigationStack {
             List {
                 Section {
+                    Toggle("Đồng bộ hồ sơ lên máy chủ", isOn: serverSyncBinding)
+                        .disabled(store.canSyncToServer == false)
+
+                    if store.isSyncing {
+                        ProgressView("Đang đồng bộ hồ sơ")
+                    }
+                } header: {
+                    Text("Lưu trữ & đồng bộ")
+                } footer: {
+                    Text(syncFooterText)
+                }
+
+                Section {
                     Picker("Nhóm", selection: $selectedGroup) {
                         Text("Tất cả nhóm").tag(RelationGroup?.none)
                         ForEach(RelationGroup.allCases) { group in
                             Text(group.title).tag(RelationGroup?.some(group))
                         }
                     }
-
-                    Picker("Tag", selection: $selectedTag) {
-                        Text("Tất cả tag").tag(String?.none)
-                        ForEach(store.availableTags, id: \.self) { tag in
-                            Text(tag).tag(String?.some(tag))
-                        }
-                    }
-                    .disabled(store.availableTags.isEmpty)
                 } header: {
                     Text("Bộ lọc")
                 }
@@ -67,10 +81,10 @@ struct RelativeProfilesView: View {
                 } header: {
                     Text("Danh sách hồ sơ")
                 } footer: {
-                    Text("Dữ liệu được lưu cục bộ theo tài khoản hiện tại để dùng lại trong các lần gửi SOS.")
+                    Text(listFooterText)
                 }
             }
-            .searchable(text: $searchText, prompt: "Tìm theo tên, tag, số điện thoại, bệnh nền")
+            .searchable(text: $searchText, prompt: "Tìm theo tên, số điện thoại, bệnh nền")
             .navigationTitle("Người thân & hồ sơ SOS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -100,6 +114,33 @@ struct RelativeProfilesView: View {
             }
         }
     }
+
+    private var serverSyncBinding: Binding<Bool> {
+        Binding(
+            get: { store.isServerSyncEnabled },
+            set: { store.setServerSyncEnabled($0) }
+        )
+    }
+
+    private var syncFooterText: String {
+        if store.canSyncToServer == false {
+            return "Cần đăng nhập để bật đồng bộ. Khi tắt đồng bộ, hồ sơ chỉ được giữ trên thiết bị hiện tại."
+        }
+
+        if store.isServerSyncEnabled {
+            return "Ứng dụng sẽ dùng GET để lấy dữ liệu, POST/PUT/DELETE cho từng thay đổi và fallback về sync snapshot khi cần."
+        }
+
+        return "Hồ sơ chỉ được giữ local. Khi tắt đồng bộ, ứng dụng sẽ xoá bản đã có trên máy chủ ở lần có phiên đăng nhập hợp lệ tiếp theo."
+    }
+
+    private var listFooterText: String {
+        if store.isServerSyncEnabled {
+            return "Danh sách này vẫn được lưu local để chọn nhanh khi gửi SOS và sẽ được đồng bộ lại với máy chủ khi bạn thay đổi."
+        }
+
+        return "Dữ liệu đang được lưu cục bộ theo tài khoản hiện tại để dùng lại trong các lần gửi SOS."
+    }
 }
 
 struct RelativeProfileEditorView: View {
@@ -113,13 +154,13 @@ struct RelativeProfileEditorView: View {
     @State private var personType: Person.PersonType = .adult
     @State private var gender: ClothingGender?
     @State private var relationGroup: RelationGroup = .giaDinh
-    @State private var tagsText = ""
     @State private var medicalProfile = RelativeMedicalProfile()
     @State private var medicalBaselineNote = ""
     @State private var specialNeedsNote = ""
     @State private var specialDietNote = ""
     @State private var showError = false
     @State private var errorMessage = ""
+    @FocusState private var focusedMedicationField: MedicationFocusTarget?
 
     init(
         existingProfile: EmergencyRelativeProfile? = nil,
@@ -200,20 +241,23 @@ struct RelativeProfileEditorView: View {
                         Toggle("Có đang dùng thuốc điều trị dài hạn", isOn: $medicalProfile.hasLongTermMedication)
 
                         if medicalProfile.hasLongTermMedication {
-                            ForEach(Array(medicalProfile.longTermMedications.indices), id: \.self) { index in
+                            ForEach($medicalProfile.longTermMedications) { $entry in
                                 MedicationEntryEditor(
-                                    entry: $medicalProfile.longTermMedications[index],
+                                    entry: $entry,
+                                    focusedField: $focusedMedicationField,
                                     removeAction: {
-                                        medicalProfile.longTermMedications.remove(at: index)
+                                        removeMedicationEntry(entry.id)
                                     }
                                 )
+                                .id(entry.id)
                             }
 
                             Button {
-                                medicalProfile.longTermMedications.append(LongTermMedicationEntry())
+                                handleAddMedicationTap()
                             } label: {
                                 Label("Thêm thuốc", systemImage: "plus.circle.fill")
                             }
+                            .buttonStyle(.plain)
                         }
                     }
 
@@ -242,8 +286,6 @@ struct RelativeProfileEditorView: View {
                         sectionLabel("🤰 Tình trạng đặc biệt")
 
                         Toggle("Đang mang thai", isOn: $medicalProfile.specialSituation.isPregnant)
-                        Toggle("Người già (>65)", isOn: $medicalProfile.specialSituation.isSenior)
-                        Toggle("Trẻ nhỏ (<6)", isOn: $medicalProfile.specialSituation.isYoungChild)
                         Toggle("Người khuyết tật", isOn: $medicalProfile.specialSituation.hasDisability)
                     }
 
@@ -289,15 +331,6 @@ struct RelativeProfileEditorView: View {
                         placeholder: "Thông tin thêm chưa nằm trong các mục trên"
                     )
                 }
-
-                Section("Phân loại") {
-                    TextField("Tag, cách nhau bởi dấu phẩy", text: $tagsText)
-                        .textInputAutocapitalization(.never)
-
-                    Text("Ví dụ: tiểu đường, xe lăn, trẻ sơ sinh")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             .navigationTitle(existingProfile == nil ? "Thêm hồ sơ" : "Sửa hồ sơ")
             .navigationBarTitleDisplayMode(.inline)
@@ -314,6 +347,20 @@ struct RelativeProfileEditorView: View {
                     }
                     .fontWeight(.semibold)
                 }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+
+                    if medicalProfile.hasLongTermMedication {
+                        Button("Thêm thuốc") {
+                            handleAddMedicationTap()
+                        }
+                    }
+
+                    Button("Xong") {
+                        focusedMedicationField = nil
+                    }
+                }
             }
             .onAppear {
                 loadExistingProfile()
@@ -321,7 +368,7 @@ struct RelativeProfileEditorView: View {
             .onChange(of: medicalProfile.hasLongTermMedication) { isEnabled in
                 guard isEnabled else { return }
                 if medicalProfile.longTermMedications.isEmpty {
-                    medicalProfile.longTermMedications = [LongTermMedicationEntry()]
+                    addMedicationEntry()
                 }
             }
             .alert("Không thể lưu hồ sơ", isPresented: $showError) {
@@ -369,7 +416,6 @@ struct RelativeProfileEditorView: View {
         personType = existingProfile.personType
         gender = existingProfile.gender
         relationGroup = existingProfile.relationGroup
-        tagsText = existingProfile.tags.joined(separator: ", ")
         medicalProfile = existingProfile.medicalProfile
         medicalBaselineNote = existingProfile.medicalBaselineNote
         specialNeedsNote = existingProfile.specialNeedsNote
@@ -384,11 +430,6 @@ struct RelativeProfileEditorView: View {
             return
         }
 
-        let tags = tagsText
-            .split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
         let profile = EmergencyRelativeProfile(
             id: existingProfile?.id ?? UUID().uuidString,
             displayName: trimmedName,
@@ -396,7 +437,6 @@ struct RelativeProfileEditorView: View {
             personType: personType,
             gender: gender,
             relationGroup: relationGroup,
-            tags: tags,
             medicalProfile: RelativeMedicalProfile(
                 chronicConditions: medicalProfile.chronicConditions,
                 otherChronicCondition: medicalProfile.otherChronicCondition,
@@ -407,7 +447,7 @@ struct RelativeProfileEditorView: View {
                 mobilityStatus: medicalProfile.mobilityStatus,
                 medicalDevices: medicalProfile.medicalDevices,
                 otherMedicalDevice: medicalProfile.otherMedicalDevice,
-                specialSituation: medicalProfile.specialSituation,
+                specialSituation: medicalProfile.specialSituation.sanitizedForProfileEditor,
                 medicalHistory: medicalProfile.medicalHistory,
                 medicalHistoryDetails: medicalProfile.medicalHistoryDetails,
                 bloodType: medicalProfile.bloodType
@@ -420,6 +460,35 @@ struct RelativeProfileEditorView: View {
 
         onSave(profile)
         dismiss()
+    }
+
+    private func removeMedicationEntry(_ id: String) {
+        medicalProfile.longTermMedications.removeAll { $0.id == id }
+        if focusedMedicationField?.entryId == id {
+            focusedMedicationField = nil
+        }
+    }
+
+    private func addMedicationEntry() {
+        let newEntry = LongTermMedicationEntry()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            medicalProfile.longTermMedications.append(newEntry)
+        }
+
+        DispatchQueue.main.async {
+            focusedMedicationField = MedicationFocusTarget(entryId: newEntry.id, field: .name)
+        }
+    }
+
+    private func handleAddMedicationTap() {
+        if focusedMedicationField != nil {
+            focusedMedicationField = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                addMedicationEntry()
+            }
+        } else {
+            addMedicationEntry()
+        }
     }
 
     private func toggledSelection<Option: CaseIterable & Hashable>(_ option: Option, in options: [Option]) -> [Option]
@@ -472,12 +541,6 @@ struct RelativeProfileRow: View {
             Text(subtitleParts.joined(separator: " • "))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-
-            if !profile.tags.isEmpty {
-                Text(profile.tags.map { "#\($0)" }.joined(separator: "  "))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
 
             let notes = Array(profile.storedInfoLines.prefix(5))
             if !notes.isEmpty {
@@ -535,6 +598,7 @@ private struct SelectableChipGrid<Option: Identifiable & Hashable>: View {
 
 private struct MedicationEntryEditor: View {
     @Binding var entry: LongTermMedicationEntry
+    @FocusState.Binding var focusedField: MedicationFocusTarget?
     let removeAction: () -> Void
 
     var body: some View {
@@ -548,12 +612,44 @@ private struct MedicationEntryEditor: View {
                 }
             }
 
-            TextField("Tên thuốc", text: $entry.name)
-            TextField("Tần suất", text: $entry.frequency)
-            TextField("Ghi chú", text: $entry.note, axis: .vertical)
-                .lineLimit(2...4)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tên thuốc")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                TextField("Ví dụ: Prep, Amlodipine 5mg", text: $entry.name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .init(entryId: entry.id, field: .name))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tần suất")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                TextField("Ví dụ: 1 viên 1 ngày", text: $entry.frequency)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .init(entryId: entry.id, field: .frequency))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ghi chú")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                TextField("Ví dụ: 30 viên 1 hộp", text: $entry.note, axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .init(entryId: entry.id, field: .note))
+            }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(Color(.systemGray6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.systemGray4), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

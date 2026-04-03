@@ -151,6 +151,34 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     
     /// Tạo từ record trả về bởi server (GET /emergency/sos-requests/me)
     init(fromServer record: SOSServerRecord) {
+        let trim: (String?) -> String? = { value in
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        let serverVictims = record.structuredData?.victims ?? []
+        let derivedVictimName: String? = {
+            if let explicitName = trim(record.victimInfo?.userName) {
+                return explicitName
+            }
+            if serverVictims.count > 1 {
+                return "Nhóm \(serverVictims.count) người"
+            }
+            if let victim = serverVictims.first {
+                return trim(victim.customName)
+            }
+            return record.senderInfo?.userName
+        }()
+        let derivedVictimPhone: String? = {
+            if let explicitPhone = trim(record.victimInfo?.userPhone) {
+                return explicitPhone
+            }
+            if serverVictims.count == 1 {
+                return trim(serverVictims.first?.personPhone)
+            }
+            return nil
+        }()
+
         self.id          = record.packetId
         self.timestamp   = Date(timeIntervalSince1970: TimeInterval(record.timestamp))
         self.sosType     = SOSType(rawValue: record.sosType ?? "")
@@ -167,8 +195,8 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.lastUpdated = Date()
         self.sendHistory = [SOSSendEvent(type: .serverAcknowledged, note: "Đồng bộ từ server (trạng thái: \(record.status ?? "unknown"))")]
         self.reportingTarget = record.isSentOnBehalf == true ? .other : .self
-        self.victimName  = record.victimInfo?.userName ?? record.senderInfo?.userName
-        self.victimPhone = record.victimInfo?.userPhone ?? record.senderInfo?.userPhone
+        self.victimName  = derivedVictimName
+        self.victimPhone = derivedVictimPhone
         self.reporterName = record.reporterInfo?.userName ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userName)
         self.reporterPhone = record.reporterInfo?.userPhone ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userPhone)
         self.addressQuery = record.structuredData?.address ?? ""

@@ -1191,7 +1191,10 @@ final class SOSFormData: ObservableObject {
     }
 
     var packetVictimPhone: String? {
-        packetReporterInfo?.userPhone?.nilIfBlank
+        let totalCount = sharedPeopleCount.total
+        // BE link nhiều nạn nhân qua structured_data.victims[].person_phone, không qua victim_info.user_phone.
+        guard totalCount <= 1 else { return nil }
+        return effectiveVictimPhone?.nilIfBlank
     }
 
     var packetVictimInfo: SOSVictimInfo? {
@@ -2038,7 +2041,9 @@ extension SOSFormData {
             sosType: sosTypeString,
             message: toSOSMessage(),
             structuredData: structuredData,
-            victimInfo: packetVictimInfo,
+            // BE hiện link các nạn nhân/companions từ structured_data.victims[].person_phone.
+            // Không gửi victim_info để tránh trùng nghĩa và tránh lệch dữ liệu với case nhiều người.
+            victimInfo: nil,
             reporterInfo: packetReporterInfo,
             isSentOnBehalf: reportingTarget == .other,
             senderInfo: packetSenderInfo,
@@ -2123,6 +2128,18 @@ extension SOSFormData {
     private func packetVictimEntries() -> [SOSVictimEntry] {
         sharedPeople.map { person in
             let snapshot = selectedRelativeSnapshot(for: person.id)
+            let manualSingleVictimName: String? = {
+                guard reportingTarget == .other, !usesSavedRelativeProfiles, sharedPeopleCount.total == 1 else {
+                    return nil
+                }
+                return effectiveVictimName?.nilIfBlank
+            }()
+            let manualSingleVictimPhone: String? = {
+                guard reportingTarget == .other, !usesSavedRelativeProfiles, sharedPeopleCount.total == 1 else {
+                    return nil
+                }
+                return effectiveVictimPhone?.nilIfBlank
+            }()
             let isInjured = needsRescueStep && rescueData.injuredPersonIds.contains(person.id)
             let issues = isInjured
                 ? Array((rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []).map(\.rawValue))
@@ -2132,7 +2149,8 @@ extension SOSFormData {
                 let personIssues = rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []
                 return personIssues.contains(where: \.isSevere) ? "SEVERE" : "MODERATE"
             }()
-            let resolvedName = person.displayName.nilIfBlank
+            let resolvedName = manualSingleVictimName
+                ?? person.displayName.nilIfBlank
                 ?? snapshot?.displayName.nilIfBlank
                 ?? "\(person.type.title) \(person.index)"
             let dietDescription = needsReliefStep
@@ -2144,7 +2162,7 @@ extension SOSFormData {
                 personType: person.type.rawValue,
                 index: person.index,
                 customName: resolvedName,
-                personPhone: snapshot?.phoneNumber?.nilIfBlank,
+                personPhone: snapshot?.phoneNumber?.nilIfBlank ?? manualSingleVictimPhone,
                 incidentStatus: SOSVictimIncidentStatus(
                     isInjured: isInjured,
                     severity: severity,

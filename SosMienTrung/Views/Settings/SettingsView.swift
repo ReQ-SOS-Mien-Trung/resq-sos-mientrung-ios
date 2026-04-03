@@ -258,10 +258,20 @@ struct SettingsView: View {
 
     private var relativeProfileSubtitle: String {
         let count = relativeProfileStore.profiles.count
-        if count == 0 {
-            return "Lưu sẵn người thân để chọn nhanh khi gửi SOS"
+        let syncStatus: String
+
+        if relativeProfileStore.isSyncing {
+            syncStatus = "đang đồng bộ"
+        } else if relativeProfileStore.isServerSyncEnabled {
+            syncStatus = "đồng bộ máy chủ"
+        } else {
+            syncStatus = "chỉ lưu local"
         }
-        return "\(count) hồ sơ đã lưu"
+
+        if count == 0 {
+            return "Lưu sẵn người thân để chọn nhanh khi gửi SOS, \(syncStatus)"
+        }
+        return "\(count) hồ sơ, \(syncStatus)"
     }
 
     // MARK: - Identity Transferred Banner
