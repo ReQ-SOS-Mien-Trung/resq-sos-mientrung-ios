@@ -137,15 +137,15 @@ enum ReportExecutionStatusOption: String, CaseIterable, Identifiable {
     var displayLabel: String {
         switch self {
         case .planned:
-            return "Chua thuc hien"
+            return "Chưa thực hiện"
         case .ongoing:
-            return "Dang thuc hien"
+            return "Đang thực hiện"
         case .completed:
-            return "Hoan thanh"
+            return "Hoàn thành"
         case .failed:
-            return "That bai"
+            return "Thất bại"
         case .cancelled:
-            return "Da huy"
+            return "Đã hủy"
         }
     }
 
@@ -186,12 +186,20 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
 
     var id: Int { missionActivityId }
 
+    var localizedActivityType: String? {
+        localizedActivityTypeDisplay(activityType)
+    }
+
+    var localizedActivityCode: String? {
+        localizedActivityCodeDisplay(activityCode)
+    }
+
     init(activity: MissionTeamReportActivity) {
         missionActivityId = activity.missionActivityId
         activityCode = activity.activityCode
         activityType = activity.activityType
         activityStatus = activity.activityStatus
-        executionStatus = activity.executionStatus ?? ""
+        executionStatus = activity.executionStatus ?? activity.activityStatus ?? ""
         summary = activity.summary ?? ""
         issuesJson = activity.issuesJson ?? ""
         resultJson = activity.resultJson ?? ""
@@ -199,15 +207,15 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
     }
 
     var title: String {
-        if let activityType, activityType.isEmpty == false {
-            return activityType.replacingOccurrences(of: "_", with: " ")
+        if let localizedActivityCode {
+            return localizedActivityCode
         }
 
-        if let activityCode, activityCode.isEmpty == false {
-            return activityCode
+        if let localizedActivityType {
+            return localizedActivityType
         }
 
-        return "Hoat dong #\(missionActivityId)"
+        return "Hoạt động #\(missionActivityId)"
     }
 }
 
@@ -247,7 +255,7 @@ struct MissionTeamMemberEvaluationForm: Identifiable, Equatable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first(where: { $0.isEmpty == false })
 
-        return trimmed ?? "Thanh vien"
+        return trimmed ?? "Thành viên"
     }
 
     var hasAnyScore: Bool {

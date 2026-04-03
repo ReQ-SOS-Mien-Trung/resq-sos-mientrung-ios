@@ -184,7 +184,8 @@ final class RescuerMissionViewModel: ObservableObject {
                 hasLoadedActivities = true
             }
             do {
-                activities = try await MissionService.shared.getActivities(missionId: missionId)
+                let fetched = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+                activities = sortActivities(fetched)
             } catch {
                 errorMessage = "Không thể tải danh sách hoạt động: \(error.localizedDescription)"
             }
@@ -202,11 +203,29 @@ final class RescuerMissionViewModel: ObservableObject {
             }
             do {
                 try await MissionService.shared.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
-                activities = try await MissionService.shared.getActivities(missionId: missionId)
+                let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+                activities = sortActivities(refreshed)
                 successMessage = "Đã cập nhật: \(status)"
             } catch {
                 errorMessage = "Cập nhật thất bại: \(error.localizedDescription)"
             }
+        }
+    }
+
+    private func sortActivities(_ items: [Activity]) -> [Activity] {
+        items.sorted { lhs, rhs in
+            switch (lhs.step, rhs.step) {
+            case let (l?, r?):
+                if l != r { return l < r }
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                break
+            }
+
+            return lhs.id < rhs.id
         }
     }
 

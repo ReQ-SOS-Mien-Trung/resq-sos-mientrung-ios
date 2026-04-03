@@ -10,15 +10,21 @@ struct MissionDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+            VStack(alignment: .leading, spacing: 20) {
                 missionHeader
-                    .padding(.top, DS.Spacing.md)
+                    .padding(.top, DS.Spacing.sm)
 
-                Text("DANH SÁCH HOẠT ĐỘNG").sectionHeader()
+                sectionHeader(
+                    title: "Danh sách hoạt động",
+                    subtitle: "\(activityCount) hoạt động cần theo dõi"
+                )
 
                 activitiesSection
 
-                Text("BAO CAO THUC DIA").sectionHeader()
+                sectionHeader(
+                    title: "Báo cáo nhiệm vụ",
+                    subtitle: "Cập nhật kết quả và tiến độ của đội"
+                )
 
                 reportSection
 
@@ -29,6 +35,7 @@ struct MissionDetailView: View {
                 Spacer(minLength: 80)
             }
             .padding(.horizontal, DS.Spacing.md)
+            .padding(.bottom, DS.Spacing.xl)
         }
         .background(DS.Colors.background)
         .navigationTitle("Chi tiết nhiệm vụ")
@@ -41,7 +48,7 @@ struct MissionDetailView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .foregroundColor(DS.Colors.warning)
+                .foregroundColor(DS.Colors.accent)
             }
         }
         .sheet(isPresented: $showReportIncident) {
@@ -82,48 +89,102 @@ struct MissionDetailView: View {
         }
     }
 
-    // MARK: - Mission Header
     private var missionHeader: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            StatusBadge(
-                text: RescuerStatusBadgeText.mission(mission.status),
-                color: missionStatusColor(mission.status)
-            )
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                    Text("Nhiệm vụ")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(DS.Colors.textSecondary)
 
-            Text(mission.title)
-                .font(DS.Typography.largeTitle)
-                .foregroundColor(DS.Colors.text)
+                    Text(mission.title)
+                        .font(.system(size: 32, weight: .black))
+                        .foregroundColor(DS.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: DS.Spacing.sm)
+
+                StatusBadge(
+                    text: RescuerStatusBadgeText.mission(mission.status),
+                    color: missionStatusColor(mission.status)
+                )
+            }
 
             if let desc = mission.description, !desc.isEmpty {
                 Text(desc)
-                    .font(DS.Typography.body)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            missionMetaGrid
+            progressSummary
+        }
+        .padding(20)
+        .sharpCard(
+            borderColor: DS.Colors.borderSubtle,
+            borderWidth: DS.Border.thin,
+            shadow: DS.Shadow.small,
+            backgroundColor: DS.Colors.surface,
+            radius: 18
+        )
+    }
+
+    private var missionMetaGrid: some View {
+        VStack(spacing: DS.Spacing.sm) {
+            HStack(spacing: DS.Spacing.sm) {
+                infoChip(
+                    title: "Thời gian bắt đầu",
+                    value: formattedDisplayDate(mission.startDate) ?? "Chưa có",
+                    icon: "calendar"
+                )
+
+                infoChip(
+                    title: "Kết thúc dự kiến",
+                    value: formattedDisplayDate(mission.endDate) ?? "Chưa có",
+                    icon: "clock"
+                )
+            }
+
+            HStack(spacing: DS.Spacing.sm) {
+                infoChip(
+                    title: "Số hoạt động",
+                    value: "\(activityCount)",
+                    icon: "checklist"
+                )
+
+                infoChip(
+                    title: "Đội phụ trách",
+                    value: mission.teams?.first?.teamName ?? "Chưa gán",
+                    icon: "person.3"
+                )
+            }
+        }
+    }
+
+    private var progressSummary: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack {
+                Text("Tiến độ nhiệm vụ")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(DS.Colors.text)
+
+                Spacer()
+
+                Text("\(completedActivityCount)/\(max(activityCount, 1))")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(DS.Colors.textSecondary)
             }
 
-            if let start = mission.startDate {
-                HStack(spacing: DS.Spacing.xs) {
-                    Image(systemName: "calendar")
-                        .foregroundColor(DS.Colors.textTertiary)
-                    Text(start)
-                        .font(DS.Typography.caption)
-                        .foregroundColor(DS.Colors.textSecondary)
-                    if let end = mission.endDate {
-                        Text("→ \(end)")
-                            .font(DS.Typography.caption)
-                            .foregroundColor(DS.Colors.textSecondary)
-                    }
-                }
-            }
+            ProgressView(value: activityProgress)
+                .tint(DS.Colors.accent)
         }
-        .padding(DS.Spacing.md)
-        .background(DS.Colors.surface)
-        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
     }
 
-    // MARK: - Activities
     @ViewBuilder
     private var activitiesSection: some View {
-        let list = vm.activities.isEmpty ? (mission.activities ?? []) : vm.activities
+        let list = displayedActivities
         if vm.isLoadingActivities && list.isEmpty {
             HStack(spacing: DS.Spacing.sm) {
                 ProgressView()
@@ -131,7 +192,15 @@ struct MissionDetailView: View {
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
             }
-            .padding()
+            .padding(DS.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sharpCard(
+                borderColor: DS.Colors.borderSubtle,
+                borderWidth: DS.Border.thin,
+                shadow: DS.Shadow.none,
+                backgroundColor: DS.Colors.surface,
+                radius: 16
+            )
         } else if vm.hasLoadedActivities && list.isEmpty {
             VStack(spacing: DS.Spacing.md) {
                 Image(systemName: "checklist")
@@ -147,8 +216,15 @@ struct MissionDetailView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, DS.Spacing.lg)
+            .sharpCard(
+                borderColor: DS.Colors.borderSubtle,
+                borderWidth: DS.Border.thin,
+                shadow: DS.Shadow.none,
+                backgroundColor: DS.Colors.surface,
+                radius: 16
+            )
         } else {
-            VStack(spacing: DS.Spacing.sm) {
+            LazyVStack(spacing: DS.Spacing.sm) {
                 ForEach(list) { activity in
                     ActivityRowView(activity: activity) { status in
                         vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
@@ -167,18 +243,22 @@ struct MissionDetailView: View {
                 missionTitle: mission.title
             )) {
                 HStack(spacing: DS.Spacing.md) {
-                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                        HStack(spacing: DS.Spacing.xs) {
-                            Image(systemName: "doc.text.fill")
-                                .foregroundColor(DS.Colors.accent)
-                            Text("Mo man bao cao doi")
-                                .font(DS.Typography.headline)
-                                .foregroundColor(DS.Colors.text)
-                        }
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(DS.Colors.accent)
+                        .frame(width: 42, height: 42)
+                        .background(DS.Colors.accent.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                        Text("Luu nhap, cap nhat ket qua tung activity va nop bao cao cuoi cho doi.")
-                            .font(DS.Typography.caption)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Mở báo cáo đội")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(DS.Colors.text)
+
+                        Text("Lưu nháp, cập nhật kết quả từng hoạt động và nộp báo cáo cuối kỳ.")
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         if let teamStatus = mission.teams?.first?.status, teamStatus.isEmpty == false {
                             StatusBadge(text: teamStatus, color: missionStatusColor(teamStatus))
@@ -191,42 +271,95 @@ struct MissionDetailView: View {
                         .foregroundColor(DS.Colors.textTertiary)
                 }
                 .padding(DS.Spacing.md)
-                .background(DS.Colors.surface)
-                .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+                .sharpCard(
+                    borderColor: DS.Colors.borderSubtle,
+                    borderWidth: DS.Border.thin,
+                    shadow: DS.Shadow.none,
+                    backgroundColor: DS.Colors.surface,
+                    radius: 16
+                )
             }
             .buttonStyle(.plain)
         } else {
             HStack(spacing: DS.Spacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(DS.Colors.warning)
-                Text("Khong tim thay doi duoc gan voi nhiem vu nay de mo bao cao.")
+                Text("Không tìm thấy đội được gán với nhiệm vụ này để mở báo cáo.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
             }
             .padding(DS.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DS.Colors.surface)
-            .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.35), lineWidth: DS.Border.medium))
+            .sharpCard(
+                borderColor: DS.Colors.warning.opacity(0.25),
+                borderWidth: DS.Border.thin,
+                shadow: DS.Shadow.none,
+                backgroundColor: DS.Colors.surface,
+                radius: 16
+            )
         }
     }
 
-    // MARK: - Incident Section Header
     private var incidentSectionHeader: some View {
-        HStack {
-            Text("SỰ CỐ TRONG NHIỆM VỤ").sectionHeader()
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sự cố trong nhiệm vụ")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(DS.Colors.text)
+
+                Text("Theo dõi tình huống phát sinh và báo ngay khi cần hỗ trợ")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+
             Spacer()
+
             Button { showReportIncident = true } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                     Text("Báo sự cố")
-                        .font(DS.Typography.caption.bold())
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                .foregroundColor(DS.Colors.accent)
+                .foregroundColor(.white)
                 .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, DS.Spacing.xs)
-                .background(DS.Colors.accent.opacity(0.1))
-                .overlay(Rectangle().stroke(DS.Colors.accent.opacity(0.4), lineWidth: 1))
+                .padding(.vertical, 10)
+                .background(DS.Colors.accent)
+                .clipShape(Capsule())
             }
+        }
+    }
+
+    private func infoChip(title: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+
+            Text(value)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(DS.Colors.text)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(DS.Colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func sectionHeader(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(DS.Colors.text)
+
+            Text(subtitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
         }
     }
 
@@ -247,5 +380,56 @@ struct MissionDetailView: View {
 
     private func normalizedStatus(_ status: String) -> String {
         RescuerStatusBadgeText.normalized(status)
+    }
+
+    private var activityCount: Int {
+        max(displayedActivities.count, mission.activityCount)
+    }
+
+    private var completedActivityCount: Int {
+        displayedActivities.filter { $0.activityStatus == .succeed }.count
+    }
+
+    private var displayedActivities: [Activity] {
+        let source = vm.activities.isEmpty ? (mission.activities ?? []) : vm.activities
+
+        return source.sorted { lhs, rhs in
+            switch (lhs.step, rhs.step) {
+            case let (l?, r?):
+                if l != r { return l < r }
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                break
+            }
+
+            return lhs.id < rhs.id
+        }
+    }
+
+    private var activityProgress: Double {
+        guard activityCount > 0 else { return 0 }
+        return Double(completedActivityCount) / Double(activityCount)
+    }
+
+    private func formattedDisplayDate(_ raw: String?) -> String? {
+        guard let raw, raw.isEmpty == false else { return nil }
+
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoBasic = ISO8601DateFormatter()
+        isoBasic.formatOptions = [.withInternetDateTime]
+
+        guard let date = isoFull.date(from: raw) ?? isoBasic.date(from: raw) else {
+            return raw
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.dateFormat = "HH:mm, dd/MM/yyyy"
+        return formatter.string(from: date)
     }
 }

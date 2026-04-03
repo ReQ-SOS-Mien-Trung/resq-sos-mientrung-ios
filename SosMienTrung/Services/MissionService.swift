@@ -84,9 +84,9 @@ final class MissionService {
         return try JSONDecoder().decode(Mission.self, from: data)
     }
 
-    // MARK: - GET /operations/missions/{missionId}/activities
-    func getActivities(missionId: Int) async throws -> [Activity] {
-        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities") else {
+    // MARK: - GET /operations/missions/{missionId}/activities/my-team
+    func getMyTeamActivities(missionId: Int) async throws -> [Activity] {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/my-team") else {
             throw URLError(.badURL)
         }
         print("[MissionService] → GET \(url.absoluteString)")
@@ -94,6 +94,11 @@ final class MissionService {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode([Activity].self, from: data)
+    }
+
+    // MARK: - Backward-compatible wrapper
+    func getActivities(missionId: Int) async throws -> [Activity] {
+        try await getMyTeamActivities(missionId: missionId)
     }
 
     // MARK: - PATCH /operations/missions/{missionId}/activities/{activityId}/status

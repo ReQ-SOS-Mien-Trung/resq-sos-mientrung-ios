@@ -64,7 +64,7 @@ final class MissionTeamReportViewModel: ObservableObject {
         guard canEdit else { return nil }
 
         if canEvaluateMembers == false && hasPersistedMemberEvaluations {
-            return "Chi doi truong moi duoc luu danh gia thanh vien. Neu ban luu nhap luc nay, backend se xoa phan danh gia da co."
+            return "Chỉ đội trưởng mới được lưu đánh giá thành viên. Nếu bạn lưu nháp lúc này, hệ thống sẽ xóa phần đánh giá đã có."
         }
 
         return nil
@@ -93,7 +93,7 @@ final class MissionTeamReportViewModel: ObservableObject {
                 )
                 apply(response)
             } catch {
-                errorMessage = "Khong the tai bao cao doi: \(error.localizedDescription)"
+                errorMessage = "Không thể tải báo cáo đội: \(error.localizedDescription)"
             }
         }
     }
@@ -122,9 +122,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     missionTeamId: missionTeamId
                 )
                 apply(response)
-                successMessage = "Da chuyen team sang trang thai cho nop bao cao."
+                successMessage = "Đội đã được chuyển sang trạng thái chờ nộp báo cáo."
             } catch {
-                errorMessage = "Khong the hoan thanh thuc dia: \(error.localizedDescription)"
+                errorMessage = "Không thể hoàn tất thực địa: \(error.localizedDescription)"
             }
         }
     }
@@ -152,9 +152,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     request: request
                 )
                 apply(response)
-                successMessage = "Da luu nhap bao cao doi."
+                successMessage = "Đã lưu nháp báo cáo đội."
             } catch {
-                errorMessage = "Khong the luu nhap bao cao: \(error.localizedDescription)"
+                errorMessage = "Không thể lưu nháp báo cáo: \(error.localizedDescription)"
             }
         }
     }
@@ -177,9 +177,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     request: request
                 )
                 apply(response)
-                successMessage = "Da nop bao cao cuoi cung."
+                successMessage = "Đã nộp báo cáo cuối cùng."
             } catch {
-                errorMessage = "Khong the nop bao cao: \(error.localizedDescription)"
+                errorMessage = "Không thể nộp báo cáo: \(error.localizedDescription)"
             }
         }
     }
@@ -311,13 +311,13 @@ private enum MissionTeamReportValidationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidJSON(let field):
-            return "\(field) khong phai JSON hop le."
+            return "\(field) không phải JSON hợp lệ."
         case .partialMemberEvaluation(let memberName):
-            return "Hay cham du 5 tieu chi cho \(memberName) hoac xoa het diem dang nhap dang do."
+            return "Hãy chấm đủ 5 tiêu chí cho \(memberName) hoặc xóa toàn bộ điểm đang nhập dở."
         case .missingMemberEvaluation(let memberName):
-            return "Can danh gia day du cho \(memberName) truoc khi nop bao cao."
+            return "Cần đánh giá đầy đủ cho \(memberName) trước khi nộp báo cáo."
         case .nonLeaderCannotSaveWithExistingEvaluations:
-            return "Chi doi truong moi duoc luu danh gia thanh vien. Vui long nho doi truong luu bao cao de tranh mat du lieu."
+            return "Chỉ đội trưởng mới được lưu đánh giá thành viên. Vui lòng nhờ đội trưởng lưu báo cáo để tránh mất dữ liệu."
         }
     }
 }

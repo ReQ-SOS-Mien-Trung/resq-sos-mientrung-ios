@@ -54,13 +54,21 @@ struct Activity: Codable, Identifiable {
 
     var missionId: Int? { nil }
 
+    var localizedActivityType: String? {
+        localizedActivityTypeDisplay(activityType)
+    }
+
+    var localizedActivityCode: String? {
+        localizedActivityCodeDisplay(activityCode)
+    }
+
     var title: String {
-        if let activityType, activityType.isEmpty == false {
-            return activityType.replacingOccurrences(of: "_", with: " ")
+        if let localizedActivityCode {
+            return localizedActivityCode
         }
 
-        if let activityCode, activityCode.isEmpty == false {
-            return activityCode
+        if let localizedActivityType {
+            return localizedActivityType
         }
 
         if let step {
@@ -182,6 +190,90 @@ private func missionTypeDisplayName(_ missionType: String) -> String {
     default:
         return missionType
     }
+}
+
+func localizedActivityTypeDisplay(_ rawValue: String?) -> String? {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return nil
+    }
+
+    switch normalizedActivityKey(rawValue) {
+    case "collectsupplies":
+        return "Thu gom vật tư"
+    case "deliversupplies":
+        return "Bàn giao vật tư"
+    case "rescue":
+        return "Cứu hộ"
+    case "medicalaid":
+        return "Sơ cứu y tế"
+    case "medicalsupport", "medical":
+        return "Hỗ trợ y tế"
+    case "evacuate", "evacuation":
+        return "Di tản"
+    case "searchandrescue", "sar":
+        return "Tìm kiếm cứu nạn"
+    case "logistics":
+        return "Hậu cần"
+    case "transport", "transportation":
+        return "Vận chuyển"
+    case "assessment":
+        return "Đánh giá hiện trường"
+    default:
+        return humanizedActivityText(rawValue)
+    }
+}
+
+func localizedActivityCodeDisplay(_ rawValue: String?) -> String? {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return nil
+    }
+
+    let parts = rawValue
+        .split(separator: "_")
+        .map(String.init)
+
+    guard parts.isEmpty == false else {
+        return nil
+    }
+
+    let hasSequence = parts.count > 1 && Int(parts.last ?? "") != nil
+    let base = hasSequence ? parts.dropLast().joined(separator: "_") : rawValue
+    let localizedBase = localizedActivityTypeDisplay(base) ?? humanizedActivityText(base)
+
+    guard let localizedBase else {
+        return nil
+    }
+
+    if hasSequence, let suffix = parts.last {
+        return "\(localizedBase) #\(suffix)"
+    }
+
+    return localizedBase
+}
+
+private func normalizedActivityKey(_ rawValue: String) -> String {
+    rawValue
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "_", with: "")
+        .replacingOccurrences(of: "-", with: "")
+        .lowercased()
+}
+
+private func humanizedActivityText(_ rawValue: String) -> String? {
+    let sanitized = rawValue
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "_", with: " ")
+        .replacingOccurrences(of: "-", with: " ")
+
+    guard sanitized.isEmpty == false else { return nil }
+
+    return sanitized
+        .split(separator: " ")
+        .map { token in
+            let lowercased = token.lowercased()
+            return lowercased.prefix(1).uppercased() + lowercased.dropFirst()
+        }
+        .joined(separator: " ")
 }
 
 // MARK: - Activity Update Request
