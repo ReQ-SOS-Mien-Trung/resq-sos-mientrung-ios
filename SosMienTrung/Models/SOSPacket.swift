@@ -293,11 +293,12 @@ struct SOSPreparedMedicalProfileSnapshot: Codable {
         mobilityStatus = profile.mobilityStatus.rawValue
         medicalDevices = profile.medicalDevices.map(\.rawValue)
         otherMedicalDevice = profile.otherMedicalDevice.nilIfBlank
+        let sanitizedSpecialSituation = profile.specialSituation.sanitizedForProfileEditor
         specialSituation = SOSPreparedSpecialSituationSnapshot(
-            isPregnant: profile.specialSituation.isPregnant,
-            isSenior: profile.specialSituation.isSenior,
-            isYoungChild: profile.specialSituation.isYoungChild,
-            hasDisability: profile.specialSituation.hasDisability
+            isPregnant: sanitizedSpecialSituation.isPregnant,
+            isSenior: sanitizedSpecialSituation.isSenior,
+            isYoungChild: sanitizedSpecialSituation.isYoungChild,
+            hasDisability: sanitizedSpecialSituation.hasDisability
         )
         medicalHistory = profile.medicalHistory.map(\.rawValue)
         medicalHistoryDetails = profile.medicalHistoryDetails.nilIfBlank

@@ -221,14 +221,21 @@ struct SpecialMedicalSituation: Codable, Equatable, Hashable {
     var selectedTitles: [String] {
         var titles: [String] = []
         if isPregnant { titles.append("Đang mang thai") }
-        if isSenior { titles.append("Người già (>65)") }
-        if isYoungChild { titles.append("Trẻ nhỏ (<6)") }
         if hasDisability { titles.append("Người khuyết tật") }
         return titles
     }
 
     var hasSelection: Bool {
-        isPregnant || isSenior || isYoungChild || hasDisability
+        isPregnant || hasDisability
+    }
+
+    var sanitizedForProfileEditor: SpecialMedicalSituation {
+        SpecialMedicalSituation(
+            isPregnant: isPregnant,
+            isSenior: false,
+            isYoungChild: false,
+            hasDisability: hasDisability
+        )
     }
 }
 
@@ -365,7 +372,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
     var personType: Person.PersonType
     var gender: ClothingGender?
     var relationGroup: RelationGroup
-    var tags: [String]
     var medicalProfile: RelativeMedicalProfile
     var medicalBaselineNote: String
     var specialNeedsNote: String
@@ -379,7 +385,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
         personType: Person.PersonType,
         gender: ClothingGender? = nil,
         relationGroup: RelationGroup,
-        tags: [String] = [],
         medicalProfile: RelativeMedicalProfile = RelativeMedicalProfile(),
         medicalBaselineNote: String = "",
         specialNeedsNote: String = "",
@@ -392,7 +397,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
         self.personType = personType
         self.gender = gender
         self.relationGroup = relationGroup
-        self.tags = Self.normalizeTags(tags)
         self.medicalProfile = medicalProfile
         self.medicalBaselineNote = medicalBaselineNote.trimmingCharacters(in: .whitespacesAndNewlines)
         self.specialNeedsNote = specialNeedsNote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -407,7 +411,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
         case personType
         case gender
         case relationGroup
-        case tags
         case medicalProfile
         case medicalBaselineNote
         case specialNeedsNote
@@ -423,7 +426,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
         personType = try container.decode(Person.PersonType.self, forKey: .personType)
         gender = try container.decodeIfPresent(ClothingGender.self, forKey: .gender)
         relationGroup = try container.decode(RelationGroup.self, forKey: .relationGroup)
-        tags = Self.normalizeTags(try container.decodeIfPresent([String].self, forKey: .tags) ?? [])
         medicalProfile = try container.decodeIfPresent(RelativeMedicalProfile.self, forKey: .medicalProfile) ?? RelativeMedicalProfile()
         medicalBaselineNote = try container.decodeIfPresent(String.self, forKey: .medicalBaselineNote)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         specialNeedsNote = try container.decodeIfPresent(String.self, forKey: .specialNeedsNote)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -453,26 +455,6 @@ struct EmergencyRelativeProfile: Codable, Identifiable, Equatable, Hashable {
         }
         return lines
     }
-
-    static func normalizeTags(_ tags: [String]) -> [String] {
-        var seen = Set<String>()
-        var normalized: [String] = []
-
-        for tag in tags {
-            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-
-            let lowercased = trimmed.lowercased()
-            guard !seen.contains(lowercased) else { continue }
-
-            seen.insert(lowercased)
-            normalized.append(trimmed)
-        }
-
-        return normalized.sorted {
-            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-        }
-    }
 }
 
 struct SelectedRelativeSnapshot: Codable, Identifiable, Equatable, Hashable {
@@ -484,7 +466,6 @@ struct SelectedRelativeSnapshot: Codable, Identifiable, Equatable, Hashable {
     let phoneNumber: String?
     let gender: ClothingGender?
     let relationGroup: RelationGroup
-    let tags: [String]
     let medicalProfile: RelativeMedicalProfile
     let medicalBaselineNote: String
     let specialNeedsNote: String
@@ -502,7 +483,6 @@ struct SelectedRelativeSnapshot: Codable, Identifiable, Equatable, Hashable {
         case phoneNumber
         case gender
         case relationGroup
-        case tags
         case medicalProfile
         case medicalBaselineNote
         case specialNeedsNote
@@ -519,7 +499,6 @@ struct SelectedRelativeSnapshot: Codable, Identifiable, Equatable, Hashable {
         self.phoneNumber = profile.phoneNumber?.trimmedNilIfEmpty
         self.gender = profile.gender
         self.relationGroup = profile.relationGroup
-        self.tags = EmergencyRelativeProfile.normalizeTags(profile.tags)
         self.medicalProfile = profile.medicalProfile
         self.medicalBaselineNote = profile.medicalBaselineNote.trimmingCharacters(in: .whitespacesAndNewlines)
         self.specialNeedsNote = profile.specialNeedsNote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -537,7 +516,6 @@ struct SelectedRelativeSnapshot: Codable, Identifiable, Equatable, Hashable {
         phoneNumber = try container.decodeIfPresent(String.self, forKey: .phoneNumber)?.trimmedNilIfEmpty
         gender = try container.decodeIfPresent(ClothingGender.self, forKey: .gender)
         relationGroup = try container.decode(RelationGroup.self, forKey: .relationGroup)
-        tags = EmergencyRelativeProfile.normalizeTags(try container.decodeIfPresent([String].self, forKey: .tags) ?? [])
         medicalProfile = try container.decodeIfPresent(RelativeMedicalProfile.self, forKey: .medicalProfile) ?? RelativeMedicalProfile()
         medicalBaselineNote = try container.decodeIfPresent(String.self, forKey: .medicalBaselineNote)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         specialNeedsNote = try container.decodeIfPresent(String.self, forKey: .specialNeedsNote)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -576,10 +554,20 @@ final class RelativeProfileStore: ObservableObject {
     static let shared = RelativeProfileStore()
 
     @Published private(set) var profiles: [EmergencyRelativeProfile] = []
+    @Published private(set) var isSyncing = false
+    @Published private(set) var isServerSyncEnabled = false
+
+    var canSyncToServer: Bool {
+        currentUserId() != nil && AuthSessionStore.shared.session?.accessToken.nilIfBlank != nil
+    }
 
     private let userDefaults: UserDefaults
     private let activeUserIdProvider: () -> String?
     private var sessionObserver: AnyCancellable?
+    private var syncTask: Task<Void, Never>?
+    private var remoteProfilesById: [String: EmergencyRelativeProfile] = [:]
+    private var hasLoadedRemoteSnapshot = false
+    private var activeSyncOperations = 0
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -598,46 +586,36 @@ final class RelativeProfileStore: ObservableObject {
         }
     }
 
-    var availableTags: [String] {
-        EmergencyRelativeProfile.normalizeTags(
-            profiles.flatMap(\.tags)
-        )
-    }
-
     func reloadCurrentUser() {
-        guard let userId = activeUserIdProvider()?.trimmingCharacters(in: .whitespacesAndNewlines),
+        syncTask?.cancel()
+        remoteProfilesById = [:]
+        hasLoadedRemoteSnapshot = false
+        activeSyncOperations = 0
+        isSyncing = false
+
+        guard let userId = currentUserId(),
               !userId.isEmpty else {
             profiles = []
+            isServerSyncEnabled = false
             return
         }
 
-        guard let data = userDefaults.data(forKey: storageKey(for: userId)) else {
-            profiles = []
-            return
-        }
+        isServerSyncEnabled = loadServerSyncPreference(for: userId)
+        profiles = loadLocalProfiles(for: userId)
 
-        do {
-            let decoded = try JSONDecoder().decode([EmergencyRelativeProfile].self, from: data)
-            profiles = sortProfiles(decoded)
-        } catch {
-            print("❌ Failed to load relative profiles: \(error)")
-            profiles = []
+        if isServerSyncEnabled {
+            scheduleServerBootstrap(for: userId)
         }
     }
 
     func filteredProfiles(
         searchText: String = "",
-        relationGroup: RelationGroup? = nil,
-        tag: String? = nil
+        relationGroup: RelationGroup? = nil
     ) -> [EmergencyRelativeProfile] {
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedTag = tag?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return profiles.filter { profile in
             let matchesGroup = relationGroup == nil || profile.relationGroup == relationGroup
-            let matchesTag = trimmedTag == nil || profile.tags.contains {
-                $0.localizedCaseInsensitiveCompare(trimmedTag ?? "") == .orderedSame
-            }
 
             let matchesSearch: Bool
             if trimmedSearch.isEmpty {
@@ -648,7 +626,6 @@ final class RelativeProfileStore: ObservableObject {
                     profile.phoneNumber ?? "",
                     profile.gender?.title ?? "",
                     profile.relationGroup.title,
-                    profile.tags.joined(separator: " "),
                     profile.medicalProfile.searchText,
                     profile.storedInfoLines.joined(separator: " ")
                 ]
@@ -657,7 +634,7 @@ final class RelativeProfileStore: ObservableObject {
                 }
             }
 
-            return matchesGroup && matchesTag && matchesSearch
+            return matchesGroup && matchesSearch
         }
     }
 
@@ -674,7 +651,6 @@ final class RelativeProfileStore: ObservableObject {
             personType: normalized.personType,
             gender: normalized.gender,
             relationGroup: normalized.relationGroup,
-            tags: normalized.tags,
             medicalProfile: normalized.medicalProfile,
             medicalBaselineNote: normalized.medicalBaselineNote,
             specialNeedsNote: normalized.specialNeedsNote,
@@ -690,20 +666,80 @@ final class RelativeProfileStore: ObservableObject {
 
         profiles = sortProfiles(profiles)
         persist()
+
+        if isServerSyncEnabled {
+            scheduleRemoteFlushForCurrentUser()
+        }
     }
 
     func delete(profileId: String) {
         profiles.removeAll { $0.id == profileId }
         persist()
+
+        if isServerSyncEnabled {
+            scheduleRemoteFlushForCurrentUser()
+        }
+    }
+
+    func setServerSyncEnabled(_ enabled: Bool) {
+        guard let userId = currentUserId(),
+              !userId.isEmpty else {
+            isServerSyncEnabled = false
+            return
+        }
+
+        guard isServerSyncEnabled != enabled else { return }
+
+        persistServerSyncPreference(enabled, for: userId)
+        isServerSyncEnabled = enabled
+        syncTask?.cancel()
+
+        if enabled {
+            scheduleServerBootstrap(for: userId)
+            return
+        }
+
+        remoteProfilesById = [:]
+        hasLoadedRemoteSnapshot = false
+
+        guard canSyncToServer else { return }
+
+        syncTask = Task { [weak self] in
+            await self?.purgeServerProfiles(for: userId)
+        }
     }
 
     private func persist() {
-        guard let userId = activeUserIdProvider()?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let userId = currentUserId(),
               !userId.isEmpty else {
             profiles = []
             return
         }
 
+        persist(profiles, for: userId)
+    }
+
+    private func currentUserId() -> String? {
+        activeUserIdProvider()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfBlank
+    }
+
+    private func loadLocalProfiles(for userId: String) -> [EmergencyRelativeProfile] {
+        guard let data = userDefaults.data(forKey: storageKey(for: userId)) else {
+            return []
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode([EmergencyRelativeProfile].self, from: data)
+            return sortProfiles(decoded)
+        } catch {
+            print("❌ Failed to load relative profiles: \(error)")
+            return []
+        }
+    }
+
+    private func persist(_ profiles: [EmergencyRelativeProfile], for userId: String) {
         do {
             let data = try JSONEncoder().encode(profiles)
             userDefaults.set(data, forKey: storageKey(for: userId))
@@ -712,8 +748,310 @@ final class RelativeProfileStore: ObservableObject {
         }
     }
 
+    private func loadServerSyncPreference(for userId: String) -> Bool {
+        userDefaults.object(forKey: serverSyncPreferenceKey(for: userId)) as? Bool ?? false
+    }
+
+    private func persistServerSyncPreference(_ enabled: Bool, for userId: String) {
+        userDefaults.set(enabled, forKey: serverSyncPreferenceKey(for: userId))
+    }
+
+    private func scheduleServerBootstrap(for userId: String) {
+        guard isServerSyncEnabled, canSyncToServer else { return }
+
+        let localSnapshot = sortProfiles(profiles)
+
+        syncTask?.cancel()
+        syncTask = Task { [weak self] in
+            await self?.bootstrapServerSync(for: userId, localSnapshot: localSnapshot)
+        }
+    }
+
+    private func scheduleRemoteFlushForCurrentUser() {
+        guard let userId = currentUserId(),
+              isServerSyncEnabled,
+              canSyncToServer else {
+            return
+        }
+
+        let localSnapshot = sortProfiles(profiles)
+
+        syncTask?.cancel()
+        syncTask = Task { [weak self] in
+            await self?.flushLocalChangesToServer(for: userId, localSnapshot: localSnapshot)
+        }
+    }
+
+    private func bootstrapServerSync(
+        for userId: String,
+        localSnapshot: [EmergencyRelativeProfile]
+    ) async {
+        beginSync()
+        defer { endSync() }
+
+        do {
+            guard currentUserId() == userId,
+                  isServerSyncEnabled,
+                  canSyncToServer else {
+                return
+            }
+
+            let remoteProfiles = try await RelativeProfileAPIService.shared.fetchRelativeProfiles()
+            guard currentUserId() == userId,
+                  isServerSyncEnabled,
+                  Task.isCancelled == false else {
+                return
+            }
+
+            let sortedRemoteProfiles = sortProfiles(remoteProfiles)
+            hasLoadedRemoteSnapshot = true
+            remoteProfilesById = dictionary(from: sortedRemoteProfiles)
+
+            let mergedProfiles = mergeProfiles(local: localSnapshot, remote: sortedRemoteProfiles)
+            if profilesEqual(mergedProfiles, profiles) == false {
+                profiles = mergedProfiles
+                persist(mergedProfiles, for: userId)
+            }
+
+            guard profilesEqual(mergedProfiles, sortedRemoteProfiles) == false else { return }
+
+            try await fallbackToFullSync(for: userId, localSnapshot: mergedProfiles)
+        } catch RelativeProfileAPIError.notAuthenticated {
+            return
+        } catch is CancellationError {
+            return
+        } catch {
+            print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+        }
+    }
+
+    private func flushLocalChangesToServer(
+        for userId: String,
+        localSnapshot: [EmergencyRelativeProfile]
+    ) async {
+        beginSync()
+        defer { endSync() }
+
+        do {
+            guard currentUserId() == userId,
+                  isServerSyncEnabled,
+                  canSyncToServer else {
+                return
+            }
+
+            if hasLoadedRemoteSnapshot == false {
+                await bootstrapServerSync(for: userId, localSnapshot: localSnapshot)
+                return
+            }
+
+            let localById = dictionary(from: localSnapshot)
+            var remoteById = remoteProfilesById
+
+            let deletedIds = remoteById.keys
+                .filter { localById[$0] == nil }
+                .sorted()
+
+            for id in deletedIds {
+                try Task.checkCancellation()
+                do {
+                    try await RelativeProfileAPIService.shared.deleteRelativeProfile(id: id)
+                } catch let error as RelativeProfileAPIError where error.statusCode == 404 {
+                    // Hồ sơ đã bị xoá trên server trước đó, coi như đã đồng bộ.
+                }
+                remoteById.removeValue(forKey: id)
+            }
+
+            let createdIds = localById.keys
+                .filter { remoteById[$0] == nil }
+                .sorted()
+
+            for id in createdIds {
+                guard let profile = localById[id] else { continue }
+                try Task.checkCancellation()
+                let createdProfile = try await RelativeProfileAPIService.shared.createRelativeProfile(profile)
+                remoteById[canonicalProfileId(createdProfile.id)] = createdProfile
+            }
+
+            let updatedIds = localById.keys
+                .filter { remoteById[$0] != nil }
+                .sorted()
+
+            for id in updatedIds {
+                guard let localProfile = localById[id],
+                      let remoteProfile = remoteById[id],
+                      profilesEqual([localProfile], [remoteProfile]) == false else {
+                    continue
+                }
+
+                try Task.checkCancellation()
+                let updatedProfile = try await RelativeProfileAPIService.shared.updateRelativeProfile(localProfile)
+                remoteById[canonicalProfileId(updatedProfile.id)] = updatedProfile
+            }
+
+            guard currentUserId() == userId,
+                  isServerSyncEnabled,
+                  Task.isCancelled == false else {
+                return
+            }
+
+            applyRemoteSnapshot(Array(remoteById.values), for: userId)
+        } catch RelativeProfileAPIError.notAuthenticated {
+            return
+        } catch is CancellationError {
+            return
+        } catch let error as RelativeProfileAPIError where shouldFallbackToFullSync(for: error) {
+            do {
+                try await fallbackToFullSync(for: userId, localSnapshot: localSnapshot)
+            } catch RelativeProfileAPIError.notAuthenticated {
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+            }
+        } catch {
+            print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+        }
+    }
+
+    private func fallbackToFullSync(
+        for userId: String,
+        localSnapshot: [EmergencyRelativeProfile]
+    ) async throws {
+        let reconciledProfiles = try await RelativeProfileAPIService.shared.syncRelativeProfiles(localSnapshot)
+        guard currentUserId() == userId,
+              isServerSyncEnabled,
+              Task.isCancelled == false else {
+            return
+        }
+
+        applyRemoteSnapshot(reconciledProfiles, for: userId)
+    }
+
+    private func purgeServerProfiles(for userId: String) async {
+        beginSync()
+        defer { endSync() }
+
+        do {
+            guard currentUserId() == userId,
+                  isServerSyncEnabled == false,
+                  canSyncToServer else {
+                return
+            }
+
+            try await RelativeProfileAPIService.shared.clearRelativeProfilesFromServer()
+            guard currentUserId() == userId,
+                  isServerSyncEnabled == false,
+                  Task.isCancelled == false else {
+                return
+            }
+
+            remoteProfilesById = [:]
+            hasLoadedRemoteSnapshot = false
+        } catch RelativeProfileAPIError.notAuthenticated {
+            return
+        } catch is CancellationError {
+            return
+        } catch {
+            print("❌ Failed to remove relative profiles from server: \(error.localizedDescription)")
+        }
+    }
+
+    private func mergeProfiles(
+        local: [EmergencyRelativeProfile],
+        remote: [EmergencyRelativeProfile]
+    ) -> [EmergencyRelativeProfile] {
+        var mergedById: [String: EmergencyRelativeProfile] = [:]
+
+        for profile in remote {
+            mergedById[canonicalProfileId(profile.id)] = profile
+        }
+
+        for profile in local {
+            let canonicalId = canonicalProfileId(profile.id)
+            if let existing = mergedById[canonicalId] {
+                mergedById[canonicalId] = profile.updatedAt >= existing.updatedAt ? profile : existing
+            } else {
+                mergedById[canonicalId] = profile
+            }
+        }
+
+        return sortProfiles(Array(mergedById.values))
+    }
+
+    private func profilesEqual(_ lhs: [EmergencyRelativeProfile], _ rhs: [EmergencyRelativeProfile]) -> Bool {
+        canonicalizedForComparison(lhs) == canonicalizedForComparison(rhs)
+    }
+
+    private func canonicalizedForComparison(_ profiles: [EmergencyRelativeProfile]) -> [EmergencyRelativeProfile] {
+        sortProfiles(
+            profiles.map { profile in
+                EmergencyRelativeProfile(
+                    id: canonicalProfileId(profile.id),
+                    displayName: profile.displayName,
+                    phoneNumber: profile.phoneNumber,
+                    personType: profile.personType,
+                    gender: profile.gender,
+                    relationGroup: profile.relationGroup,
+                    medicalProfile: profile.medicalProfile,
+                    medicalBaselineNote: profile.medicalBaselineNote,
+                    specialNeedsNote: profile.specialNeedsNote,
+                    specialDietNote: profile.specialDietNote,
+                    updatedAt: profile.updatedAt
+                )
+            }
+        )
+    }
+
+    private func canonicalProfileId(_ id: String) -> String {
+        UUID(uuidString: id)?.uuidString ?? id
+    }
+
+    private func dictionary(from profiles: [EmergencyRelativeProfile]) -> [String: EmergencyRelativeProfile] {
+        var result: [String: EmergencyRelativeProfile] = [:]
+
+        for profile in profiles {
+            result[canonicalProfileId(profile.id)] = profile
+        }
+
+        return result
+    }
+
+    private func applyRemoteSnapshot(_ remoteProfiles: [EmergencyRelativeProfile], for userId: String) {
+        let sortedProfiles = sortProfiles(remoteProfiles)
+        remoteProfilesById = dictionary(from: sortedProfiles)
+        hasLoadedRemoteSnapshot = true
+
+        guard currentUserId() == userId else { return }
+
+        profiles = sortedProfiles
+        persist(sortedProfiles, for: userId)
+    }
+
+    private func shouldFallbackToFullSync(for error: RelativeProfileAPIError) -> Bool {
+        guard let statusCode = error.statusCode else {
+            return false
+        }
+
+        return [400, 404, 409].contains(statusCode)
+    }
+
+    private func beginSync() {
+        activeSyncOperations += 1
+        isSyncing = activeSyncOperations > 0
+    }
+
+    private func endSync() {
+        activeSyncOperations = max(0, activeSyncOperations - 1)
+        isSyncing = activeSyncOperations > 0
+    }
+
     private func storageKey(for userId: String) -> String {
         "saved_relative_profiles_\(userId)"
+    }
+
+    private func serverSyncPreferenceKey(for userId: String) -> String {
+        "saved_relative_profiles_sync_enabled_\(userId)"
     }
 
     private func sortProfiles(_ profiles: [EmergencyRelativeProfile]) -> [EmergencyRelativeProfile] {
@@ -750,6 +1088,26 @@ private extension Optional where Wrapped == String {
         case .some(let value):
             return value.trimmedNilIfEmpty
         case .none:
+            return nil
+        }
+    }
+
+    var nilIfBlank: String? {
+        switch self {
+        case .some(let value):
+            return value.nilIfBlank
+        case .none:
+            return nil
+        }
+    }
+}
+
+private extension RelativeProfileAPIError {
+    var statusCode: Int? {
+        switch self {
+        case .httpError(let code, _):
+            return code
+        default:
             return nil
         }
     }
