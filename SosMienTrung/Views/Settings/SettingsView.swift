@@ -8,6 +8,8 @@
 import SwiftUI
 import Combine
 import UIKit
+import CoreLocation
+import PhotosUI
 
 // MARK: - App Theme Enum
 enum AppTheme: String, CaseIterable {
@@ -415,105 +417,584 @@ struct BatterySavingToggleRow: View {
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var userProfile = UserProfile.shared
-    
+
+    @ObservedObject private var authSession = AuthSessionStore.shared
+    @StateObject private var locationManager = LocationManager()
+    private let avatarUploader = CloudinaryImageUploader.resQ(folder: "resq/profile")
+
     @State private var name: String = ""
+    @State private var firstName: String = ""
+    @State private var lastName: String = ""
     @State private var phoneNumber: String = ""
+    @State private var address: String = ""
+    @State private var ward: String = ""
+    @State private var province: String = ""
+    @State private var avatarUrl: String = ""
+    @State private var latitudeText: String = ""
+    @State private var longitudeText: String = ""
+    @State private var isSaving = false
+    @State private var isLoadingVictimProfile = false
+    @State private var isUploadingAvatar = false
+    @State private var hasLoadedVictimProfile = false
+    @State private var showAvatarSourceSheet = false
+    @State private var showPhotoPicker = false
+    @State private var showCameraPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var pickedCameraImage: UIImage?
+    @State private var localAvatarImage: UIImage?
     @State private var showError = false
     @State private var errorMessage = ""
-    
+
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    // Avatar
-                    HStack {
-                        Spacer()
-                        ZStack {
-                            Circle()
-                                .fill(Color.blue.opacity(0.15))
-                                .frame(width: 100, height: 100)
-                            
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 30))
-                                .foregroundColor(.blue)
+                avatarSection
+
+                if isLoadingVictimProfile {
+                    Section {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("Đang tải hồ sơ victim từ máy chủ...")
+                                .foregroundColor(.secondary)
                         }
-                        Spacer()
                     }
-                    .listRowBackground(Color.clear)
-                    
-                    Text("Đặt ảnh đại diện")
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
                 }
-                
-                Section {
-                    TextField("Tên", text: $name)
-                        .textContentType(.name)
-                    
-                    TextField("Số điện thoại", text: $phoneNumber)
-                        .textContentType(.telephoneNumber)
-                        .keyboardType(.phonePad)
-                } header: {
-                    Text("Thông tin cá nhân")
-                } footer: {
-                    Text("Nhập tên và số điện thoại để người khác có thể nhận diện bạn.")
+
+                if isVictimRole {
+                    victimProfileSections
+                } else {
+                    basicProfileSection
                 }
             }
-            .navigationTitle("Sửa hồ sơ")
+            .navigationTitle(isVictimRole ? "Cập nhật hồ sơ" : "Sửa hồ sơ")
             .navigationBarTitleDisplayMode(.inline)
+            .disabled(isSaving || isLoadingVictimProfile || isUploadingAvatar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Hủy bỏ") {
+                    Button("Hủy") {
                         dismiss()
                     }
+                    .disabled(isSaving || isUploadingAvatar)
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Xong") {
-                        saveProfile()
+                    if isSaving || isUploadingAvatar {
+                        ProgressView()
+                    } else {
+                        Button("Lưu") {
+                            saveProfile()
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(!isFormValid || isLoadingVictimProfile || isUploadingAvatar)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(!isFormValid)
                 }
             }
             .onAppear {
-                name = userProfile.currentUser?.name ?? ""
-                phoneNumber = userProfile.currentUser?.phoneNumber ?? ""
+                populateFormFromCurrentUser()
+            }
+            .task {
+                await loadVictimProfileIfNeeded()
             }
             .alert("Lỗi", isPresented: $showError) {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(errorMessage)
             }
+            .confirmationDialog("Ảnh đại diện", isPresented: $showAvatarSourceSheet, titleVisibility: .visible) {
+                Button {
+                    showPhotoPicker = true
+                } label: {
+                    Label("Chọn từ thư viện", systemImage: "photo.on.rectangle")
+                }
+
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button {
+                        showCameraPicker = true
+                    } label: {
+                        Label("Chụp từ camera", systemImage: "camera")
+                    }
+                }
+
+                if isVictimRole && hasAvatar {
+                    Button("Xóa ảnh", role: .destructive) {
+                        localAvatarImage = nil
+                        avatarUrl = ""
+                    }
+                }
+
+                Button("Huỷ", role: .cancel) { }
+            }
+            .photosPicker(
+                isPresented: $showPhotoPicker,
+                selection: $selectedPhotoItem,
+                matching: .images,
+                photoLibrary: .shared()
+            )
+            .sheet(isPresented: $showCameraPicker) {
+                AppCameraPicker(image: $pickedCameraImage)
+                    .ignoresSafeArea()
+            }
+            .onChange(of: selectedPhotoItem) { newItem in
+                guard let item = newItem else { return }
+                Task {
+                    await handleAvatarPhotoLibrarySelection(item)
+                    await MainActor.run {
+                        selectedPhotoItem = nil
+                    }
+                }
+            }
+            .onChange(of: pickedCameraImage) { image in
+                guard let image else { return }
+                Task {
+                    await uploadAvatar(image)
+                    await MainActor.run {
+                        pickedCameraImage = nil
+                    }
+                }
+            }
         }
     }
-    
-    private var isFormValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty &&
-        phoneNumber.count >= 9
+
+    private var isVictimRole: Bool {
+        authSession.session?.roleId == 5
     }
-    
+
+    @ViewBuilder
+    private var avatarSection: some View {
+        Section {
+            HStack {
+                Spacer()
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 100, height: 100)
+
+                    if let localAvatarImage {
+                        Image(uiImage: localAvatarImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 100, height: 100)
+                            .clipShape(Circle())
+                    } else if let avatarPreviewURL,
+                              !avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AsyncImage(url: avatarPreviewURL) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            default:
+                                avatarFallbackView
+                            }
+                        }
+                        .frame(width: 100, height: 100)
+                        .clipShape(Circle())
+                    } else {
+                        avatarFallbackView
+                    }
+
+                    if isUploadingAvatar {
+                        Circle()
+                            .fill(.black.opacity(0.38))
+                            .frame(width: 100, height: 100)
+                            .overlay {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                    }
+                }
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+
+            if isVictimRole {
+                Button {
+                    showAvatarSourceSheet = true
+                } label: {
+                    Label(hasAvatar ? "Đổi ảnh đại diện" : "Chọn ảnh đại diện", systemImage: "photo.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .listRowBackground(Color.clear)
+
+                Text(avatarHelperText)
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .listRowBackground(Color.clear)
+            } else {
+                Text("Ảnh đại diện hiện chỉ là hiển thị local.")
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    private var avatarFallbackView: some View {
+        Group {
+            if let firstCharacter = displayNamePreview.first {
+                Text(String(firstCharacter).uppercased())
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundColor(.blue)
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 30))
+                    .foregroundColor(.blue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var basicProfileSection: some View {
+        Section {
+            TextField("Tên", text: $name)
+                .textContentType(.name)
+
+            TextField("Số điện thoại", text: $phoneNumber)
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+        } header: {
+            Text("Thông tin cá nhân")
+        } footer: {
+            Text("Nhập tên và số điện thoại để người khác có thể nhận diện bạn.")
+        }
+    }
+
+    @ViewBuilder
+    private var victimProfileSections: some View {
+        Section {
+            TextField("Tên", text: $firstName)
+                .textContentType(.givenName)
+
+            TextField("Họ", text: $lastName)
+                .textContentType(.familyName)
+
+            TextField("Số điện thoại", text: $phoneNumber)
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+        } header: {
+            Text("Thông tin cơ bản")
+        } footer: {
+            Text("Dữ liệu này sẽ được gửi lên BE qua `PUT /identity/user/profile` cho role victim.")
+        }
+
+        Section {
+            TextField("Địa chỉ", text: $address, axis: .vertical)
+                .lineLimit(2...4)
+
+            TextField("Phường/Xã", text: $ward)
+                .textContentType(.addressCityAndState)
+
+            TextField("Tỉnh/Thành", text: $province)
+                .textContentType(.addressCity)
+        } header: {
+            Text("Địa chỉ")
+        }
+
+        Section {
+            TextField("Latitude", text: $latitudeText)
+                .keyboardType(.decimalPad)
+
+            TextField("Longitude", text: $longitudeText)
+                .keyboardType(.decimalPad)
+
+            Button {
+                fillCoordinatesFromCurrentLocation()
+            } label: {
+                HStack {
+                    Image(systemName: "location.fill")
+                    Text("Dùng vị trí hiện tại")
+                    Spacer()
+                    if locationManager.isFetchingLocation {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(locationManager.isFetchingLocation)
+        } header: {
+            Text("Toạ độ")
+        } footer: {
+            Text("Nếu để trống, app sẽ gửi giá trị hiện có hoặc `0` khi chưa có toạ độ.")
+        }
+    }
+
+    private var isFormValid: Bool {
+        hasValidDisplayName && hasValidPhoneNumber
+    }
+
+    private var hasValidDisplayName: Bool {
+        if isVictimRole {
+            return !displayNamePreview.isEmpty
+        }
+        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hasValidPhoneNumber: Bool {
+        let digits = phoneNumber.filter(\.isNumber)
+        return !phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && digits.count >= 9
+    }
+
+    private var displayNamePreview: String {
+        if isVictimRole {
+            let parts = [
+                lastName.trimmingCharacters(in: .whitespacesAndNewlines),
+                firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+            ].filter { !$0.isEmpty }
+            if !parts.isEmpty {
+                return parts.joined(separator: " ")
+            }
+        }
+
+        return name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var avatarPreviewURL: URL? {
+        let trimmedURL = avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else { return nil }
+        return URL(string: trimmedURL)
+    }
+
+    private var hasAvatar: Bool {
+        localAvatarImage != nil || !avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var avatarHelperText: String {
+        if isUploadingAvatar {
+            return "Đang tải ảnh lên Cloudinary..."
+        }
+        if hasAvatar {
+            return "Ảnh sẽ tự upload lên Cloudinary và lưu URL vào profile."
+        }
+        return "Không cần nhập URL nữa. Chọn ảnh từ thư viện hoặc camera, app sẽ tự upload lên Cloudinary."
+    }
+
     private func saveProfile() {
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespaces)
-        
+        if isVictimRole {
+            Task {
+                await saveVictimProfile()
+            }
+            return
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+
         guard !trimmedName.isEmpty else {
             errorMessage = "Vui lòng nhập tên"
             showError = true
             return
         }
-        
-        guard trimmedPhone.count >= 9 else {
+
+        guard hasValidPhoneNumber else {
             errorMessage = "Số điện thoại không hợp lệ"
             showError = true
             return
         }
-        
+
         userProfile.saveUser(name: trimmedName, phoneNumber: trimmedPhone)
         dismiss()
+    }
+
+    @MainActor
+    private func saveVictimProfile() async {
+        let trimmedFirstName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedWard = ward.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProvince = province.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAvatarUrl = avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let latitude = parsedCoordinate(from: latitudeText) ?? userProfile.currentUser?.latitude ?? 0
+        let longitude = parsedCoordinate(from: longitudeText) ?? userProfile.currentUser?.longitude ?? 0
+
+        guard !displayNamePreview.isEmpty else {
+            errorMessage = "Vui lòng nhập ít nhất tên hoặc họ"
+            showError = true
+            return
+        }
+
+        guard hasValidPhoneNumber else {
+            errorMessage = "Số điện thoại không hợp lệ"
+            showError = true
+            return
+        }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        let payload = UserProfileUpdateRequest(
+            firstName: trimmedFirstName,
+            lastName: trimmedLastName,
+            phone: trimmedPhone,
+            address: trimmedAddress,
+            ward: trimmedWard,
+            province: trimmedProvince,
+            latitude: latitude,
+            longitude: longitude,
+            avatarUrl: trimmedAvatarUrl
+        )
+
+        do {
+            let response = try await AuthService.shared.updateUserProfile(payload)
+
+            userProfile.saveVictimProfile(
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                phoneNumber: trimmedPhone,
+                address: trimmedAddress,
+                ward: trimmedWard,
+                province: trimmedProvince,
+                latitude: latitude,
+                longitude: longitude,
+                avatarUrl: trimmedAvatarUrl
+            )
+
+            if let response {
+                AuthSessionStore.shared.apply(currentUser: response)
+                userProfile.apply(currentUser: response, fallbackPhone: trimmedPhone)
+            }
+
+            dismiss()
+        } catch {
+            if let authError = error as? AuthService.AuthServiceError {
+                errorMessage = authError.localizedDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            showError = true
+        }
+    }
+
+    @MainActor
+    private func loadVictimProfileIfNeeded() async {
+        guard isVictimRole, !hasLoadedVictimProfile else { return }
+
+        hasLoadedVictimProfile = true
+        isLoadingVictimProfile = true
+        defer { isLoadingVictimProfile = false }
+
+        do {
+            let response = try await AuthService.shared.fetchCurrentUser()
+            AuthSessionStore.shared.apply(currentUser: response)
+            userProfile.apply(currentUser: response, fallbackPhone: userProfile.currentUser?.phoneNumber)
+            populateFormFromCurrentUser()
+        } catch {
+            print("[EditProfileView] Failed to load victim profile: \(error.localizedDescription)")
+        }
+    }
+
+    private func fillCoordinatesFromCurrentLocation() {
+        locationManager.requestLocation { location in
+            guard let location else {
+                Task { @MainActor in
+                    errorMessage = "Không lấy được vị trí hiện tại"
+                    showError = true
+                }
+                return
+            }
+
+            Task { @MainActor in
+                latitudeText = Self.coordinateString(location.coordinate.latitude)
+                longitudeText = Self.coordinateString(location.coordinate.longitude)
+
+                if address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    do {
+                        address = try await GeocodingService.shared.reverseGeocode(location.coordinate)
+                    } catch {
+                        print("[EditProfileView] Reverse geocode failed: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func handleAvatarPhotoLibrarySelection(_ item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                errorMessage = "Không thể đọc ảnh từ thư viện"
+                showError = true
+                return
+            }
+
+            await uploadAvatar(image)
+        } catch {
+            errorMessage = "Không thể chọn ảnh: \(error.localizedDescription)"
+            showError = true
+        }
+    }
+
+    @MainActor
+    private func uploadAvatar(_ image: UIImage) async {
+        let previousLocalAvatar = localAvatarImage
+        let previousAvatarURL = avatarUrl
+
+        localAvatarImage = image
+        isUploadingAvatar = true
+        defer { isUploadingAvatar = false }
+
+        do {
+            avatarUrl = try await avatarUploader.upload(image: image, fileNamePrefix: "profile")
+        } catch {
+            localAvatarImage = previousLocalAvatar
+            avatarUrl = previousAvatarURL
+            errorMessage = "Upload ảnh thất bại: \(error.localizedDescription)"
+            showError = true
+        }
+    }
+
+    private func populateFormFromCurrentUser() {
+        guard let currentUser = userProfile.currentUser else { return }
+
+        localAvatarImage = nil
+        name = currentUser.name
+        phoneNumber = currentUser.phoneNumber
+        address = currentUser.address ?? ""
+        ward = currentUser.ward ?? ""
+        province = currentUser.province ?? ""
+        avatarUrl = currentUser.avatarUrl ?? ""
+        latitudeText = Self.coordinateString(currentUser.latitude)
+        longitudeText = Self.coordinateString(currentUser.longitude)
+
+        let storedFirstName = currentUser.firstName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedLastName = currentUser.lastName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if storedFirstName != nil || storedLastName != nil {
+            firstName = storedFirstName ?? ""
+            lastName = storedLastName ?? ""
+            return
+        }
+
+        let parts = currentUser.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .map(String.init)
+
+        if let lastComponent = parts.last {
+            firstName = lastComponent
+            lastName = parts.dropLast().joined(separator: " ")
+        } else {
+            firstName = ""
+            lastName = ""
+        }
+    }
+
+    private func parsedCoordinate(from value: String) -> Double? {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard !normalized.isEmpty else { return nil }
+        return Double(normalized)
+    }
+
+    private static func coordinateString(_ value: Double?) -> String {
+        guard let value else { return "" }
+        return String(format: "%.6f", value)
     }
 }
 

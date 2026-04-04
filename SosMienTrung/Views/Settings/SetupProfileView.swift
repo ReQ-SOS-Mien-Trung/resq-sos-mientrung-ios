@@ -8,6 +8,39 @@
 import SwiftUI
 import MultipeerConnectivity
 
+enum VietnamPhoneNumber {
+    static func sanitizedInput(_ raw: String) -> String {
+        var digits = raw.filter(\.isNumber)
+
+        if digits.hasPrefix("84") {
+            let localDigits = String(digits.dropFirst(2))
+            if localDigits.count == 9 || localDigits.count == 10 {
+                digits = localDigits
+            }
+        }
+
+        return String(digits.prefix(10))
+    }
+
+    static func isValidInput(_ raw: String) -> Bool {
+        let digits = sanitizedInput(raw)
+        return digits.count >= 9 && digits.count <= 10
+    }
+
+    static func normalizedE164(_ raw: String) -> String {
+        let digits = sanitizedInput(raw)
+        if digits.hasPrefix("0") {
+            return "+84" + digits.dropFirst()
+        }
+        return "+84" + digits
+    }
+
+    static func editableInput(_ raw: String?) -> String {
+        guard let raw else { return "" }
+        return sanitizedInput(raw)
+    }
+}
+
 struct SetupProfileView: View {
     @ObservedObject var userProfile = UserProfile.shared
     @StateObject private var phoneAuth = PhoneAuthManager.shared
@@ -211,9 +244,7 @@ struct SetupProfileView: View {
                                         .foregroundColor(DS.Colors.text)
                                         .focused($focusedField, equals: .phone)
                                         .onChange(of: phoneNumber) { newValue in
-                                            // Chỉ cho nhập số, tối đa 10 ký tự
-                                            let filtered = newValue.filter { $0.isNumber }
-                                            let trimmed = String(filtered.prefix(10))
+                                            let trimmed = VietnamPhoneNumber.sanitizedInput(newValue)
                                             if trimmed != newValue { phoneNumber = trimmed }
                                         }
                                 }
@@ -500,17 +531,11 @@ struct SetupProfileView: View {
     
     /// Chuẩn hoá số điện thoại thành +84...
     private func normalizedPhone(_ raw: String) -> String {
-        let digits = raw.filter { $0.isNumber }
-        if digits.hasPrefix("0") {
-            return "+84" + digits.dropFirst()
-        }
-        return "+84" + digits
+        VietnamPhoneNumber.normalizedE164(raw)
     }
     
     private var isPhoneValid: Bool {
-        let digits = phoneNumber.filter { $0.isNumber }
-        // 9 digits (without leading 0) or 10 digits (with leading 0)
-        return digits.count >= 9 && digits.count <= 10
+        VietnamPhoneNumber.isValidInput(phoneNumber)
     }
     
     private var isPINValid: Bool {
