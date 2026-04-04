@@ -3,10 +3,21 @@ import SwiftUI
 struct ActivityRowView: View {
     let activity: Activity
     let onStatusChange: (String) -> Void
+    let onNavigateTap: (() -> Void)?
 
     @State private var isExpanded = false
     @State private var showCancelConfirmation = false
     @State private var pendingCancelStatus: String?
+
+    init(
+        activity: Activity,
+        onStatusChange: @escaping (String) -> Void,
+        onNavigateTap: (() -> Void)? = nil
+    ) {
+        self.activity = activity
+        self.onStatusChange = onStatusChange
+        self.onNavigateTap = onNavigateTap
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
@@ -74,6 +85,37 @@ struct ActivityRowView: View {
                 }
 
                 Spacer()
+            }
+
+            if onNavigateTap != nil {
+                Button {
+                    onNavigateTap?()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "location.viewfinder")
+                            .font(.system(size: 14, weight: .semibold))
+
+                        Text("Chỉ đường Goong")
+                            .font(.system(size: 13, weight: .semibold))
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundColor(DS.Colors.info)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DS.Colors.info.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(DS.Colors.info.opacity(0.28), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
             if availableActions.isEmpty == false {

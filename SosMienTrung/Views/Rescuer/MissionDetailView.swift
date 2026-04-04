@@ -5,6 +5,7 @@ struct MissionDetailView: View {
     @StateObject private var vm = RescuerMissionViewModel()
     @StateObject private var incidentVM = IncidentViewModel()
     @State private var showReportIncident = false
+    @State private var showAggregateRoute = false
 
     private var missionTeamId: Int? { mission.missionTeamId }
 
@@ -18,6 +19,8 @@ struct MissionDetailView: View {
                     title: "Danh sách hoạt động",
                     subtitle: "\(activityCount) hoạt động cần theo dõi"
                 )
+
+                aggregateRouteButton
 
                 activitiesSection
 
@@ -65,6 +68,20 @@ struct MissionDetailView: View {
                 }
                 .padding()
                 .presentationDetents([.medium])
+            }
+        }
+        .sheet(isPresented: $showAggregateRoute) {
+            NavigationStack {
+                MissionAggregateRouteSheetView(mission: mission, vm: vm)
+                    .navigationTitle("Lộ trình tổng hợp")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Đóng") {
+                                showAggregateRoute = false
+                            }
+                        }
+                    }
             }
         }
         .alert("Lỗi", isPresented: Binding(
@@ -232,6 +249,52 @@ struct MissionDetailView: View {
                 }
             }
         }
+    }
+
+    private var aggregateRouteButton: some View {
+        Button {
+            vm.loadActivities(missionId: mission.id)
+            showAggregateRoute = true
+        } label: {
+            HStack(spacing: DS.Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(DS.Colors.info.opacity(0.12))
+                        .frame(width: 34, height: 34)
+
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Lộ trình tổng hợp theo team")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
+
+                    Text("Chỉ đường theo toàn bộ hoạt động chưa hoàn thành và tự cập nhật sau mỗi lần hoàn tất.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .padding(DS.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sharpCard(
+                borderColor: DS.Colors.borderSubtle,
+                borderWidth: DS.Border.thin,
+                shadow: DS.Shadow.none,
+                backgroundColor: DS.Colors.surface,
+                radius: 16
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
