@@ -170,6 +170,15 @@ struct RelativeProfileEditorView: View {
         self.onSave = onSave
     }
 
+    private var isPhoneNumberValid: Bool {
+        phoneNumber.isEmpty || VietnamPhoneNumber.isValidInput(phoneNumber)
+    }
+
+    private var phoneValidationColor: Color {
+        if phoneNumber.isEmpty { return DS.Colors.border }
+        return isPhoneNumberValid ? DS.Colors.success : DS.Colors.accent
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -178,9 +187,50 @@ struct RelativeProfileEditorView: View {
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)
 
-                    TextField("Số điện thoại (tuỳ chọn)", text: $phoneNumber)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        Text("SỐ ĐIỆN THOẠI")
+                            .font(DS.Typography.caption)
+                            .tracking(1)
+                            .foregroundColor(DS.Colors.textSecondary)
+
+                        HStack(spacing: 0) {
+                            Image(systemName: "phone.fill")
+                                .foregroundColor(DS.Colors.success)
+                                .frame(width: 20)
+                                .padding(.trailing, DS.Spacing.xs)
+
+                            Text("+84")
+                                .font(DS.Typography.body.monospacedDigit())
+                                .foregroundColor(DS.Colors.text)
+
+                            Divider()
+                                .frame(height: 20)
+                                .padding(.horizontal, DS.Spacing.xs)
+
+                            TextField("9 chữ số...", text: $phoneNumber)
+                                .textContentType(.telephoneNumber)
+                                .keyboardType(.phonePad)
+                                .foregroundColor(DS.Colors.text)
+                                .onChange(of: phoneNumber) { newValue in
+                                    let sanitized = VietnamPhoneNumber.sanitizedInput(newValue)
+                                    if sanitized != newValue {
+                                        phoneNumber = sanitized
+                                    }
+                                }
+                        }
+                        .padding(DS.Spacing.sm)
+                        .background(DS.Colors.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(phoneValidationColor, lineWidth: DS.Border.medium)
+                        )
+
+                        if !phoneNumber.isEmpty && !isPhoneNumberValid {
+                            Text("Nhập 9-10 chữ số (VD: 901234567)")
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.accent)
+                        }
+                    }
 
                     Picker("Nhóm tuổi", selection: $personType) {
                         ForEach(Person.PersonType.allCasesForProfileEditor, id: \.rawValue) { type in
@@ -241,15 +291,17 @@ struct RelativeProfileEditorView: View {
                         Toggle("Có đang dùng thuốc điều trị dài hạn", isOn: $medicalProfile.hasLongTermMedication)
 
                         if medicalProfile.hasLongTermMedication {
-                            ForEach($medicalProfile.longTermMedications) { $entry in
-                                MedicationEntryEditor(
-                                    entry: $entry,
-                                    focusedField: $focusedMedicationField,
-                                    removeAction: {
-                                        removeMedicationEntry(entry.id)
-                                    }
-                                )
-                                .id(entry.id)
+                            ForEach(medicalProfile.longTermMedications) { entry in
+                                if let entryBinding = medicationEntryBinding(for: entry.id) {
+                                    MedicationEntryEditor(
+                                        entry: entryBinding,
+                                        focusedField: $focusedMedicationField,
+                                        removeAction: {
+                                            removeMedicationEntry(entry.id)
+                                        }
+                                    )
+                                    .id(entry.id)
+                                }
                             }
 
                             Button {
@@ -412,7 +464,7 @@ struct RelativeProfileEditorView: View {
     private func loadExistingProfile() {
         guard let existingProfile else { return }
         displayName = existingProfile.displayName
-        phoneNumber = existingProfile.phoneNumber ?? ""
+        phoneNumber = VietnamPhoneNumber.editableInput(existingProfile.phoneNumber)
         personType = existingProfile.personType
         gender = existingProfile.gender
         relationGroup = existingProfile.relationGroup
@@ -430,10 +482,20 @@ struct RelativeProfileEditorView: View {
             return
         }
 
+        let sanitizedPhoneNumber = VietnamPhoneNumber.sanitizedInput(phoneNumber)
+        guard sanitizedPhoneNumber.isEmpty || VietnamPhoneNumber.isValidInput(sanitizedPhoneNumber) else {
+            errorMessage = "Số điện thoại cần có 9-10 chữ số."
+            showError = true
+            return
+        }
+        let normalizedPhoneNumber = sanitizedPhoneNumber.isEmpty
+            ? nil
+            : VietnamPhoneNumber.normalizedE164(sanitizedPhoneNumber)
+
         let profile = EmergencyRelativeProfile(
             id: existingProfile?.id ?? UUID().uuidString,
             displayName: trimmedName,
-            phoneNumber: phoneNumber,
+            phoneNumber: normalizedPhoneNumber,
             personType: personType,
             gender: gender,
             relationGroup: relationGroup,
@@ -463,9 +525,12 @@ struct RelativeProfileEditorView: View {
     }
 
     private func removeMedicationEntry(_ id: String) {
-        medicalProfile.longTermMedications.removeAll { $0.id == id }
         if focusedMedicationField?.entryId == id {
             focusedMedicationField = nil
+        }
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            medicalProfile.longTermMedications.removeAll { $0.id == id }
         }
     }
 
@@ -500,6 +565,25 @@ struct RelativeProfileEditorView: View {
             selected.insert(option)
         }
         return Array(Option.allCases).filter { selected.contains($0) }
+    }
+
+    private func medicationEntryBinding(for id: String) -> Binding<LongTermMedicationEntry>? {
+        guard medicalProfile.longTermMedications.contains(where: { $0.id == id }) else {
+            return nil
+        }
+
+        return Binding(
+            get: {
+                medicalProfile.longTermMedications.first(where: { $0.id == id })
+                    ?? LongTermMedicationEntry(id: id)
+            },
+            set: { updatedEntry in
+                guard let index = medicalProfile.longTermMedications.firstIndex(where: { $0.id == id }) else {
+                    return
+                }
+                medicalProfile.longTermMedications[index] = updatedEntry
+            }
+        )
     }
 }
 

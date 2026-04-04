@@ -148,67 +148,379 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         
         return formData
     }
+
+    private init(
+        id: String,
+        timestamp: Date,
+        sosType: SOSType?,
+        latitude: Double?,
+        longitude: Double?,
+        message: String,
+        sharedPeople: [Person],
+        personSourceMode: SOSPersonSourceMode,
+        selectedRelativeSnapshots: [SelectedRelativeSnapshot],
+        reliefData: ReliefData?,
+        rescueData: SavedRescueData?,
+        additionalDescription: String,
+        status: SOSSendStatus,
+        lastUpdated: Date,
+        sendHistory: [SOSSendEvent],
+        reportingTarget: SOSReportingTarget,
+        victimName: String?,
+        victimPhone: String?,
+        reporterName: String?,
+        reporterPhone: String?,
+        addressQuery: String,
+        resolvedAddress: String?,
+        manualLocation: SOSManualLocation?,
+        isMine: Bool
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.sosType = sosType
+        self.latitude = latitude
+        self.longitude = longitude
+        self.message = message
+        self.sharedPeople = sharedPeople
+        self.personSourceMode = personSourceMode
+        self.selectedRelativeSnapshots = selectedRelativeSnapshots
+        self.reliefData = reliefData
+        self.rescueData = rescueData
+        self.additionalDescription = additionalDescription
+        self.status = status
+        self.lastUpdated = lastUpdated
+        self.sendHistory = sendHistory
+        self.reportingTarget = reportingTarget
+        self.victimName = victimName
+        self.victimPhone = victimPhone
+        self.reporterName = reporterName
+        self.reporterPhone = reporterPhone
+        self.addressQuery = addressQuery
+        self.resolvedAddress = resolvedAddress
+        self.manualLocation = manualLocation
+        self.isMine = isMine
+    }
+
+    private static func trimmedValue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func personType(from rawValue: String, personId: String) -> Person.PersonType {
+        if let type = Person.PersonType(rawValue: rawValue.uppercased()) {
+            return type
+        }
+        if personId.lowercased().contains("child") {
+            return .child
+        }
+        if personId.lowercased().contains("elderly") || personId.lowercased().contains("senior") {
+            return .elderly
+        }
+        return .adult
+    }
+
+    private static func derivedPeopleCount(
+        incident: SOSIncidentData?,
+        victims: [SOSVictimEntry]
+    ) -> PeopleCount {
+        let derivedFromVictims = PeopleCount(
+            adults: victims.filter { personType(from: $0.personType, personId: $0.personId) == .adult }.count,
+            children: victims.filter { personType(from: $0.personType, personId: $0.personId) == .child }.count,
+            elderly: victims.filter { personType(from: $0.personType, personId: $0.personId) == .elderly }.count
+        )
+
+        guard let peopleCount = incident?.peopleCount else {
+            return derivedFromVictims
+        }
+
+        return PeopleCount(
+            adults: max(peopleCount.adult, derivedFromVictims.adults),
+            children: max(peopleCount.child, derivedFromVictims.children),
+            elderly: max(peopleCount.elderly, derivedFromVictims.elderly)
+        )
+    }
+
+    private static func buildSharedPeople(
+        victims: [SOSVictimEntry],
+        peopleCount: PeopleCount
+    ) -> [Person] {
+        var people = victims.map { victim in
+            Person(
+                id: victim.personId,
+                type: personType(from: victim.personType, personId: victim.personId),
+                index: victim.index,
+                customName: trimmedValue(victim.customName) ?? ""
+            )
+        }
+
+        func appendPlaceholders(
+            type: Person.PersonType,
+            targetCount: Int
+        ) {
+            let existing = people.filter { $0.type == type }
+            guard existing.count < targetCount else { return }
+
+            let nextIndexStart = max(existing.map(\.index).max() ?? 0, existing.count)
+            for offset in 1...(targetCount - existing.count) {
+                let index = nextIndexStart + offset
+                people.append(
+                    Person(
+                        id: "\(type.idPrefix)_\(index)",
+                        type: type,
+                        index: index
+                    )
+                )
+            }
+        }
+
+        appendPlaceholders(type: .adult, targetCount: peopleCount.adults)
+        appendPlaceholders(type: .child, targetCount: peopleCount.children)
+        appendPlaceholders(type: .elderly, targetCount: peopleCount.elderly)
+
+        return people.sorted {
+            if $0.type == $1.type {
+                return $0.index < $1.index
+            }
+            return $0.type.rawValue < $1.type.rawValue
+        }
+    }
+
+    private static func buildRescueData(
+        sosType: String?,
+        incident: SOSIncidentData?,
+        victims: [SOSVictimEntry],
+        sharedPeople: [Person],
+        peopleCount: PeopleCount
+    ) -> SavedRescueData? {
+        let normalizedSOSType = sosType?.uppercased()
+        let shouldCreateRescueData = normalizedSOSType == "RESCUE"
+            || normalizedSOSType == "BOTH"
+            || incident?.situation != nil
+            || incident?.hasInjured != nil
+            || incident?.othersAreStable != nil
+            || incident?.otherMedicalDescription != nil
+            || victims.contains(where: { $0.incidentStatus.isInjured || !$0.incidentStatus.medicalIssues.isEmpty })
+
+        guard shouldCreateRescueData else { return nil }
+
+        var rescueData = RescueData()
+        rescueData.situation = incident?.situation.flatMap(RescueSituation.init(rawValue:))
+        rescueData.otherSituationDescription = incident?.otherSituationDescription ?? ""
+        rescueData.peopleCount = peopleCount
+        rescueData.people = sharedPeople
+        rescueData.hasInjured = incident?.hasInjured ?? victims.contains(where: \.incidentStatus.isInjured)
+        rescueData.otherMedicalDescription = incident?.otherMedicalDescription ?? ""
+        rescueData.othersAreStable = incident?.othersAreStable ?? false
+
+        var allMedicalIssues: Set<MedicalIssue> = []
+        for victim in victims where victim.incidentStatus.isInjured || !victim.incidentStatus.medicalIssues.isEmpty {
+            let personIssues = Set(victim.incidentStatus.medicalIssues.compactMap(MedicalIssue.init(rawValue:)))
+            allMedicalIssues.formUnion(personIssues)
+            rescueData.injuredPersonIds.insert(victim.personId)
+            rescueData.medicalInfoByPerson[victim.personId] = PersonMedicalInfo(
+                personId: victim.personId,
+                medicalIssues: personIssues
+            )
+        }
+
+        if !rescueData.injuredPersonIds.isEmpty {
+            rescueData.hasInjured = true
+        }
+        rescueData.medicalIssues = allMedicalIssues
+
+        return SavedRescueData(from: rescueData)
+    }
+
+    private static func buildReliefData(
+        sosType: String?,
+        groupNeeds: SOSGroupNeedsData?,
+        victims: [SOSVictimEntry],
+        peopleCount: PeopleCount
+    ) -> ReliefData? {
+        let normalizedSOSType = sosType?.uppercased()
+        let shouldCreateReliefData = normalizedSOSType == "RELIEF"
+            || normalizedSOSType == "BOTH"
+            || groupNeeds != nil
+            || victims.contains(where: {
+                $0.personalNeeds.clothing.needed
+                    || $0.personalNeeds.diet.hasSpecialDiet
+                    || trimmedValue($0.personalNeeds.diet.description) != nil
+            })
+
+        guard shouldCreateReliefData else { return nil }
+
+        var reliefData = ReliefData()
+        reliefData.peopleCount = peopleCount
+        reliefData.supplies = Set((groupNeeds?.supplies ?? []).compactMap(SupplyNeed.init(rawValue:)))
+        reliefData.otherSupplyDescription = groupNeeds?.otherSupplyDescription ?? ""
+        reliefData.waterDuration = groupNeeds?.water?.duration.flatMap(WaterDuration.init(rawValue:))
+        reliefData.waterRemaining = groupNeeds?.water?.remaining.flatMap(WaterRemaining.init(rawValue:))
+        reliefData.foodDuration = groupNeeds?.food?.duration.flatMap(FoodDuration.init(rawValue:))
+        reliefData.needsUrgentMedicine = groupNeeds?.medicine?.needsUrgentMedicine
+        reliefData.medicineConditions = Set((groupNeeds?.medicine?.conditions ?? []).compactMap(MedicineCondition.init(rawValue:)))
+        reliefData.medicineOtherDescription = groupNeeds?.medicine?.otherDescription ?? ""
+        reliefData.medicalNeeds = Set((groupNeeds?.medicine?.medicalNeeds ?? []).compactMap(MedicalSupportNeed.init(rawValue:)))
+        reliefData.medicalDescription = groupNeeds?.medicine?.medicalDescription ?? ""
+        reliefData.isColdOrWet = groupNeeds?.blanket?.isColdOrWet
+        reliefData.blanketAvailability = groupNeeds?.blanket?.availability.flatMap(BlanketAvailability.init(rawValue:))
+        reliefData.blanketRequestCount = groupNeeds?.blanket?.requestCount
+        if let blanketAvailability = reliefData.blanketAvailability {
+            reliefData.areBlanketsEnough = blanketAvailability == .enough
+            if blanketAvailability == .enough {
+                reliefData.blanketRequestCount = nil
+            }
+        } else if reliefData.blanketRequestCount != nil {
+            reliefData.areBlanketsEnough = false
+        }
+        reliefData.clothingStatus = groupNeeds?.clothing?.status.flatMap(ClothingStatus.init(rawValue:))
+
+        for victim in victims {
+            if victim.personalNeeds.clothing.needed {
+                reliefData.clothingPersonIds.insert(victim.personId)
+                reliefData.clothingInfoByPerson[victim.personId] = ClothingPersonInfo(
+                    personId: victim.personId,
+                    gender: victim.personalNeeds.clothing.gender.flatMap(ClothingGender.init(rawValue:))
+                )
+            }
+
+            let hasSpecialDiet = victim.personalNeeds.diet.hasSpecialDiet
+                || trimmedValue(victim.personalNeeds.diet.description) != nil
+            if hasSpecialDiet {
+                reliefData.specialDietPersonIds.insert(victim.personId)
+                if let description = trimmedValue(victim.personalNeeds.diet.description) {
+                    reliefData.specialDietInfoByPerson[victim.personId] = PersonSpecialDietInfo(
+                        personId: victim.personId,
+                        dietDescription: description
+                    )
+                }
+            }
+        }
+
+        return reliefData
+    }
     
     /// Tạo từ record trả về bởi server (GET /emergency/sos-requests/me)
     init(fromServer record: SOSServerRecord) {
-        let trim: (String?) -> String? = { value in
-            guard let value else { return nil }
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
         let serverVictims = record.structuredData?.victims ?? []
+        let peopleCount = Self.derivedPeopleCount(
+            incident: record.structuredData?.incident,
+            victims: serverVictims
+        )
+        let sharedPeople = Self.buildSharedPeople(
+            victims: serverVictims,
+            peopleCount: peopleCount
+        )
+        let rescueData = Self.buildRescueData(
+            sosType: record.sosType,
+            incident: record.structuredData?.incident,
+            victims: serverVictims,
+            sharedPeople: sharedPeople,
+            peopleCount: peopleCount
+        )
+        let reliefData = Self.buildReliefData(
+            sosType: record.sosType,
+            groupNeeds: record.structuredData?.groupNeeds,
+            victims: serverVictims,
+            peopleCount: peopleCount
+        )
         let derivedVictimName: String? = {
-            if let explicitName = trim(record.victimInfo?.userName) {
+            if let explicitName = Self.trimmedValue(record.victimInfo?.userName) {
                 return explicitName
             }
             if serverVictims.count > 1 {
                 return "Nhóm \(serverVictims.count) người"
             }
             if let victim = serverVictims.first {
-                return trim(victim.customName)
+                return Self.trimmedValue(victim.customName)
             }
             return record.senderInfo?.userName
         }()
         let derivedVictimPhone: String? = {
-            if let explicitPhone = trim(record.victimInfo?.userPhone) {
+            if let explicitPhone = Self.trimmedValue(record.victimInfo?.userPhone) {
                 return explicitPhone
             }
             if serverVictims.count == 1 {
-                return trim(serverVictims.first?.personPhone)
+                return Self.trimmedValue(serverVictims.first?.personPhone)
             }
             return nil
         }()
 
-        self.id          = record.packetId
-        self.timestamp   = Date(timeIntervalSince1970: TimeInterval(record.timestamp))
-        self.sosType     = SOSType(rawValue: record.sosType ?? "")
-        self.latitude    = record.latitude
-        self.longitude   = record.longitude
-        self.message     = record.rawMessage
-        self.sharedPeople = []
-        self.personSourceMode = .manual
-        self.selectedRelativeSnapshots = []
-        self.reliefData  = nil
-        self.rescueData  = nil
-        self.additionalDescription = record.structuredData?.additionalDescription ?? ""
-        self.status      = SOSServerRecord.mapStatus(record.status)
-        self.lastUpdated = Date()
-        self.sendHistory = [SOSSendEvent(type: .serverAcknowledged, note: "Đồng bộ từ server (trạng thái: \(record.status ?? "unknown"))")]
-        self.reportingTarget = record.isSentOnBehalf == true ? .other : .self
-        self.victimName  = derivedVictimName
-        self.victimPhone = derivedVictimPhone
-        self.reporterName = record.reporterInfo?.userName ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userName)
-        self.reporterPhone = record.reporterInfo?.userPhone ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userPhone)
-        self.addressQuery = record.structuredData?.address ?? ""
-        self.resolvedAddress = record.structuredData?.address
-        if record.structuredData?.address != nil,
-           let latitude = record.latitude,
-           let longitude = record.longitude {
-            self.manualLocation = SOSManualLocation(latitude: latitude, longitude: longitude, accuracy: record.locationAccuracy)
-        } else {
-            self.manualLocation = nil
+        self.init(
+            id: record.packetId,
+            timestamp: Date(timeIntervalSince1970: TimeInterval(record.timestamp)),
+            sosType: SOSType(rawValue: record.sosType ?? ""),
+            latitude: record.latitude,
+            longitude: record.longitude,
+            message: record.rawMessage,
+            sharedPeople: sharedPeople,
+            personSourceMode: .manual,
+            selectedRelativeSnapshots: [],
+            reliefData: reliefData,
+            rescueData: rescueData,
+            additionalDescription: record.structuredData?.additionalDescription ?? "",
+            status: SOSServerRecord.mapStatus(record.status),
+            lastUpdated: Date(),
+            sendHistory: [SOSSendEvent(type: .serverAcknowledged, note: "Đồng bộ từ server (trạng thái: \(record.status ?? "unknown"))")],
+            reportingTarget: record.isSentOnBehalf == true ? .other : .self,
+            victimName: derivedVictimName,
+            victimPhone: derivedVictimPhone,
+            reporterName: record.reporterInfo?.userName ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userName),
+            reporterPhone: record.reporterInfo?.userPhone ?? (record.isSentOnBehalf == true ? nil : record.senderInfo?.userPhone),
+            addressQuery: record.structuredData?.address ?? "",
+            resolvedAddress: record.structuredData?.address,
+            manualLocation: {
+                guard record.structuredData?.address != nil,
+                      let latitude = record.latitude,
+                      let longitude = record.longitude else {
+                    return nil
+                }
+                return SOSManualLocation(latitude: latitude, longitude: longitude, accuracy: record.locationAccuracy)
+            }(),
+            isMine: true
+        )
+    }
+
+    func merged(withServer record: SOSServerRecord) -> SavedSOS {
+        let serverSnapshot = SavedSOS(fromServer: record)
+        let serverStatus = SOSServerRecord.mapStatus(record.status)
+
+        var mergedHistory = sendHistory
+        if status != serverStatus {
+            mergedHistory.append(
+                SOSSendEvent(
+                    type: .serverAcknowledged,
+                    note: "Cập nhật từ server: \(serverStatus.title)"
+                )
+            )
         }
-        self.isMine      = true
+
+        return SavedSOS(
+            id: serverSnapshot.id,
+            timestamp: serverSnapshot.timestamp,
+            sosType: serverSnapshot.sosType ?? sosType,
+            latitude: serverSnapshot.latitude ?? latitude,
+            longitude: serverSnapshot.longitude ?? longitude,
+            message: Self.trimmedValue(serverSnapshot.message) ?? message,
+            sharedPeople: serverSnapshot.sharedPeople.isEmpty ? sharedPeople : serverSnapshot.sharedPeople,
+            personSourceMode: personSourceMode,
+            selectedRelativeSnapshots: selectedRelativeSnapshots,
+            reliefData: serverSnapshot.reliefData ?? reliefData,
+            rescueData: serverSnapshot.rescueData ?? rescueData,
+            additionalDescription: Self.trimmedValue(serverSnapshot.additionalDescription) ?? additionalDescription,
+            status: serverStatus,
+            lastUpdated: Date(),
+            sendHistory: mergedHistory,
+            reportingTarget: serverSnapshot.reportingTarget,
+            victimName: serverSnapshot.victimName ?? victimName,
+            victimPhone: serverSnapshot.victimPhone ?? victimPhone,
+            reporterName: serverSnapshot.reporterName ?? reporterName,
+            reporterPhone: serverSnapshot.reporterPhone ?? reporterPhone,
+            addressQuery: Self.trimmedValue(serverSnapshot.addressQuery) ?? addressQuery,
+            resolvedAddress: serverSnapshot.resolvedAddress ?? resolvedAddress,
+            manualLocation: serverSnapshot.manualLocation ?? manualLocation,
+            isMine: isMine || serverSnapshot.isMine
+        )
     }
     
     // MARK: - Codable (backward compat cho sendHistory)
@@ -432,7 +744,7 @@ struct SavedRescueData: Codable, Equatable {
 // MARK: - Server Response Models
 
 /// Record SOS trả về từ API /emergency/sos-requests/me
-struct SOSServerRecord: Codable {
+struct SOSServerRecord: Decodable {
     let id: Int
     let packetId: String
     let clusterId: Int?
@@ -459,7 +771,7 @@ struct SOSServerRecord: Codable {
     let reviewedById: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, packetId, clusterId, userId, sosType, rawMessage
+        case id, packetId, clusterId, userId, sosType, rawMessage, msg
         case structuredData = "structuredData"
         case networkMetadata = "networkMetadata"
         case victimInfo = "victimInfo"
@@ -469,6 +781,36 @@ struct SOSServerRecord: Codable {
         case originId, status, priorityLevel, waitTimeMinutes
         case latitude, longitude, locationAccuracy, timestamp
         case createdAt, lastUpdatedAt, reviewedAt, reviewedById
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(Int.self, forKey: .id)
+        packetId = try container.decode(String.self, forKey: .packetId)
+        clusterId = try container.decodeIfPresent(Int.self, forKey: .clusterId)
+        userId = try container.decodeIfPresent(String.self, forKey: .userId)
+        sosType = try container.decodeIfPresent(String.self, forKey: .sosType)
+        rawMessage = try container.decodeIfPresent(String.self, forKey: .rawMessage)
+            ?? container.decode(String.self, forKey: .msg)
+        structuredData = try container.decodeIfPresent(SOSStructuredData.self, forKey: .structuredData)
+        networkMetadata = try container.decodeIfPresent(SOSNetworkMetadata.self, forKey: .networkMetadata)
+        victimInfo = try container.decodeIfPresent(SOSVictimInfo.self, forKey: .victimInfo)
+        reporterInfo = try container.decodeIfPresent(SOSReporterInfo.self, forKey: .reporterInfo)
+        isSentOnBehalf = try container.decodeIfPresent(Bool.self, forKey: .isSentOnBehalf)
+        senderInfo = try container.decodeIfPresent(SOSSenderInfo.self, forKey: .senderInfo)
+        originId = try container.decodeIfPresent(String.self, forKey: .originId)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        priorityLevel = try container.decodeIfPresent(String.self, forKey: .priorityLevel)
+        waitTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .waitTimeMinutes)
+        latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        locationAccuracy = try container.decodeIfPresent(Double.self, forKey: .locationAccuracy)
+        timestamp = try container.decode(Int64.self, forKey: .timestamp)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        lastUpdatedAt = try container.decodeIfPresent(String.self, forKey: .lastUpdatedAt)
+        reviewedAt = try container.decodeIfPresent(String.self, forKey: .reviewedAt)
+        reviewedById = try container.decodeIfPresent(String.self, forKey: .reviewedById)
     }
 
     /// Map server status string → SOSSendStatus
@@ -482,7 +824,7 @@ struct SOSServerRecord: Codable {
     }
 }
 
-struct SOSServerResponse: Codable {
+struct SOSServerResponse: Decodable {
     let sosRequests: [SOSServerRecord]
 }
 
@@ -591,11 +933,10 @@ final class SOSStorageManager: ObservableObject {
         await MainActor.run {
             for record in records {
                 let serverTs = Date(timeIntervalSince1970: TimeInterval(record.timestamp))
-                let serverStatus = SOSServerRecord.mapStatus(record.status)
 
                 // 1. Khớp chính xác theo packetId
                 if let index = savedSOSList.firstIndex(where: { $0.id.caseInsensitiveCompare(record.packetId) == .orderedSame }) {
-                    updateStatusIfNeeded(at: index, serverStatus: serverStatus)
+                    savedSOSList[index] = savedSOSList[index].merged(withServer: record)
 
                 // 2. Khớp mờ: cùng sosType + timestamp ±120s (server có thể dùng UUID riêng)
                 } else if let index = savedSOSList.firstIndex(where: {
@@ -604,9 +945,7 @@ final class SOSStorageManager: ObservableObject {
                     abs($0.timestamp.timeIntervalSince(serverTs)) < 120
                 }) {
                     print("[SOS Sync] 🔄 Fuzzy match – cập nhật id local \(savedSOSList[index].id) → server \(record.packetId)")
-                    // Đồng bộ id về server packetId để lần sau khớp chính xác
-                    savedSOSList[index].id = record.packetId
-                    updateStatusIfNeeded(at: index, serverStatus: serverStatus)
+                    savedSOSList[index] = savedSOSList[index].merged(withServer: record)
 
                 // 3. Record chỉ tồn tại trên server (gửi từ session/thiết bị khác)
                 } else {
@@ -616,16 +955,6 @@ final class SOSStorageManager: ObservableObject {
             }
             savedSOSList.sort { $0.timestamp > $1.timestamp }
             saveToStorage()
-        }
-    }
-    
-    private func updateStatusIfNeeded(at index: Int, serverStatus: SOSSendStatus) {
-        if savedSOSList[index].status != serverStatus {
-            let event = SOSSendEvent(type: .serverAcknowledged,
-                                    note: "Cập nhật từ server: \(serverStatus.title)")
-            savedSOSList[index].status      = serverStatus
-            savedSOSList[index].lastUpdated  = Date()
-            savedSOSList[index].sendHistory.append(event)
         }
     }
     

@@ -644,10 +644,15 @@ final class RelativeProfileStore: ObservableObject {
 
     func save(profile: EmergencyRelativeProfile) {
         var normalized = profile
+        let normalizedPhoneNumber = normalized.phoneNumber
+            .flatMap(VietnamPhoneNumber.editableInput)
+            .flatMap { digits in
+                digits.isEmpty ? nil : VietnamPhoneNumber.normalizedE164(digits)
+            }
         normalized = EmergencyRelativeProfile(
             id: normalized.id,
             displayName: normalized.displayName,
-            phoneNumber: normalized.phoneNumber,
+            phoneNumber: normalizedPhoneNumber,
             personType: normalized.personType,
             gender: normalized.gender,
             relationGroup: normalized.relationGroup,
