@@ -917,8 +917,8 @@ final class IdentityStore: ObservableObject {
     }
     
     /// Create identity from existing user profile
-    func createIdentityFromProfile(_ publicKey: Data) -> UserIdentity? {
-        guard let user = UserProfile.shared.currentUser else { return nil }
+    func createIdentityFromProfile(_ publicKey: Data, user explicitUser: User? = nil) -> UserIdentity? {
+        guard let user = explicitUser ?? UserProfile.shared.currentUser else { return nil }
         
         let identity = UserIdentity(
             id: user.id.uuidString,

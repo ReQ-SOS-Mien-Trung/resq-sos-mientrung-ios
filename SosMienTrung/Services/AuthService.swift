@@ -94,6 +94,18 @@ struct LoginResponse: Codable {
     var isRescuer: Bool { roleId == 3 }
 }
 
+struct UserProfileUpdateRequest: Encodable {
+    let firstName: String
+    let lastName: String
+    let phone: String
+    let address: String
+    let ward: String
+    let province: String
+    let latitude: Double
+    let longitude: Double
+    let avatarUrl: String
+}
+
 struct GoogleLoginResponse: Codable {
     let accessToken: String
     let refreshToken: String
@@ -123,6 +135,11 @@ struct CurrentUserResponse: Codable {
     let lastName: String?
     let username: String?
     let phone: String?
+    let address: String?
+    let ward: String?
+    let province: String?
+    let latitude: Double?
+    let longitude: Double?
     let rescuerType: String?
     let email: String?
     let isEmailVerified: Bool
@@ -133,8 +150,10 @@ struct CurrentUserResponse: Codable {
     var displayName: String? {
         let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
         if !parts.isEmpty { return parts.joined(separator: " ") }
-        return username ?? email
+        return username ?? email ?? phone
     }
+
+    var isVictim: Bool { roleId == 5 }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DynamicCodingKey.self)
@@ -156,6 +175,11 @@ struct CurrentUserResponse: Codable {
         lastName = Self.decodeString(from: container, keys: ["lastName", "last_name"])
         username = Self.decodeString(from: container, keys: ["username", "userName"])
         phone = Self.decodeString(from: container, keys: ["phone", "phoneNumber"])
+        address = Self.decodeString(from: container, keys: ["address", "streetAddress", "street_address"])
+        ward = Self.decodeString(from: container, keys: ["ward", "commune", "district"])
+        province = Self.decodeString(from: container, keys: ["province", "city"])
+        latitude = Self.decodeDouble(from: container, keys: ["latitude", "lat"])
+        longitude = Self.decodeDouble(from: container, keys: ["longitude", "lng", "lon"])
         rescuerType = Self.decodeString(from: container, keys: ["rescuerType", "rescuer_type"])
         email = Self.decodeString(from: container, keys: ["email"])
         isEmailVerified = Self.decodeBool(from: container, keys: ["isEmailVerified", "emailVerified", "is_email_verified"]) ?? false
@@ -237,6 +261,34 @@ struct CurrentUserResponse: Codable {
 
             if let rawValue = try? container.decode(Int.self, forKey: key) {
                 return rawValue != 0
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeDouble(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> Double? {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let value = try? container.decode(Double.self, forKey: key) {
+                return value
+            }
+
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return Double(value)
+            }
+
+            if let rawValue = try? container.decode(String.self, forKey: key) {
+                let normalized = rawValue
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: ",", with: ".")
+                if let parsed = Double(normalized) {
+                    return parsed
+                }
             }
         }
 
@@ -343,6 +395,26 @@ final class AuthService {
     /// Lấy hồ sơ người dùng hiện tại để đọc các cờ quyền như isEligibleRescuer
     func fetchCurrentUser() async throws -> CurrentUserResponse {
         try await authorizedRequest(path: "/identity/user/me")
+    }
+
+    func updateUserProfile(_ payload: UserProfileUpdateRequest) async throws -> CurrentUserResponse? {
+        let data = try await authorizedRequestData(
+            path: "/identity/user/profile",
+            method: "PUT",
+            body: try JSONEncoder().encode(payload)
+        )
+
+        guard !data.isEmpty else {
+            return nil
+        }
+
+        do {
+            return try makeDecoder().decode(CurrentUserResponse.self, from: data)
+        } catch {
+            let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+            print("[AuthService] updateUserProfile decode skipped: \(raw)")
+            return nil
+        }
     }
     
     /// Đăng xuất và xóa session
@@ -457,6 +529,20 @@ final class AuthService {
         path: String,
         method: String = "GET"
     ) async throws -> R {
+        let data = try await authorizedRequestData(path: path, method: method)
+
+        do {
+            return try makeDecoder().decode(R.self, from: data)
+        } catch {
+            throw AuthServiceError.decodingFailed(error)
+        }
+    }
+
+    private func authorizedRequestData(
+        path: String,
+        method: String = "GET",
+        body: Data? = nil
+    ) async throws -> Data {
         guard let token = AuthSessionStore.shared.session?.accessToken, !token.isEmpty else {
             throw AuthServiceError.missingData
         }
@@ -468,10 +554,29 @@ final class AuthService {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return try await perform(request)
+
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+
+        return try await performData(request, allowEmptyBody: true)
     }
 
     private func perform<R: Codable>(_ request: URLRequest) async throws -> R {
+        let data = try await performData(request)
+
+        do {
+            return try makeDecoder().decode(R.self, from: data)
+        } catch {
+            throw AuthServiceError.decodingFailed(error)
+        }
+    }
+
+    private func performData(
+        _ request: URLRequest,
+        allowEmptyBody: Bool = false
+    ) async throws -> Data {
         do {
             let (data, response) = try await session.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -485,15 +590,11 @@ final class AuthService {
                 throw AuthServiceError.httpStatus(statusCode, errorMessage)
             }
 
-            guard !data.isEmpty else {
+            guard allowEmptyBody || !data.isEmpty else {
                 throw AuthServiceError.missingData
             }
 
-            do {
-                return try makeDecoder().decode(R.self, from: data)
-            } catch {
-                throw AuthServiceError.decodingFailed(error)
-            }
+            return data
         } catch let authError as AuthServiceError {
             throw authError
         } catch {
