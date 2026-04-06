@@ -26,7 +26,6 @@ struct HomeView: View {
     @State private var showWaterEject = false
     @State private var showRescuersView = false
     @State private var showRescuerDashboard = false
-    @State private var showAssemblyEvents = false
     @State private var showVictimStandby = false
     @State private var showCoordinatorChat = false
     @State private var showSOSSignal = false
@@ -109,11 +108,6 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showRescuerDashboard) {
             RescuerDashboardView()
-        }
-        .sheet(isPresented: $showAssemblyEvents) {
-            NavigationStack {
-                RescuerAssemblyEventsView()
-            }
         }
         .fullScreenCover(isPresented: $showVictimStandby) {
             NavigationStack {
@@ -293,18 +287,10 @@ struct HomeView: View {
                 }
                 ResQGridButton(
                     icon: "checklist",
-                    title: "Nhiệm vụ\ncủa team",
+                    title: "Nhiệm vụ\n& Check-in",
                     accentColor: DS.Colors.warning
                 ) {
                     showRescuerDashboard = true
-                }
-
-                ResQGridButton(
-                    icon: "calendar.badge.clock",
-                    title: "Xem sự kiện\nCheck-in",
-                    accentColor: DS.Colors.success
-                ) {
-                    showAssemblyEvents = true
                 }
             } else {
                 ResQGridButton(

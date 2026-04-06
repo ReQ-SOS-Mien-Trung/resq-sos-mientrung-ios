@@ -221,9 +221,9 @@ struct MissionRowView: View {
 // MARK: - Rescuer Dashboard
 struct RescuerDashboardView: View {
     @StateObject private var vm = RescuerMissionViewModel()
+    @StateObject private var assemblyVM = RescuerAssemblyEventsViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
-    @State private var showAssemblyEvents = false
 
     private var currentUserId: String? {
         AuthSessionStore.shared.session?.userId
@@ -289,23 +289,36 @@ struct RescuerDashboardView: View {
         return false
     }
 
+    private var isMissionAccessUnlocked: Bool {
+        assemblyVM.events.contains(where: { $0.isCheckedIn })
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                    teamCard
-                        .padding(.top, DS.Spacing.md)
+                    if isMissionAccessUnlocked {
+                        teamCard
+                            .padding(.top, DS.Spacing.md)
 
-                    Text("NHIỆM VỤ CỦA TEAM").sectionHeader()
+                        Text("NHIỆM VỤ CỦA TEAM").sectionHeader()
 
-                    if vm.isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, DS.Spacing.lg)
-                    } else if vm.missions.isEmpty {
-                        emptyMissionsView
+                        if vm.isLoading {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, DS.Spacing.lg)
+                        } else if vm.missions.isEmpty {
+                            emptyMissionsView
+                        } else {
+                            missionsList
+                        }
                     } else {
-                        missionsList
+                        Text("TRIỆU TẬP").sectionHeader()
+                            .padding(.top, DS.Spacing.md)
+
+                        assemblyEventsSection
+
+                        checkInGateMessage
                     }
 
                     Spacer(minLength: 80)
@@ -322,12 +335,16 @@ struct RescuerDashboardView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        vm.refreshDashboard()
+                        if isMissionAccessUnlocked {
+                            vm.refreshDashboard()
+                        } else {
+                            assemblyVM.refresh()
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .foregroundColor(DS.Colors.warning)
-                    .disabled(vm.isLoading)
+                    .disabled(vm.isLoading || assemblyVM.isLoading)
                 }
             }
             .alert("Lỗi", isPresented: Binding(
@@ -346,14 +363,36 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(vm.successMessage ?? "")
             }
-            .sheet(isPresented: $showAssemblyEvents) {
-                NavigationStack {
-                    RescuerAssemblyEventsView()
-                }
+            .alert("Lỗi check-in", isPresented: Binding(
+                get: { assemblyVM.errorMessage != nil },
+                set: { if !$0 { assemblyVM.errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { assemblyVM.errorMessage = nil }
+            } message: {
+                Text(assemblyVM.errorMessage ?? "")
+            }
+            .alert("Thông báo check-in", isPresented: Binding(
+                get: { assemblyVM.successMessage != nil },
+                set: { if !$0 { assemblyVM.successMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { assemblyVM.successMessage = nil }
+            } message: {
+                Text(assemblyVM.successMessage ?? "")
             }
         }
         .onAppear {
-            vm.refreshDashboard()
+            if assemblyVM.events.isEmpty {
+                assemblyVM.refresh()
+            }
+
+            if isMissionAccessUnlocked {
+                vm.refreshDashboard()
+            }
+        }
+        .onChange(of: isMissionAccessUnlocked) { unlocked in
+            if unlocked {
+                vm.refreshDashboard()
+            }
         }
     }
 
@@ -393,22 +432,6 @@ struct RescuerDashboardView: View {
                 if let members = team.members, !members.isEmpty {
                     memberDropdown(members: members)
                 }
-
-                Button {
-                    showAssemblyEvents = true
-                } label: {
-                    HStack(spacing: DS.Spacing.xs) {
-                        Image(systemName: "calendar.badge.clock")
-                        Text("SỰ KIỆN ĐIỂM TẬP KẾT")
-                            .font(DS.Typography.subheadline).tracking(1)
-                    }
-                    .foregroundColor(DS.Colors.text)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(DS.Colors.background)
-                    .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
-                }
-                .padding(.top, DS.Spacing.xs)
 
                 if isCurrentUserLeader {
                     teamAvailabilityButton
@@ -538,6 +561,73 @@ struct RescuerDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, DS.Spacing.lg * 2)
+    }
+
+    private var checkInGateMessage: some View {
+        HStack(alignment: .top, spacing: DS.Spacing.sm) {
+            Image(systemName: "lock.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundColor(DS.Colors.info)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Xác nhận có mặt để mở nhiệm vụ")
+                    .font(DS.Typography.subheadline.bold())
+                    .foregroundColor(DS.Colors.text)
+
+                Text("Sau khi bạn bấm Xác nhận có mặt ở phần Triệu tập & Check-in, thông tin Team của bạn và Nhiệm vụ của team sẽ hiển thị.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.info.opacity(0.3), lineWidth: DS.Border.medium))
+    }
+
+    @ViewBuilder
+    private var assemblyEventsSection: some View {
+        if assemblyVM.isLoading && assemblyVM.events.isEmpty {
+            HStack(spacing: DS.Spacing.sm) {
+                ProgressView()
+                Text("Đang tải sự kiện triệu tập...")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DS.Spacing.md)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+        } else if assemblyVM.events.isEmpty {
+            VStack(spacing: DS.Spacing.md) {
+                Image(systemName: "calendar.badge.exclamationmark")
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundColor(DS.Colors.textTertiary)
+                Text("Hiện chưa có sự kiện triệu tập")
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.textSecondary)
+                Text("Khi tổng đài tạo phiên tập trung, bạn sẽ thấy lịch triệu tập và có thể check-in ngay tại đây.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Spacing.lg)
+            .background(DS.Colors.surface)
+            .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+        } else {
+            VStack(spacing: DS.Spacing.sm) {
+                ForEach(assemblyVM.events) { event in
+                    AssemblyEventRowView(
+                        event: event,
+                        isCheckingIn: assemblyVM.loadingEventId == event.eventId,
+                        onCheckIn: { assemblyVM.checkIn(event: event) }
+                    )
+                }
+            }
+        }
     }
 
     private func teamStatusColor(_ status: String) -> Color {

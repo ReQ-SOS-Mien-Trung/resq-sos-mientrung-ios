@@ -456,7 +456,7 @@ struct EditProfileView: View {
                     Section {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Đang tải hồ sơ victim từ máy chủ...")
+                            Text("Đang tải thông tin hồ sơ...")
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -627,7 +627,7 @@ struct EditProfileView: View {
                     .multilineTextAlignment(.center)
                     .listRowBackground(Color.clear)
             } else {
-                Text("Ảnh đại diện hiện chỉ là hiển thị local.")
+                Text("Ảnh đại diện hiện chỉ hiển thị trên thiết bị này.")
                     .font(.subheadline)
                     .foregroundColor(.blue)
                     .frame(maxWidth: .infinity)
@@ -660,10 +660,11 @@ struct EditProfileView: View {
             TextField("Số điện thoại", text: $phoneNumber)
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
+                .disabled(true)
         } header: {
             Text("Thông tin cá nhân")
         } footer: {
-            Text("Nhập tên và số điện thoại để người khác có thể nhận diện bạn.")
+            Text("Bạn có thể cập nhật tên hiển thị. Số điện thoại được lấy từ tài khoản và không chỉnh sửa tại đây.")
         }
     }
 
@@ -679,10 +680,11 @@ struct EditProfileView: View {
             TextField("Số điện thoại", text: $phoneNumber)
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
+                .disabled(true)
         } header: {
             Text("Thông tin cơ bản")
         } footer: {
-            Text("Dữ liệu này sẽ được gửi lên BE qua `PUT /identity/user/profile` cho role victim.")
+            Text("Thông tin này giúp tổng đài liên hệ nhanh hơn khi cần hỗ trợ. Số điện thoại được lấy từ tài khoản và không chỉnh sửa tại đây.")
         }
 
         Section {
@@ -699,10 +701,10 @@ struct EditProfileView: View {
         }
 
         Section {
-            TextField("Latitude", text: $latitudeText)
+            TextField("Vĩ độ", text: $latitudeText)
                 .keyboardType(.decimalPad)
 
-            TextField("Longitude", text: $longitudeText)
+            TextField("Kinh độ", text: $longitudeText)
                 .keyboardType(.decimalPad)
 
             Button {
@@ -719,9 +721,9 @@ struct EditProfileView: View {
             }
             .disabled(locationManager.isFetchingLocation)
         } header: {
-            Text("Toạ độ")
+            Text("Vị trí trên bản đồ")
         } footer: {
-            Text("Nếu để trống, app sẽ gửi giá trị hiện có hoặc `0` khi chưa có toạ độ.")
+            Text("Nếu để trống, ứng dụng sẽ dùng vị trí đã lưu trước đó.")
         }
     }
 
@@ -767,12 +769,12 @@ struct EditProfileView: View {
 
     private var avatarHelperText: String {
         if isUploadingAvatar {
-            return "Đang tải ảnh lên Cloudinary..."
+            return "Đang tải ảnh lên..."
         }
         if hasAvatar {
-            return "Ảnh sẽ tự upload lên Cloudinary và lưu URL vào profile."
+            return "Ảnh sẽ được cập nhật tự động vào hồ sơ của bạn."
         }
-        return "Không cần nhập URL nữa. Chọn ảnh từ thư viện hoặc camera, app sẽ tự upload lên Cloudinary."
+        return "Bạn chỉ cần chọn ảnh từ thư viện hoặc camera, ứng dụng sẽ tự cập nhật ảnh đại diện."
     }
 
     private func saveProfile() {
