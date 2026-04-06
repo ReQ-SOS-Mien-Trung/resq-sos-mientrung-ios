@@ -6,6 +6,12 @@ struct MissionDetailView: View {
     @StateObject private var incidentVM = IncidentViewModel()
     @State private var showReportIncident = false
     @State private var showAggregateRoute = false
+    @State private var missionStatus: String
+
+    init(mission: Mission) {
+        self.mission = mission
+        _missionStatus = State(initialValue: mission.status)
+    }
 
     private var missionTeamId: Int? { mission.missionTeamId }
 
@@ -131,8 +137,8 @@ struct MissionDetailView: View {
                 Spacer(minLength: DS.Spacing.sm)
 
                 StatusBadge(
-                    text: RescuerStatusBadgeText.mission(mission.status),
-                    color: missionStatusColor(mission.status)
+                    text: RescuerStatusBadgeText.mission(missionStatus),
+                    color: missionStatusColor(missionStatus)
                 )
             }
 
@@ -141,6 +147,10 @@ struct MissionDetailView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if shouldShowStartMissionButton {
+                startMissionButton
             }
 
             missionMetaGrid
@@ -252,6 +262,10 @@ struct MissionDetailView: View {
             LazyVStack(spacing: DS.Spacing.sm) {
                 ForEach(list) { activity in
                     ActivityRowView(activity: activity) { status in
+                        guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else {
+                            return
+                        }
+
                         vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
                     }
                 }
@@ -436,17 +450,66 @@ struct MissionDetailView: View {
 
     private func missionStatusColor(_ status: String) -> Color {
         switch normalizedStatus(status) {
-        case "ongoing":
+        case "ongoing", "inprogress":
             return DS.Colors.success
-        case "planned":
+        case "planned", "pending", "scheduled":
             return DS.Colors.warning
-        case "completed":
+        case "completed", "finished":
             return DS.Colors.info
-        case "incompleted":
+        case "incompleted", "incomplete":
             return DS.Colors.accent
+        case "cancelled":
+            return DS.Colors.textTertiary
         default:
             return DS.Colors.textSecondary
         }
+    }
+
+    private var shouldShowStartMissionButton: Bool {
+        switch normalizedStatus(missionStatus) {
+        case "planned", "pending", "scheduled":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var startMissionButton: some View {
+        Button {
+            Task {
+                let didUpdate = await vm.updateMissionStatus(missionId: mission.id, status: "OnGoing")
+                if didUpdate {
+                    missionStatus = "OnGoing"
+                }
+            }
+        } label: {
+            HStack(spacing: DS.Spacing.sm) {
+                if vm.isLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+
+                Text(vm.isLoading ? "Đang bắt đầu nhiệm vụ..." : "Bắt đầu nhiệm vụ")
+                    .font(.system(size: 14, weight: .bold))
+
+                Spacer()
+
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DS.Colors.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(vm.isLoading)
+        .opacity(vm.isLoading ? 0.8 : 1)
     }
 
     private func missionTypeColor(_ missionTypeKey: String?) -> Color {

@@ -22,9 +22,9 @@ struct StatusBadge: View {
 enum RescuerStatusBadgeText {
     static func mission(_ status: String) -> String {
         switch normalized(status) {
-        case "ongoing":
+        case "ongoing", "inprogress":
             return "Đang thực hiện"
-        case "planned":
+        case "planned", "pending", "scheduled":
             return "Đã lên kế hoạch"
         case "completed", "finished":
             return "Đã hoàn thành"
@@ -181,14 +181,16 @@ struct MissionRowView: View {
 
     private func missionStatusColor(_ status: String) -> Color {
         switch normalizedStatus(status) {
-        case "ongoing":
+        case "ongoing", "inprogress":
             return DS.Colors.success
-        case "planned":
+        case "planned", "pending", "scheduled":
             return DS.Colors.warning
-        case "completed":
+        case "completed", "finished":
             return DS.Colors.info
-        case "incompleted":
+        case "incompleted", "incomplete":
             return DS.Colors.accent
+        case "cancelled":
+            return DS.Colors.textTertiary
         default:
             return DS.Colors.textSecondary
         }

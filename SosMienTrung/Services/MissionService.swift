@@ -124,6 +124,20 @@ final class MissionService {
         }
     }
 
+    // MARK: - PATCH /operations/missions/{missionId}/status
+    /// Common values used by backend deployments: Planned, OnGoing, Completed, Cancelled
+    func updateMissionStatus(missionId: Int, status: String) async throws {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/status") else {
+            throw URLError(.badURL)
+        }
+
+        var req = authorizedRequest(url: url, method: "PATCH")
+        req.httpBody = try JSONEncoder().encode(MissionStatusUpdate(status: status))
+        print("[MissionService] → PATCH \(url.absoluteString) status=\(status)")
+
+        _ = try await send(req)
+    }
+
     // MARK: - GET /operations/missions/{missionId}/activities/{activityId}/route
     func getActivityRoute(missionId: Int, activityId: Int, originLat: Double, originLng: Double, vehicle: String = "car") async throws -> ActivityRoute {
         let urlStr = "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/route?originLat=\(originLat)&originLng=\(originLng)&vehicle=\(vehicle)"

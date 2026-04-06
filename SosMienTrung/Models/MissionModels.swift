@@ -365,6 +365,11 @@ struct ActivityStatusUpdate: Codable {
     let status: String
 }
 
+// MARK: - Mission Update Request
+struct MissionStatusUpdate: Codable {
+    let status: String
+}
+
 // MARK: - Activity Route
 struct ActivityRoute: Codable {
     let activityId: Int

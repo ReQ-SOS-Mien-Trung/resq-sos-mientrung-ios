@@ -6,8 +6,6 @@ struct ActivityRowView: View {
     let onNavigateTap: (() -> Void)?
 
     @State private var isExpanded = false
-    @State private var showCancelConfirmation = false
-    @State private var pendingCancelStatus: String?
 
     init(
         activity: Activity,
@@ -178,20 +176,6 @@ struct ActivityRowView: View {
             backgroundColor: DS.Colors.surface,
             radius: 16
         )
-        .alert("Xác nhận hủy hoạt động", isPresented: $showCancelConfirmation) {
-            Button("Không", role: .cancel) {
-                pendingCancelStatus = nil
-            }
-
-            Button("Xác nhận hủy", role: .destructive) {
-                if let status = pendingCancelStatus {
-                    onStatusChange(status)
-                }
-                pendingCancelStatus = nil
-            }
-        } message: {
-            Text("Bạn có chắc chắn muốn hủy hoạt động này không?")
-        }
     }
 
     private var activityStatusBadge: some View {
@@ -259,14 +243,12 @@ struct ActivityRowView: View {
         switch activity.activityStatus {
         case .planned:
             return [
-                ActivityAction(label: "Bắt đầu", icon: "play.fill", color: DS.Colors.accent, status: "OnGoing"),
-                ActivityAction(label: "Hủy", icon: "minus.circle.fill", color: DS.Colors.accent, status: "Cancelled")
+                ActivityAction(label: "Bắt đầu", icon: "play.fill", color: DS.Colors.accent, status: "OnGoing")
             ]
         case .onGoing:
             return [
                 ActivityAction(label: "Hoàn thành", icon: "checkmark.circle.fill", color: DS.Colors.success, status: "Succeed"),
-                ActivityAction(label: "Từ chối", icon: "xmark.circle.fill", color: DS.Colors.accent, status: "Failed"),
-                ActivityAction(label: "Hủy", icon: "minus.circle.fill", color: DS.Colors.accent, status: "Cancelled")
+                ActivityAction(label: "Từ chối", icon: "xmark.circle.fill", color: DS.Colors.accent, status: "Failed")
             ]
         default:
             return []
@@ -440,29 +422,22 @@ struct ActivityRowView: View {
 
     private func actionButton(_ action: ActivityAction) -> some View {
         Button {
-            if action.requiresConfirmation {
-                pendingCancelStatus = action.status
-                showCancelConfirmation = true
-            } else {
-                onStatusChange(action.status)
-            }
+            onStatusChange(action.status)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: action.icon)
-                    .font(.system(size: action.isIconOnly ? 18 : 16, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
 
-                if action.isIconOnly == false {
-                    Text(action.label)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .allowsTightening(true)
-                }
+                Text(action.label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .allowsTightening(true)
             }
             .foregroundColor(action.foregroundColor)
-            .frame(maxWidth: action.isIconOnly ? 74 : .infinity)
+            .frame(maxWidth: .infinity)
             .frame(minHeight: 22)
-            .padding(.horizontal, action.isIconOnly ? 0 : DS.Spacing.sm)
+            .padding(.horizontal, DS.Spacing.sm)
             .padding(.vertical, 12)
             .background(action.backgroundColor)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -472,8 +447,7 @@ struct ActivityRowView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(action.isIconOnly ? "Hủy hoạt động" : action.label)
-        .accessibilityHint(action.requiresConfirmation ? "Mở xác nhận hủy hoạt động" : "")
+        .accessibilityLabel(action.label)
     }
 
     private var localizedCodeDetailValue: String? {
@@ -590,14 +564,6 @@ private struct ActivityAction: Identifiable {
         self.icon = icon
         self.color = color
         self.status = status
-    }
-
-    var isIconOnly: Bool {
-        status == "Cancelled"
-    }
-
-    var requiresConfirmation: Bool {
-        status == "Cancelled"
     }
 
     var foregroundColor: Color {

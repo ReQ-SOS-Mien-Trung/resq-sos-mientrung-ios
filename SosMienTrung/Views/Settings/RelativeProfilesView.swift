@@ -31,7 +31,7 @@ struct RelativeProfilesView: View {
         NavigationStack {
             List {
                 Section {
-                    Toggle("Đồng bộ hồ sơ lên máy chủ", isOn: serverSyncBinding)
+                    Toggle("Tự đồng bộ hồ sơ", isOn: serverSyncBinding)
                         .disabled(store.canSyncToServer == false)
 
                     if store.isSyncing {
@@ -85,7 +85,7 @@ struct RelativeProfilesView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Tìm theo tên, số điện thoại, bệnh nền")
-            .navigationTitle("Người thân & hồ sơ SOS")
+            .navigationTitle("Hồ sơ người thân")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -124,22 +124,22 @@ struct RelativeProfilesView: View {
 
     private var syncFooterText: String {
         if store.canSyncToServer == false {
-            return "Cần đăng nhập để bật đồng bộ. Khi tắt đồng bộ, hồ sơ chỉ được giữ trên thiết bị hiện tại."
+            return "Cần đăng nhập để bật đồng bộ. Khi chưa bật, hồ sơ sẽ chỉ lưu trên thiết bị này."
         }
 
         if store.isServerSyncEnabled {
-            return "Ứng dụng sẽ dùng GET để lấy dữ liệu, POST/PUT/DELETE cho từng thay đổi và fallback về sync snapshot khi cần."
+            return "Ứng dụng sẽ tự cập nhật hồ sơ giữa thiết bị và máy chủ. Mọi thay đổi của bạn sẽ được lưu tự động."
         }
 
-        return "Hồ sơ chỉ được giữ local. Khi tắt đồng bộ, ứng dụng sẽ xoá bản đã có trên máy chủ ở lần có phiên đăng nhập hợp lệ tiếp theo."
+        return "Hồ sơ chỉ lưu trên thiết bị này. Bạn vẫn có thể dùng bình thường khi gửi SOS."
     }
 
     private var listFooterText: String {
         if store.isServerSyncEnabled {
-            return "Danh sách này vẫn được lưu local để chọn nhanh khi gửi SOS và sẽ được đồng bộ lại với máy chủ khi bạn thay đổi."
+            return "Danh sách vẫn được lưu trên thiết bị để chọn nhanh khi gửi SOS, đồng thời tự đồng bộ khi có thay đổi."
         }
 
-        return "Dữ liệu đang được lưu cục bộ theo tài khoản hiện tại để dùng lại trong các lần gửi SOS."
+        return "Danh sách đang được lưu trên thiết bị theo tài khoản hiện tại để dùng lại trong các lần gửi SOS."
     }
 }
 

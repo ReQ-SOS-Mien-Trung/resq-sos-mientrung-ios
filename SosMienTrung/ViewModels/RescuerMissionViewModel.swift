@@ -212,6 +212,24 @@ final class RescuerMissionViewModel: ObservableObject {
         }
     }
 
+    func updateMissionStatus(missionId: Int, status: String) async -> Bool {
+        errorMessage = nil
+        successMessage = nil
+        beginLoading()
+
+        defer { endLoading() }
+
+        do {
+            try await MissionService.shared.updateMissionStatus(missionId: missionId, status: status)
+            missions = try await MissionService.shared.getMyTeamMissions()
+            successMessage = "Đã cập nhật trạng thái nhiệm vụ"
+            return true
+        } catch {
+            errorMessage = "Không thể cập nhật trạng thái nhiệm vụ: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     private func sortActivities(_ items: [Activity]) -> [Activity] {
         items.sorted { lhs, rhs in
             switch (lhs.step, rhs.step) {

@@ -143,7 +143,7 @@ struct SettingsView: View {
                         SettingsRow(
                             icon: "person.3.fill",
                             iconColor: DS.Colors.success,
-                            title: "Người thân & hồ sơ SOS",
+                            title: "Hồ sơ người thân",
                             subtitle: relativeProfileSubtitle
                         ) {
                             showRelativeProfiles = true
@@ -365,6 +365,8 @@ struct SettingsRow: View {
                         Text(subtitle)
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.textTertiary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
 
