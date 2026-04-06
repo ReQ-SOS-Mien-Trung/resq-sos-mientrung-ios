@@ -33,17 +33,26 @@ struct ContentView: View {
         authSession.session?.roleId == 3
     }
 
+    private var rescuerEligibility: Bool? {
+        authSession.session?.isEligibleRescuer
+    }
+
     private var hasUnlockedInterface: Bool {
         guard isFullyAuthenticated else { return false }
         guard requiresRescuerEligibility else { return true }
-        return authSession.session?.isEligibleRescuer == true
+        return rescuerEligibility == true
+    }
+
+    private var isRescuerExplicitlyLocked: Bool {
+        guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
+        return rescuerEligibility == false
     }
 
     private var isCheckingRescuerEligibility: Bool {
         guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
-        // Only show loading while an active refresh is running.
-        // If refresh finished but eligibility is still unknown, show locked state with retry.
-        return authSession.isRefreshingCurrentUser
+        // Keep checking state while eligibility is still unknown,
+        // instead of treating unknown as locked.
+        return rescuerEligibility == nil || authSession.isRefreshingCurrentUser
     }
 
     private var currentDiscoveryRole: MultipeerSession.DiscoveryRole? {
@@ -92,21 +101,21 @@ struct ContentView: View {
     private var rootView: some View {
         if isFullyAuthenticated {
             if requiresRescuerEligibility {
-                if isCheckingRescuerEligibility {
-                    RescuerEligibilityGateView(
-                        state: .checking,
-                        retryAction: { refreshAuthenticatedAccess(force: true) }
-                    )
-                } else if authSession.session?.isEligibleRescuer == true {
+                if hasUnlockedInterface {
                     MainTabView(
                         nearbyManager: nearbyManager,
                         multipeerSession: multipeerSession,
                         bridgefyManager: bridgefyManager,
                         selectedPeer: $selectedPeer
                     )
-                } else {
+                } else if isRescuerExplicitlyLocked {
                     RescuerEligibilityGateView(
                         state: .locked,
+                        retryAction: { refreshAuthenticatedAccess(force: true) }
+                    )
+                } else if isCheckingRescuerEligibility {
+                    RescuerEligibilityGateView(
+                        state: .checking,
                         retryAction: { refreshAuthenticatedAccess(force: true) }
                     )
                 }

@@ -85,6 +85,12 @@ struct AssemblyPointEvent: Decodable, Identifiable {
     let eventId: Int
     let assemblyPointId: Int
     let assemblyPointName: String?
+    let assemblyPointCode: String?
+    let assemblyPointStatus: String?
+    let assemblyPointMaxCapacity: Int?
+    let assemblyPointImageUrl: String?
+    let assemblyPointLatitude: Double?
+    let assemblyPointLongitude: Double?
     let assemblyDate: String?
     let eventStatus: String?
     let isCheckedIn: Bool
@@ -95,6 +101,12 @@ struct AssemblyPointEvent: Decodable, Identifiable {
         case eventId
         case assemblyPointId
         case assemblyPointName
+        case assemblyPointCode
+        case assemblyPointStatus
+        case assemblyPointMaxCapacity
+        case assemblyPointImageUrl
+        case assemblyPointLatitude
+        case assemblyPointLongitude
         case assemblyDate
         case eventStatus
         case status
@@ -105,9 +117,28 @@ struct AssemblyPointEvent: Decodable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        func decodeLossyDouble(forKey key: CodingKeys) throws -> Double? {
+            if let value = try container.decodeIfPresent(Double.self, forKey: key) {
+                return value
+            }
+
+            if let text = try container.decodeIfPresent(String.self, forKey: key) {
+                return Double(text)
+            }
+
+            return nil
+        }
+
         eventId = try container.decode(Int.self, forKey: .eventId)
         assemblyPointId = try container.decode(Int.self, forKey: .assemblyPointId)
         assemblyPointName = try container.decodeIfPresent(String.self, forKey: .assemblyPointName)
+        assemblyPointCode = try container.decodeIfPresent(String.self, forKey: .assemblyPointCode)
+        assemblyPointStatus = try container.decodeIfPresent(String.self, forKey: .assemblyPointStatus)
+        assemblyPointMaxCapacity = try container.decodeIfPresent(Int.self, forKey: .assemblyPointMaxCapacity)
+        assemblyPointImageUrl = try container.decodeIfPresent(String.self, forKey: .assemblyPointImageUrl)
+        assemblyPointLatitude = try decodeLossyDouble(forKey: .assemblyPointLatitude)
+        assemblyPointLongitude = try decodeLossyDouble(forKey: .assemblyPointLongitude)
         assemblyDate = try container.decodeIfPresent(String.self, forKey: .assemblyDate)
         eventStatus = try container.decodeIfPresent(String.self, forKey: .eventStatus)
             ?? container.decodeIfPresent(String.self, forKey: .status)

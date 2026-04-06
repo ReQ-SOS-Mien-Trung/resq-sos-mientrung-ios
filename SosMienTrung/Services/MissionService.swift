@@ -33,6 +33,12 @@ final class MissionService {
         return "Bearer \(token)"
     }
 
+    private func missionDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return decoder
+    }
+
     private func authorizedRequest(url: URL, method: String = "GET") -> URLRequest {
         var req = URLRequest(url: url)
         req.httpMethod = method
@@ -69,7 +75,7 @@ final class MissionService {
             print("[MissionService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw URLError(.badServerResponse)
         }
-        return try JSONDecoder().decode(MissionListResponse.self, from: data).missions
+        return try missionDecoder().decode(MissionListResponse.self, from: data).missions
     }
 
     // MARK: - GET /operations/missions/{missionId}
@@ -81,7 +87,7 @@ final class MissionService {
         let (data, response) = try await session.data(for: authorizedRequest(url: url))
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
-        return try JSONDecoder().decode(Mission.self, from: data)
+        return try missionDecoder().decode(Mission.self, from: data)
     }
 
     // MARK: - GET /operations/missions/{missionId}/activities/my-team

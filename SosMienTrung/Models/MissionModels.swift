@@ -152,24 +152,56 @@ struct Mission: Codable, Identifiable {
     let suggestedPriorityScore: Double?
     let suggestedSeverityLevel: String?
 
+    private var resolvedMissionTypeRaw: String? {
+        firstNonEmptyTrimmed(missionType, suggestedMissionType)
+    }
+
+    var missionTypeBadgeText: String? {
+        guard let rawType = resolvedMissionTypeRaw else { return nil }
+        return missionTypeDisplayName(rawType)
+    }
+
+    var missionTypeBadgeKey: String? {
+        guard let rawType = resolvedMissionTypeRaw else { return nil }
+        return normalizedMissionTypeKey(rawType)
+    }
+
+    var shouldDisplayMissionTypeBadge: Bool {
+        guard let missionTypeBadgeText = missionTypeBadgeText else { return false }
+
+        return normalizedMissionLabelForComparison(missionTypeBadgeText)
+            != normalizedMissionLabelForComparison(title)
+    }
+
     var title: String {
-        if let suggestedMissionTitle, suggestedMissionTitle.isEmpty == false {
-            return suggestedMissionTitle
+        if let missionTypeBadgeText = missionTypeBadgeText {
+            return missionTypeBadgeText
         }
 
-        if let missionType, missionType.isEmpty == false {
-            return "\(missionTypeDisplayName(missionType)) #\(id)"
+        if let suggestedMissionTitle = firstNonEmptyTrimmed(suggestedMissionTitle) {
+            let cleanedTitle = sanitizeMissionTitle(suggestedMissionTitle)
+            return cleanedTitle.isEmpty ? "Nhiệm vụ" : cleanedTitle
         }
 
-        return "Mission #\(id)"
+        return "Nhiệm vụ"
     }
 
     var description: String? {
-        let parts = [
-            clusterId.map { "Cluster #\($0)" },
-            teams?.first?.teamName,
-            suggestedSeverityLevel.map { "Mức độ \($0)" }
-        ].compactMap { $0 }.filter { $0.isEmpty == false }
+        var parts: [String] = []
+
+        if let clusterId = clusterId {
+            parts.append("Cụm yêu cầu SOS #\(clusterId)")
+        }
+
+        if let teamName = teams?.first?.teamName,
+           teamName.isEmpty == false {
+            parts.append(teamName)
+        }
+
+        if let severity = suggestedSeverityLevel,
+           severity.isEmpty == false {
+            parts.append("Mức độ \(severity)")
+        }
 
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
@@ -182,14 +214,66 @@ struct Mission: Codable, Identifiable {
 }
 
 private func missionTypeDisplayName(_ missionType: String) -> String {
-    switch missionType.lowercased() {
+    switch normalizedMissionTypeKey(missionType) {
     case "rescue":
         return "Cứu hộ"
+    case "evacuation", "evacuate":
+        return "Di tản"
+    case "medical", "medicalaid", "medicalsupport":
+        return "Y tế"
+    case "supply", "supplies", "logistics", "relief":
+        return "Cứu trợ"
+    case "mixed", "hybrid", "combined":
+        return "Tổng hợp"
     case "rescuer":
-        return "Điều động cứu hộ"
+        return "Điều động người cứu hộ"
     default:
-        return missionType
+        return humanizedMissionTypeText(missionType)
     }
+}
+
+private func normalizedMissionTypeKey(_ missionType: String) -> String {
+    missionType
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "_", with: "")
+        .replacingOccurrences(of: "-", with: "")
+        .replacingOccurrences(of: " ", with: "")
+        .lowercased()
+}
+
+    private func normalizedMissionLabelForComparison(_ value: String) -> String {
+        value
+        .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "_", with: "")
+        .replacingOccurrences(of: "-", with: "")
+        .replacingOccurrences(of: " ", with: "")
+    }
+
+private func firstNonEmptyTrimmed(_ values: String?...) -> String? {
+    for value in values {
+        guard let value = value else { continue }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty == false {
+            return trimmed
+        }
+    }
+
+    return nil
+}
+
+private func sanitizeMissionTitle(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let withoutTrailingId = trimmed.replacingOccurrences(
+        of: "\\s*#\\d+\\s*$",
+        with: "",
+        options: .regularExpression
+    )
+    return withoutTrailingId.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func humanizedMissionTypeText(_ rawValue: String) -> String {
+    humanizedActivityText(rawValue) ?? rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 func localizedActivityTypeDisplay(_ rawValue: String?) -> String? {

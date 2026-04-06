@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 // MARK: - Status Badge (shared across Rescuer views)
 struct StatusBadge: View {
@@ -153,6 +154,14 @@ struct MissionRowView: View {
             }
 
             HStack(spacing: DS.Spacing.sm) {
+                if mission.shouldDisplayMissionTypeBadge,
+                   let missionTypeBadgeText = mission.missionTypeBadgeText {
+                    StatusBadge(
+                        text: missionTypeBadgeText,
+                        color: missionTypeColor(mission.missionTypeBadgeKey)
+                    )
+                }
+
                 StatusBadge(
                     text: RescuerStatusBadgeText.mission(mission.status),
                     color: missionStatusColor(mission.status)
@@ -180,6 +189,23 @@ struct MissionRowView: View {
             return DS.Colors.info
         case "incompleted":
             return DS.Colors.accent
+        default:
+            return DS.Colors.textSecondary
+        }
+    }
+
+    private func missionTypeColor(_ missionTypeKey: String?) -> Color {
+        switch missionTypeKey {
+        case "rescue":
+            return DS.Colors.accent
+        case "evacuation", "evacuate":
+            return DS.Colors.warning
+        case "medical", "medicalaid", "medicalsupport":
+            return DS.Colors.info
+        case "supply", "supplies", "logistics", "relief":
+            return DS.Colors.success
+        case "mixed", "hybrid", "combined":
+            return DS.Colors.textSecondary
         default:
             return DS.Colors.textSecondary
         }
@@ -826,6 +852,11 @@ private struct AssemblyEventRowView: View {
     let isCheckingIn: Bool
     let onCheckIn: () -> Void
 
+    private struct AssemblyPointAnnotation: Identifiable {
+        let id = UUID()
+        let coordinate: CLLocationCoordinate2D
+    }
+
     private var statusText: String {
         RescuerStatusBadgeText.assemblyEvent(event.eventStatus)
     }
@@ -838,6 +869,26 @@ private struct AssemblyEventRowView: View {
         RescuerStatusBadgeText.normalized(event.eventStatus)
     }
 
+    private var assemblyCoordinate: CLLocationCoordinate2D? {
+        guard let latitude = event.assemblyPointLatitude,
+              let longitude = event.assemblyPointLongitude,
+              (-90...90).contains(latitude),
+              (-180...180).contains(longitude) else {
+            return nil
+        }
+
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private var mapRegion: MKCoordinateRegion {
+        let center = assemblyCoordinate ?? CLLocationCoordinate2D(latitude: 16.4637, longitude: 107.5909)
+
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             HStack(alignment: .top, spacing: DS.Spacing.sm) {
@@ -845,7 +896,7 @@ private struct AssemblyEventRowView: View {
                     Text(event.assemblyPointName ?? "Điểm tập kết #\(event.assemblyPointId)")
                         .font(DS.Typography.headline)
                         .foregroundColor(DS.Colors.text)
-                    Text("Mã sự kiện #\(event.eventId)")
+                    Text(eventLabel)
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -858,6 +909,8 @@ private struct AssemblyEventRowView: View {
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
             }
+
+            mapSection
 
             if event.isCheckedIn {
                 Label(
@@ -895,6 +948,67 @@ private struct AssemblyEventRowView: View {
         .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
     }
 
+    private var eventLabel: String {
+        if let assemblyPointCode = event.assemblyPointCode,
+           assemblyPointCode.isEmpty == false {
+            return assemblyPointCode
+        }
+
+        return "Mã sự kiện #\(event.eventId)"
+    }
+
+    @ViewBuilder
+    private var mapSection: some View {
+        if let coordinate = assemblyCoordinate {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                Map(
+                    coordinateRegion: .constant(mapRegion),
+                    annotationItems: [AssemblyPointAnnotation(coordinate: coordinate)]
+                ) { item in
+                    MapMarker(coordinate: item.coordinate, tint: DS.Colors.accent)
+                }
+                .frame(height: 168)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                        .stroke(DS.Colors.borderSubtle, lineWidth: DS.Border.thin)
+                )
+
+                Button {
+                    openInMaps(coordinate: coordinate)
+                } label: {
+                    HStack(spacing: DS.Spacing.xs) {
+                        Image(systemName: "map")
+                        Text("Mở chỉ đường đến điểm tập kết")
+                            .font(DS.Typography.caption)
+                            .tracking(0.4)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .foregroundColor(DS.Colors.info)
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, DS.Spacing.xs)
+                    .background(DS.Colors.info.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
+                            .stroke(DS.Colors.info.opacity(0.26), lineWidth: DS.Border.thin)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func openInMaps(coordinate: CLLocationCoordinate2D) {
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = event.assemblyPointName ?? "Điểm tập kết"
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
+
     private var statusColor: Color {
         switch normalizedStatus {
         case "gathering":
@@ -925,6 +1039,9 @@ private struct AssemblyEventRowView: View {
             return rawValue
         }
 
-        return date.formatted(date: .abbreviated, time: .shortened)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.dateFormat = "HH:mm, dd/MM/yyyy"
+        return formatter.string(from: date)
     }
 }

@@ -118,6 +118,14 @@ struct MissionDetailView: View {
                         .font(.system(size: 32, weight: .black))
                         .foregroundColor(DS.Colors.text)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if mission.shouldDisplayMissionTypeBadge,
+                       let missionTypeBadgeText = mission.missionTypeBadgeText {
+                        StatusBadge(
+                            text: missionTypeBadgeText,
+                            color: missionTypeColor(mission.missionTypeBadgeKey)
+                        )
+                    }
                 }
 
                 Spacer(minLength: DS.Spacing.sm)
@@ -436,6 +444,23 @@ struct MissionDetailView: View {
             return DS.Colors.info
         case "incompleted":
             return DS.Colors.accent
+        default:
+            return DS.Colors.textSecondary
+        }
+    }
+
+    private func missionTypeColor(_ missionTypeKey: String?) -> Color {
+        switch missionTypeKey {
+        case "rescue":
+            return DS.Colors.accent
+        case "evacuation", "evacuate":
+            return DS.Colors.warning
+        case "medical", "medicalaid", "medicalsupport":
+            return DS.Colors.info
+        case "supply", "supplies", "logistics", "relief":
+            return DS.Colors.success
+        case "mixed", "hybrid", "combined":
+            return DS.Colors.textSecondary
         default:
             return DS.Colors.textSecondary
         }
