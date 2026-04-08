@@ -221,6 +221,7 @@ struct RescuerDashboardView: View {
     @ObservedObject private var authSession = AuthSessionStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
+    @State private var showAssemblyEventsSheet = false
 
     private var currentUserId: String? {
         AuthSessionStore.shared.session?.userId
@@ -300,6 +301,29 @@ struct RescuerDashboardView: View {
 
     private var canManageTeamAvailability: Bool {
         authSession.session?.canManageTeamAvailability ?? false
+    }
+
+    private var assemblyEventsSummary: String {
+        if assemblyVM.isLoading && assemblyVM.events.isEmpty {
+            return "Đang tải sự kiện tập kết..."
+        }
+
+        let totalCount = assemblyVM.events.count
+        let checkedInCount = assemblyVM.events.filter(\.isCheckedIn).count
+
+        guard totalCount > 0 else {
+            return "Xem lịch triệu tập và check-in của bạn"
+        }
+
+        if checkedInCount == totalCount {
+            return "Bạn đã check-in đầy đủ \(totalCount) sự kiện"
+        }
+
+        if checkedInCount > 0 {
+            return "Bạn đã check-in \(checkedInCount)/\(totalCount) sự kiện"
+        }
+
+        return "Có \(totalCount) sự kiện đang chờ check-in"
     }
 
     var body: some View {
@@ -395,6 +419,10 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(assemblyVM.successMessage ?? "")
             }
+            .sheet(isPresented: $showAssemblyEventsSheet) {
+                RescuerAssemblyEventsView()
+                    .presentationDetents([.medium, .large])
+            }
         }
         .onAppear {
             guard canAccessRescuerWorkspace else { return }
@@ -423,6 +451,7 @@ struct RescuerDashboardView: View {
                     .foregroundColor(DS.Colors.warning)
                 EyebrowLabel(text: "TEAM CỦA BẠN")
                 Spacer()
+
                 if let status = vm.team?.status {
                     StatusBadge(text: RescuerStatusBadgeText.team(status), color: teamStatusColor(status))
                 }
@@ -451,9 +480,11 @@ struct RescuerDashboardView: View {
                     memberDropdown(members: members)
                 }
 
+                assemblyEventsTriggerButton
+
                 if isCurrentUserLeader && canManageTeamAvailability {
                     teamAvailabilityButton
-                    .padding(.top, DS.Spacing.xs)
+                        .padding(.top, DS.Spacing.xs)
                 } else if isCurrentUserLeader {
                     Label("Tài khoản hiện tại chưa được cấp quyền đổi trạng thái team", systemImage: "lock.fill")
                         .font(DS.Typography.caption)
@@ -504,6 +535,41 @@ struct RescuerDashboardView: View {
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
         .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.5), lineWidth: DS.Border.medium))
+    }
+
+    private var assemblyEventsTriggerButton: some View {
+        Button {
+            showAssemblyEventsSheet = true
+        } label: {
+            HStack(alignment: .center, spacing: DS.Spacing.xs) {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(DS.Colors.info)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sự kiện điểm tập kết")
+                        .font(DS.Typography.subheadline.bold())
+                        .foregroundColor(DS.Colors.text)
+
+                    Text(assemblyEventsSummary)
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .padding(.horizontal, DS.Spacing.sm)
+            .padding(.vertical, DS.Spacing.sm)
+            .background(DS.Colors.info.opacity(0.08))
+            .overlay(Rectangle().stroke(DS.Colors.info.opacity(0.28), lineWidth: DS.Border.thin))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sự kiện điểm tập kết")
     }
 
     @ViewBuilder
@@ -870,36 +936,47 @@ struct RescuerAssemblyEventsView: View {
     @StateObject private var vm = RescuerAssemblyEventsViewModel()
     @Environment(\.dismiss) private var dismiss
 
+    private var checkedInCount: Int {
+        vm.events.filter(\.isCheckedIn).count
+    }
+
+    private var pendingCount: Int {
+        max(vm.events.count - checkedInCount, 0)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                headerSection
-                    .padding(.top, DS.Spacing.md)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+                    headerSection
+                        .padding(.top, DS.Spacing.md)
 
-                Text("SỰ KIỆN CỦA BẠN").sectionHeader()
+                    Text("TẤT CẢ SỰ KIỆN").sectionHeader()
 
-                contentSection
+                    contentSection
 
-                Spacer(minLength: 80)
-            }
-            .padding(.horizontal, DS.Spacing.md)
-        }
-        .background(DS.Colors.background)
-        .navigationTitle("Điểm Tập Kết")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Đóng") { dismiss() }
-                    .foregroundColor(DS.Colors.accent)
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    vm.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Spacer(minLength: 80)
                 }
-                .foregroundColor(DS.Colors.warning)
-                .disabled(vm.isLoading)
+                .padding(.horizontal, DS.Spacing.md)
+            }
+            .background(DS.Colors.background)
+            .navigationTitle("Điểm tập kết")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Đóng") {
+                        dismiss()
+                    }
+                    .foregroundColor(DS.Colors.accent)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Làm mới") {
+                        vm.refresh()
+                    }
+                    .foregroundColor(DS.Colors.accent)
+                    .disabled(vm.isLoading)
+                }
             }
         }
         .alert("Lỗi", isPresented: Binding(
@@ -930,14 +1007,60 @@ struct RescuerAssemblyEventsView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "Xác nhận có mặt")
-            Text("Theo dõi sự kiện điểm tập kết và check-in đúng phiên tập trung của bạn.")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.textSecondary)
+            HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(DS.Colors.info)
+                    .frame(width: 30, height: 30)
+                    .background(DS.Colors.info.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    EyebrowLabel(text: "Triệu tập & Check-in", color: DS.Colors.info)
+                    Text("Theo dõi sự kiện điểm tập kết và xác nhận có mặt đúng phiên tập trung của bạn.")
+                        .font(DS.Typography.subheadline)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if vm.events.isEmpty == false {
+                HStack(spacing: DS.Spacing.xs) {
+                    summaryPill(
+                        title: "Đã check-in",
+                        value: "\(checkedInCount)",
+                        color: DS.Colors.success
+                    )
+
+                    summaryPill(
+                        title: "Chờ check-in",
+                        value: "\(pendingCount)",
+                        color: DS.Colors.warning
+                    )
+                }
+            }
         }
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
-        .overlay(Rectangle().stroke(DS.Colors.warning.opacity(0.5), lineWidth: DS.Border.medium))
+        .overlay(Rectangle().stroke(DS.Colors.info.opacity(0.35), lineWidth: DS.Border.medium))
+    }
+
+    private func summaryPill(title: String, value: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+
+            Text(value)
+                .font(DS.Typography.caption.bold())
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.1))
+        .overlay(Rectangle().stroke(color.opacity(0.3), lineWidth: DS.Border.thin))
     }
 
     @ViewBuilder

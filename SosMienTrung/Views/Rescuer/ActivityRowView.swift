@@ -5,6 +5,7 @@ struct ActivityRowView: View {
     let isStatusEditable: Bool
     let onStatusChange: (String) -> Void
     let onNavigateTap: (() -> Void)?
+    let allowsCompletionActions: Bool
 
     @State private var isExpanded = false
 
@@ -12,11 +13,13 @@ struct ActivityRowView: View {
         activity: Activity,
         isStatusEditable: Bool = true,
         onStatusChange: @escaping (String) -> Void,
+        allowsCompletionActions: Bool = true,
         onNavigateTap: (() -> Void)? = nil
     ) {
         self.activity = activity
         self.isStatusEditable = isStatusEditable
         self.onStatusChange = onStatusChange
+        self.allowsCompletionActions = allowsCompletionActions
         self.onNavigateTap = onNavigateTap
     }
 
@@ -223,7 +226,7 @@ struct ActivityRowView: View {
             case .cancelled:
                 Image(systemName: "minus.circle.fill").foregroundColor(DS.Colors.textTertiary)
             case .planned:
-                Image(systemName: "circle").foregroundColor(DS.Colors.textSecondary)
+                Image(systemName: "clock").foregroundColor(DS.Colors.textSecondary)
             }
         }
         .font(.system(size: 20))
@@ -246,14 +249,11 @@ struct ActivityRowView: View {
         guard isStatusEditable else { return [] }
 
         switch activity.activityStatus {
-        case .planned:
-            return [
-                ActivityAction(label: "Bắt đầu", icon: "play.fill", color: DS.Colors.accent, status: "OnGoing")
-            ]
-        case .onGoing:
+        case .planned, .onGoing:
+            guard allowsCompletionActions else { return [] }
             return [
                 ActivityAction(label: "Hoàn thành", icon: "checkmark.circle.fill", color: DS.Colors.success, status: "Succeed"),
-                ActivityAction(label: "Từ chối", icon: "xmark.circle.fill", color: DS.Colors.accent, status: "Failed")
+                ActivityAction(label: "Thất bại", icon: "xmark.circle.fill", color: DS.Colors.accent, status: "Failed")
             ]
         default:
             return []
@@ -419,8 +419,7 @@ struct ActivityRowView: View {
             detailItem("Kho tiếp tế", activity.depotName, icon: "shippingbox"),
             detailItem("Địa chỉ kho", activity.depotAddress, icon: "mappin.and.ellipse"),
             detailItem("Thời gian phân công", formattedDisplayDate(activity.assignedAt), icon: "calendar.badge.clock"),
-            detailItem("Hoàn tất lúc", formattedDisplayDate(activity.completedAt), icon: "checkmark.circle"),
-            detailItem("Người hoàn tất", activity.completedBy, icon: "person.crop.circle")
+            detailItem("Hoàn tất lúc", formattedDisplayDate(activity.completedAt), icon: "checkmark.circle")
         ]
         .compactMap { $0 }
     }

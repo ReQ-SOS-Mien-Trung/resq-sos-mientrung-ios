@@ -13,6 +13,7 @@ struct MissionAggregateRouteSheetView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var originKind: RouteOriginKind = .team
+    @State private var originAddress: String?
 
     private enum RouteOriginKind {
         case team
@@ -21,9 +22,9 @@ struct MissionAggregateRouteSheetView: View {
         var label: String {
             switch self {
             case .team:
-                return "Vị trí team"
+                return "Tọa độ team"
             case .device:
-                return "Vị trí thiết bị"
+                return "GPS thiết bị"
             }
         }
     }
@@ -42,9 +43,6 @@ struct MissionAggregateRouteSheetView: View {
                 } else {
                     routeMapCard
                     routeSummaryCard
-                    if segments.isEmpty == false {
-                        routeSegmentsCard
-                    }
                 }
             }
             .padding(DS.Spacing.md)
@@ -53,6 +51,9 @@ struct MissionAggregateRouteSheetView: View {
         .background(DS.Colors.background)
         .task(id: refreshKey) {
             await loadAggregateRoute()
+        }
+        .task(id: originLookupKey) {
+            await updateOriginAddress()
         }
     }
 
@@ -90,16 +91,60 @@ struct MissionAggregateRouteSheetView: View {
                 .disabled(isLoading)
             }
 
-            Text("Điểm bắt đầu: \(originKind.label) • \(originDisplayText)")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(DS.Colors.textSecondary)
+            originInfoCard
         }
+    }
+
+    private var originInfoCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: originKind == .device ? "location.fill" : "person.3.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(originKind == .device ? DS.Colors.success : DS.Colors.info)
+
+                Text("Điểm xuất phát của team")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(DS.Colors.text)
+
+                Spacer(minLength: 0)
+
+                Text(originKind.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(originKind == .device ? DS.Colors.success : DS.Colors.info)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background((originKind == .device ? DS.Colors.success : DS.Colors.info).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            if let originAddress,
+               originAddress.isEmpty == false {
+                Text(originAddress)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if originAddress == nil {
+                Text(originDisplayText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+        }
+        .padding(DS.Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke((originKind == .device ? DS.Colors.success : DS.Colors.info).opacity(0.22), lineWidth: 1)
+        )
     }
 
     private var loadingCard: some View {
         HStack(spacing: DS.Spacing.sm) {
             ProgressView()
-            Text("Đang tổng hợp lộ trình từ vị trí team...")
+            Text("Đang tổng hợp lộ trình xuất phát từ vị trí hiện tại của team...")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
         }
@@ -188,7 +233,7 @@ struct MissionAggregateRouteSheetView: View {
                 GoongAggregateRouteMapView(
                     origin: originCoordinate,
                     destination: destinationCoordinate,
-                    originTitle: originKind.label,
+                    originTitle: mapOriginTitle,
                     encodedPolylines: mapPolylines,
                     waypointCoordinates: waypointCoordinates
                 )
@@ -233,68 +278,13 @@ struct MissionAggregateRouteSheetView: View {
                 )
             }
 
-            if let destinationCoordinate {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Điểm đích cuối")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(DS.Colors.textSecondary)
-
-                    Text(String(format: "%.6f, %.6f", destinationCoordinate.latitude, destinationCoordinate.longitude))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(DS.Colors.text)
-                }
-            }
-        }
-        .padding(DS.Spacing.md)
-        .sharpCard(
-            borderColor: DS.Colors.borderSubtle,
-            borderWidth: DS.Border.thin,
-            shadow: DS.Shadow.none,
-            backgroundColor: DS.Colors.surface,
-            radius: 16
-        )
-    }
-
-    private var routeSegmentsCard: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            Text("Chặng theo activity còn lại")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(DS.Colors.text)
-
-            ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
-                HStack(alignment: .top, spacing: DS.Spacing.sm) {
-                    ZStack {
-                        Circle()
-                            .fill(DS.Colors.accent.opacity(0.12))
-                            .frame(width: 28, height: 28)
-
-                        Text("\(index + 1)")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(DS.Colors.accent)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(segment.title)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(DS.Colors.text)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 8) {
-                            Text(segment.distanceText)
-                            Text("•")
-                            Text(segment.durationText)
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(DS.Colors.textSecondary)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 6)
-
-                if index < segments.count - 1 {
-                    Divider().overlay(DS.Colors.divider)
-                }
+            if destinationCoordinate != nil {
+                pointSummaryBlock(
+                    title: "Điểm đích cuối",
+                    systemImage: "flag.checkered",
+                    tint: DS.Colors.warning,
+                    detail: "Điểm nhiệm vụ cuối"
+                )
             }
         }
         .padding(DS.Spacing.md)
@@ -350,7 +340,9 @@ struct MissionAggregateRouteSheetView: View {
             teamKey = "none"
         }
 
-        return "\(selectedVehicle)|\(resolvedMissionTeamId ?? -1)|\(teamKey)|\(statusKey)"
+        let deviceKey = currentDeviceCoordinate == nil ? "none" : "available"
+
+        return "\(selectedVehicle)|\(resolvedMissionTeamId ?? -1)|\(teamKey)|\(deviceKey)|\(statusKey)"
     }
 
     private var resolvedMissionTeamId: Int? {
@@ -376,12 +368,37 @@ struct MissionAggregateRouteSheetView: View {
         return String(format: "%.6f, %.6f", originCoordinate.latitude, originCoordinate.longitude)
     }
 
+    private var mapOriginTitle: String {
+        "Điểm xuất phát (\(originKind.label))"
+    }
+
+    private var originLookupKey: String {
+        guard let originCoordinate else { return "none" }
+        return String(format: "%.6f,%.6f|%@", originCoordinate.latitude, originCoordinate.longitude, originKind.label)
+    }
+
+    private var currentDeviceCoordinate: CLLocationCoordinate2D? {
+        guard let coordinates = locationManager.coordinates else { return nil }
+
+        let coordinate = CLLocationCoordinate2D(
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude
+        )
+
+        return isUsableCoordinate(coordinate) ? coordinate : nil
+    }
+
     private var originCoordinate: CLLocationCoordinate2D? {
         if let latitude = teamRoute?.originLatitude,
            let longitude = teamRoute?.originLongitude,
            (-90...90).contains(latitude),
            (-180...180).contains(longitude) {
             return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+
+        if originKind == .device,
+           let deviceCoordinate = currentDeviceCoordinate {
+            return deviceCoordinate
         }
 
         guard let first = segments.first else { return missionTeamCoordinate }
@@ -577,6 +594,11 @@ struct MissionAggregateRouteSheetView: View {
                 errorMessage = "API route team chưa trả về dữ liệu lộ trình."
             }
         } catch {
+            if isTaskCancellation(error) {
+                isLoading = false
+                return
+            }
+
             errorMessage = "Không thể tải lộ trình tổng hợp: \(error.localizedDescription)"
             teamRoute = nil
             segments = []
@@ -602,14 +624,9 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private func resolveOriginCoordinate() async throws -> CLLocationCoordinate2D {
-        if let teamCoordinate = missionTeamCoordinate {
-            originKind = .team
-            return teamCoordinate
-        }
-
-        if let coordinates = locationManager.coordinates {
+        if let deviceCoordinate = currentDeviceCoordinate {
             originKind = .device
-            return CLLocationCoordinate2D(latitude: coordinates.latitude, longitude: coordinates.longitude)
+            return deviceCoordinate
         }
 
         let location: CLLocation? = await withCheckedContinuation { continuation in
@@ -618,12 +635,31 @@ struct MissionAggregateRouteSheetView: View {
             }
         }
 
-        guard let location else {
-            throw MissionAggregateRouteSheetError.locationUnavailable
+        if let location,
+           isUsableCoordinate(location.coordinate) {
+            originKind = .device
+            return location.coordinate
         }
 
-        originKind = .device
-        return location.coordinate
+        if let teamCoordinate = missionTeamCoordinate {
+            originKind = .team
+            return teamCoordinate
+        }
+
+        throw MissionAggregateRouteSheetError.locationUnavailable
+    }
+
+    private func updateOriginAddress() async {
+        guard let originCoordinate else {
+            originAddress = nil
+            return
+        }
+
+        do {
+            originAddress = compactAddress(try await GeocodingService.shared.reverseGeocode(originCoordinate))
+        } catch {
+            originAddress = nil
+        }
     }
 
     private func statusPill(title: String, value: String, color: Color) -> some View {
@@ -655,6 +691,110 @@ struct MissionAggregateRouteSheetView: View {
         }
 
         return result
+    }
+
+    private func isUsableCoordinate(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        (-90...90).contains(coordinate.latitude)
+        && (-180...180).contains(coordinate.longitude)
+        && !(abs(coordinate.latitude) < 0.000001 && abs(coordinate.longitude) < 0.000001)
+    }
+
+    private func isTaskCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        if let urlError = error as? URLError,
+           urlError.code == .cancelled {
+            return true
+        }
+
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private func pointSummaryBlock(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        detail: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .foregroundColor(tint)
+                Text(title)
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(DS.Colors.textSecondary)
+
+            Text(detail)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(DS.Colors.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func compactAddress(_ rawAddress: String) -> String {
+        let parts = rawAddress
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var result: [String] = []
+        var normalizedResult: [String] = []
+
+        for part in parts {
+            let normalizedPart = normalizedAddressComponent(part)
+            if normalizedPart.isEmpty {
+                continue
+            }
+
+            if normalizedResult.contains(normalizedPart) {
+                continue
+            }
+
+            // Keep the longer variant when street fragments are repeated with house numbers.
+            if let similarIndex = normalizedResult.firstIndex(where: { existing in
+                let hasNumericHint = containsDigit(existing) || containsDigit(normalizedPart)
+                guard hasNumericHint else { return false }
+                return existing.contains(normalizedPart) || normalizedPart.contains(existing)
+            }) {
+                if normalizedPart.count > normalizedResult[similarIndex].count {
+                    result[similarIndex] = part
+                    normalizedResult[similarIndex] = normalizedPart
+                }
+
+                continue
+            }
+
+            // Remove orphan numeric chunks when previous part already includes that number.
+            if isNumericOnly(normalizedPart),
+               let previous = normalizedResult.last,
+               previous.contains(normalizedPart) {
+                continue
+            }
+
+            result.append(part)
+            normalizedResult.append(normalizedPart)
+        }
+
+        return result.joined(separator: ", ")
+    }
+
+    private func normalizedAddressComponent(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "vi_VN"))
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func containsDigit(_ value: String) -> Bool {
+        value.rangeOfCharacter(from: .decimalDigits) != nil
+    }
+
+    private func isNumericOnly(_ value: String) -> Bool {
+        value.range(of: "^[0-9]+$", options: .regularExpression) != nil
     }
 }
 
@@ -872,7 +1012,11 @@ private struct GoongAggregateRouteMapView: UIViewRepresentable {
             view.canShowCallout = true
 
             let annotationTitle = (annotation.title ?? nil) ?? ""
-            if annotationTitle == "Điểm nhiệm vụ cuối" {
+            if annotationTitle.hasPrefix("Điểm xuất phát") {
+                view.markerTintColor = .systemGreen
+                view.glyphImage = UIImage(systemName: "location.north.line.fill")
+                view.glyphText = nil
+            } else if annotationTitle == "Điểm nhiệm vụ cuối" {
                 view.markerTintColor = .systemRed
                 view.glyphImage = UIImage(systemName: "flag.checkered")
                 view.glyphText = nil
@@ -948,7 +1092,7 @@ private enum MissionAggregateRouteSheetError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .locationUnavailable:
-            return "Không có vị trí team và cũng chưa lấy được GPS thiết bị để bắt đầu chỉ đường."
+            return "Chưa lấy được GPS thiết bị và cũng không có tọa độ team để bắt đầu chỉ đường."
         }
     }
 }
