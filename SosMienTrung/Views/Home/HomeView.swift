@@ -18,11 +18,10 @@ struct HomeView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var notificationHub = NotificationHubService.shared
 
-    @State private var showSOSMap = false
+    @State private var showAssemblyPointMap = false
     @State private var showSOSForm = false
     @State private var showChatBot = false
     @State private var showNotifications = false
-    @State private var showMapDisabledAlert = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
     @State private var showRescuerDashboard = false
@@ -65,13 +64,8 @@ struct HomeView: View {
             .background(DS.Colors.background)
             .navigationBarHidden(true)
         }
-        .fullScreenCover(isPresented: $showSOSMap) {
-            SOSMapView()
-        }
-        .alert("Thông báo", isPresented: $showMapDisabledAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Chức năng bản đồ đang được cập nhật. Vui lòng thử lại sau.")
+        .fullScreenCover(isPresented: $showAssemblyPointMap) {
+            AssemblyPointMapView()
         }
         .fullScreenCover(isPresented: $showSOSForm) {
             SOSFormView(bridgefyManager: bridgefyManager)
@@ -254,52 +248,35 @@ struct HomeView: View {
             GridItem(.flexible(), spacing: DS.Spacing.sm)
         ], spacing: DS.Spacing.sm) {
             ResQGridButton(
-                icon: "mappin.and.ellipse",
-                title: "Bản đồ\ncần trợ giúp",
-                accentColor: DS.Colors.danger
-            ) {
-                showMapDisabledAlert = true
-            }
-
-            ResQGridButton(
-                icon: "cloud.rain.fill",
-                title: "Bản đồ\nthiên tai",
-                accentColor: DS.Colors.info
-            ) {
-                showSOSMap = true
-            }
-
-            ResQGridButton(
                 icon: "house.and.flag.fill",
                 title: "Bản đồ\nlánh nạn",
                 accentColor: DS.Colors.warning
             ) {
-                showMapDisabledAlert = true
+                showAssemblyPointMap = true
             }
 
-            if AuthSessionStore.shared.session?.roleId == 3 {
-                ResQGridButton(
-                    icon: "antenna.radiowaves.left.and.right",
-                    title: "Cứu hộ\n(Rescuer)",
-                    accentColor: DS.Colors.accent
-                ) {
-                    showRescuersView = true
-                }
-                ResQGridButton(
-                    icon: "checklist",
-                    title: "Nhiệm vụ\n& Check-in",
-                    accentColor: DS.Colors.warning
-                ) {
-                    showRescuerDashboard = true
-                }
-            } else {
-                ResQGridButton(
-                    icon: "figure.wave.circle.fill",
-                    title: "Chờ cứu\n(Victim)",
-                    accentColor: DS.Colors.danger
-                ) {
-                    showVictimStandby = true
-                }
+            ResQGridButton(
+                icon: "figure.wave.circle.fill",
+                title: "Chờ cứu\n(Victim)",
+                accentColor: DS.Colors.danger
+            ) {
+                showVictimStandby = true
+            }
+
+            ResQGridButton(
+                icon: "antenna.radiowaves.left.and.right",
+                title: "Cứu hộ\n(Rescuer)",
+                accentColor: DS.Colors.accent
+            ) {
+                showRescuersView = true
+            }
+
+            ResQGridButton(
+                icon: "checklist",
+                title: "Nhiệm vụ\n& Check-in",
+                accentColor: DS.Colors.warning
+            ) {
+                showRescuerDashboard = true
             }
         }
     }

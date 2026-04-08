@@ -87,11 +87,40 @@ struct VictimStandbyView: View {
                 .font(DS.Typography.title)
                 .foregroundColor(DS.Colors.text)
 
-            Text("Thiết bị đang tham gia tìm kiếm UWB.\nCác thiết bị gần đó có thể ghép đôi và định vị nhau.")
+            Text("Thiết bị đang phát tín hiệu định vị UWB và Bluetooth Mesh. Các thiết bị cứu hộ gần đó có thể ghép đôi và xác định vị trí của bạn.")
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, DS.Spacing.md)
+            
+            // Active Systems Panel
+            VStack(spacing: DS.Spacing.xs) {
+                HStack {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundColor(DS.Colors.accent)
+                    Text("Nearby Interaction (UWB)")
+                        .font(DS.Typography.headline)
+                    Spacer()
+                    ResQBadge(text: "ĐANG QUÉT", color: DS.Colors.accent)
+                }
+                .padding(DS.Spacing.sm)
+                .background(DS.Colors.accent.opacity(0.1))
+                .cornerRadius(DS.Radius.sm)
+                
+                HStack {
+                    Image(systemName: "network")
+                        .foregroundColor(DS.Colors.info)
+                    Text("Local Network (Multipeer)")
+                        .font(DS.Typography.headline)
+                    Spacer()
+                    ResQBadge(text: "SẴN SÀNG", color: DS.Colors.info)
+                }
+                .padding(DS.Spacing.sm)
+                .background(DS.Colors.info.opacity(0.1))
+                .cornerRadius(DS.Radius.sm)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.sm)
 
             // Danh sách peer đã kết nối
             if !multipeerSession.connectedPeers.isEmpty {

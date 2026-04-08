@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 
 struct RescueTeamMember: Codable, Identifiable {
     let userId: String
@@ -152,6 +153,78 @@ struct AssemblyPointEvent: Decodable, Identifiable {
 
 struct AssemblyPointEventsPage: Decodable {
     let items: [AssemblyPointEvent]
+    let pageNumber: Int
+    let pageSize: Int
+    let totalCount: Int
+    let totalPages: Int
+    let hasPreviousPage: Bool
+    let hasNextPage: Bool
+}
+
+struct AssemblyPoint: Decodable, Identifiable {
+    let id: Int
+    let code: String
+    let name: String
+    let latitude: Double?
+    let longitude: Double?
+    let maxCapacity: Int?
+    let status: String?
+    let imageUrl: String?
+    let lastUpdatedAt: String?
+    let hasActiveEvent: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case code
+        case name
+        case latitude
+        case longitude
+        case maxCapacity
+        case status
+        case imageUrl
+        case lastUpdatedAt
+        case hasActiveEvent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        func decodeLossyDouble(forKey key: CodingKeys) throws -> Double? {
+            if let value = try container.decodeIfPresent(Double.self, forKey: key) {
+                return value
+            }
+
+            if let text = try container.decodeIfPresent(String.self, forKey: key) {
+                return Double(text)
+            }
+
+            return nil
+        }
+
+        id = try container.decode(Int.self, forKey: .id)
+        code = try container.decode(String.self, forKey: .code)
+        name = try container.decode(String.self, forKey: .name)
+        latitude = try decodeLossyDouble(forKey: .latitude)
+        longitude = try decodeLossyDouble(forKey: .longitude)
+        maxCapacity = try container.decodeIfPresent(Int.self, forKey: .maxCapacity)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        lastUpdatedAt = try container.decodeIfPresent(String.self, forKey: .lastUpdatedAt)
+        hasActiveEvent = try container.decodeIfPresent(Bool.self, forKey: .hasActiveEvent) ?? false
+    }
+
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude,
+              let longitude else {
+            return nil
+        }
+
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
+struct AssemblyPointsPage: Decodable {
+    let items: [AssemblyPoint]
     let pageNumber: Int
     let pageSize: Int
     let totalCount: Int

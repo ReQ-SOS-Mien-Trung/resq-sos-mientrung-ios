@@ -29,39 +29,14 @@ struct ContentView: View {
         userProfile.isSetupComplete && authSession.isValid
     }
 
-    private var requiresRescuerEligibility: Bool {
-        authSession.session?.roleId == 3
-    }
-
-    private var rescuerEligibility: Bool? {
-        authSession.session?.isEligibleRescuer
-    }
-
-    private var hasUnlockedInterface: Bool {
-        guard isFullyAuthenticated else { return false }
-        guard requiresRescuerEligibility else { return true }
-        return rescuerEligibility == true
-    }
-
-    private var isRescuerExplicitlyLocked: Bool {
-        guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
-        return rescuerEligibility == false
-    }
-
-    private var isCheckingRescuerEligibility: Bool {
-        guard isFullyAuthenticated, requiresRescuerEligibility else { return false }
-        // Keep checking state while eligibility is still unknown,
-        // instead of treating unknown as locked.
-        return rescuerEligibility == nil || authSession.isRefreshingCurrentUser
-    }
-
     private var currentDiscoveryRole: MultipeerSession.DiscoveryRole? {
-        guard hasUnlockedInterface else { return nil }
+        guard isFullyAuthenticated else { return nil }
+        // Default session discovery role. If role is 3, start as rescuer. Otherwise start as victim.
         return authSession.session?.roleId == 3 ? .rescuer : .victim
     }
 
     private func bootstrapAuthenticatedNetworking() {
-        guard hasUnlockedInterface else { return }
+        guard isFullyAuthenticated else { return }
         ServerRequestGateway.shared.register(multipeerSession: multipeerSession)
         if let role = currentDiscoveryRole {
             multipeerSession.startBackgroundDiscovery(for: role)
@@ -82,9 +57,9 @@ struct ContentView: View {
         }
 
         Task { @MainActor in
-            await authSession.refreshCurrentUserIfNeeded(force: force && requiresRescuerEligibility)
+            await authSession.refreshCurrentUserIfNeeded(force: force)
 
-            if hasUnlockedInterface {
+            if isFullyAuthenticated {
                 bootstrapAuthenticatedNetworking()
             } else {
                 teardownAuthenticatedNetworking()
@@ -100,33 +75,12 @@ struct ContentView: View {
     @ViewBuilder
     private var rootView: some View {
         if isFullyAuthenticated {
-            if requiresRescuerEligibility {
-                if hasUnlockedInterface {
-                    MainTabView(
-                        nearbyManager: nearbyManager,
-                        multipeerSession: multipeerSession,
-                        bridgefyManager: bridgefyManager,
-                        selectedPeer: $selectedPeer
-                    )
-                } else if isRescuerExplicitlyLocked {
-                    RescuerEligibilityGateView(
-                        state: .locked,
-                        retryAction: { refreshAuthenticatedAccess(force: true) }
-                    )
-                } else if isCheckingRescuerEligibility {
-                    RescuerEligibilityGateView(
-                        state: .checking,
-                        retryAction: { refreshAuthenticatedAccess(force: true) }
-                    )
-                }
-            } else {
-                MainTabView(
-                    nearbyManager: nearbyManager,
-                    multipeerSession: multipeerSession,
-                    bridgefyManager: bridgefyManager,
-                    selectedPeer: $selectedPeer
-                )
-            }
+            MainTabView(
+                nearbyManager: nearbyManager,
+                multipeerSession: multipeerSession,
+                bridgefyManager: bridgefyManager,
+                selectedPeer: $selectedPeer
+            )
         } else {
             SetupProfileView(isSetupComplete: $isSetupComplete)
         }

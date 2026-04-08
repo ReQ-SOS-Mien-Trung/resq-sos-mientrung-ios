@@ -193,6 +193,71 @@ final class RescueTeamService {
         )
     }
 
+    // MARK: - GET /personnel/assembly-point
+    func getAssemblyPoints(pageNumber: Int = 1, pageSize: Int = 20) async throws -> AssemblyPointsPage {
+        guard var components = URLComponents(string: "\(baseURL)/personnel/assembly-point") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "pageNumber", value: String(pageNumber)),
+            URLQueryItem(name: "pageSize", value: String(pageSize))
+        ]
+
+        guard let url = components.url else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard let auth = authHeader else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(auth, forHTTPHeaderField: "Authorization")
+
+        print("[RescueTeamService] → GET \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            do {
+                return try JSONDecoder().decode(AssemblyPointsPage.self, from: data)
+            } catch {
+                throw RescueTeamServiceError.decodingError(error)
+            }
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
+    func getAllAssemblyPoints(pageSize: Int = 50) async throws -> [AssemblyPoint] {
+        var allItems: [AssemblyPoint] = []
+        var pageNumber = 1
+
+        while true {
+            let page = try await getAssemblyPoints(pageNumber: pageNumber, pageSize: pageSize)
+            allItems.append(contentsOf: page.items)
+
+            guard page.hasNextPage else {
+                break
+            }
+
+            pageNumber += 1
+        }
+
+        return allItems
+    }
+
     private func getAssemblyPointEvents(assemblyPointId: Int, pageNumber: Int = 1, pageSize: Int = 10) async throws -> [AssemblyPointEvent] {
         guard var components = URLComponents(string: "\(baseURL)/personnel/assembly-point/\(assemblyPointId)/events") else {
             throw RescueTeamServiceError.invalidURL
