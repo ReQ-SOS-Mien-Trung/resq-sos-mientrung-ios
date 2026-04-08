@@ -13,6 +13,7 @@ struct HomeView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
+    @ObservedObject private var authSession = AuthSessionStore.shared
     @Binding var selectedPeer: MCPeerID?
 
     @StateObject private var locationManager = LocationManager()
@@ -31,6 +32,18 @@ struct HomeView: View {
 
     @State private var weatherInfo = "TP Hồ Chí Minh - Có Mây"
 
+    private var canCreateSosRequest: Bool {
+        authSession.session?.canCreateSosRequest ?? false
+    }
+
+    private var canAccessRescuerWorkspace: Bool {
+        authSession.session?.canAccessRescuerWorkspace ?? false
+    }
+
+    private var canUseRescuerTracking: Bool {
+        authSession.session?.canUseRescuerTracking ?? false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -44,7 +57,9 @@ struct HomeView: View {
                     weatherSection
 
                     // MARK: - SOS CTA Button
-                    sosCTAButton
+                    if canCreateSosRequest {
+                        sosCTAButton
+                    }
 
                     // MARK: - Coordinator Chat Button
                     coordinatorChatButton
@@ -255,28 +270,34 @@ struct HomeView: View {
                 showAssemblyPointMap = true
             }
 
-            ResQGridButton(
-                icon: "figure.wave.circle.fill",
-                title: "Chờ cứu\n(Victim)",
-                accentColor: DS.Colors.danger
-            ) {
-                showVictimStandby = true
+            if canCreateSosRequest {
+                ResQGridButton(
+                    icon: "figure.wave.circle.fill",
+                    title: "Chờ cứu\n(Victim)",
+                    accentColor: DS.Colors.danger
+                ) {
+                    showVictimStandby = true
+                }
             }
 
-            ResQGridButton(
-                icon: "antenna.radiowaves.left.and.right",
-                title: "Cứu hộ\n(Rescuer)",
-                accentColor: DS.Colors.accent
-            ) {
-                showRescuersView = true
+            if canUseRescuerTracking {
+                ResQGridButton(
+                    icon: "antenna.radiowaves.left.and.right",
+                    title: "Cứu hộ\n(Rescuer)",
+                    accentColor: DS.Colors.accent
+                ) {
+                    showRescuersView = true
+                }
             }
 
-            ResQGridButton(
-                icon: "checklist",
-                title: "Nhiệm vụ\n& Check-in",
-                accentColor: DS.Colors.warning
-            ) {
-                showRescuerDashboard = true
+            if canAccessRescuerWorkspace {
+                ResQGridButton(
+                    icon: "checklist",
+                    title: "Nhiệm vụ\n& Check-in",
+                    accentColor: DS.Colors.warning
+                ) {
+                    showRescuerDashboard = true
+                }
             }
         }
     }

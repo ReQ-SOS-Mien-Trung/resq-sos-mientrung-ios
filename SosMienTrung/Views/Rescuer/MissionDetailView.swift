@@ -4,6 +4,7 @@ struct MissionDetailView: View {
     let mission: Mission
     @StateObject private var vm = RescuerMissionViewModel()
     @StateObject private var incidentVM = IncidentViewModel()
+    @ObservedObject private var authSession = AuthSessionStore.shared
     @State private var showReportIncident = false
     @State private var showAggregateRoute = false
     @State private var missionStatus: String
@@ -15,31 +16,61 @@ struct MissionDetailView: View {
 
     private var missionTeamId: Int? { mission.missionTeamId }
 
+    private var canViewMissionWorkspace: Bool {
+        authSession.session?.canViewMissionWorkspace ?? false
+    }
+
+    private var canManageMissionStatus: Bool {
+        authSession.session?.canManageMissionStatus ?? false
+    }
+
+    private var canUpdateActivityStatus: Bool {
+        authSession.session?.canUpdateActivityStatus ?? false
+    }
+
+    private var canAccessMissionRoutes: Bool {
+        authSession.session?.canAccessMissionRoutes ?? false
+    }
+
+    private var canReportMissionIncidents: Bool {
+        canViewMissionWorkspace
+    }
+
+    private var canOpenMissionReports: Bool {
+        canViewMissionWorkspace
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 missionHeader
                     .padding(.top, DS.Spacing.sm)
 
-                sectionHeader(
-                    title: "Danh sách hoạt động",
-                    subtitle: "\(activityCount) hoạt động cần theo dõi"
-                )
+                if canAccessMissionRoutes {
+                    aggregateRouteButton
+                }
 
-                aggregateRouteButton
+                if canViewMissionWorkspace {
+                    sectionHeader(
+                        title: "Danh sách hoạt động",
+                        subtitle: "\(activityCount) hoạt động cần theo dõi"
+                    )
 
-                activitiesSection
+                    activitiesSection
 
-                sectionHeader(
-                    title: "Báo cáo nhiệm vụ",
-                    subtitle: "Cập nhật kết quả và tiến độ của đội"
-                )
+                    sectionHeader(
+                        title: "Báo cáo nhiệm vụ",
+                        subtitle: "Cập nhật kết quả và tiến độ của đội"
+                    )
 
-                reportSection
+                    reportSection
 
-                incidentSectionHeader
+                    incidentSectionHeader
 
-                IncidentTimelineView(incidents: incidentVM.incidents, isLoading: incidentVM.isLoading)
+                    IncidentTimelineView(incidents: incidentVM.incidents, isLoading: incidentVM.isLoading)
+                } else {
+                    restrictedNotice
+                }
 
                 Spacer(minLength: 80)
             }
@@ -50,14 +81,16 @@ struct MissionDetailView: View {
         .navigationTitle("Chi tiết nhiệm vụ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    vm.loadActivities(missionId: mission.id)
-                    incidentVM.loadIncidents(missionId: mission.id)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+            if canViewMissionWorkspace {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        vm.loadActivities(missionId: mission.id)
+                        incidentVM.loadIncidents(missionId: mission.id)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .foregroundColor(DS.Colors.accent)
                 }
-                .foregroundColor(DS.Colors.accent)
             }
         }
         .sheet(isPresented: $showReportIncident) {
@@ -104,6 +137,7 @@ struct MissionDetailView: View {
             Text(vm.errorMessage ?? "")
         }
         .onAppear {
+            guard canViewMissionWorkspace else { return }
             vm.loadActivities(missionId: mission.id)
             incidentVM.loadIncidents(missionId: mission.id)
         }
@@ -146,7 +180,7 @@ struct MissionDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if shouldShowStartMissionButton {
+            if shouldShowStartMissionButton && canManageMissionStatus {
                 startMissionButton
             }
 
@@ -261,13 +295,15 @@ struct MissionDetailView: View {
                     ActivityRowView(
                         activity: activity,
                         onStatusChange: { status in
+                            guard canUpdateActivityStatus else { return }
+
                             guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else {
                                 return
                             }
 
                             vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
                         },
-                        allowsCompletionActions: isActivityActionUnlocked(activity, within: list)
+                        allowsCompletionActions: canUpdateActivityStatus && isActivityActionUnlocked(activity, within: list)
                     )
                 }
             }
@@ -322,7 +358,7 @@ struct MissionDetailView: View {
 
     @ViewBuilder
     private var reportSection: some View {
-        if let teamId = missionTeamId {
+        if canOpenMissionReports, let teamId = missionTeamId {
             NavigationLink(destination: MissionTeamReportView(
                 missionId: mission.id,
                 missionTeamId: teamId,
@@ -370,7 +406,9 @@ struct MissionDetailView: View {
             HStack(spacing: DS.Spacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(DS.Colors.warning)
-                Text("Không tìm thấy đội được gán với nhiệm vụ này để mở báo cáo.")
+                Text(canOpenMissionReports
+                    ? "Không tìm thấy đội được gán với nhiệm vụ này để mở báo cáo."
+                    : "Tài khoản hiện tại chưa được cấp quyền mở báo cáo đội.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
             }
@@ -400,17 +438,19 @@ struct MissionDetailView: View {
 
             Spacer()
 
-            Button { showReportIncident = true } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text("Báo sự cố")
-                        .font(.system(size: 13, weight: .semibold))
+            if canReportMissionIncidents {
+                Button { showReportIncident = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text("Báo sự cố")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, 10)
+                    .background(DS.Colors.accent)
+                    .clipShape(Capsule())
                 }
-                .foregroundColor(.white)
-                .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, 10)
-                .background(DS.Colors.accent)
-                .clipShape(Capsule())
             }
         }
     }
@@ -565,6 +605,34 @@ struct MissionDetailView: View {
     private var activityProgress: Double {
         guard activityCount > 0 else { return 0 }
         return Double(completedActivityCount) / Double(activityCount)
+    }
+
+    private var restrictedNotice: some View {
+        HStack(alignment: .top, spacing: DS.Spacing.sm) {
+            Image(systemName: "lock.fill")
+                .foregroundColor(DS.Colors.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Bạn chưa có quyền thao tác với nhiệm vụ này")
+                    .font(DS.Typography.headline)
+                    .foregroundColor(DS.Colors.text)
+
+                Text("Backend đang bảo vệ các API mission và activity bằng permission động. Khi được cấp quyền phù hợp, phần hoạt động, báo cáo và sự cố sẽ tự mở.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(DS.Spacing.md)
+        .sharpCard(
+            borderColor: DS.Colors.warning.opacity(0.3),
+            borderWidth: DS.Border.thin,
+            shadow: DS.Shadow.none,
+            backgroundColor: DS.Colors.surface,
+            radius: 16
+        )
     }
 
     private func isActivityActionUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
