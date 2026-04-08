@@ -13,10 +13,10 @@ import Combine
 struct SavedSOS: Codable, Identifiable, Equatable {
     var id: String                          // packetId (có thể được update sang server packetId sau sync)
     let timestamp: Date
-    let sosType: SOSType?
-    let latitude: Double?
-    let longitude: Double?
-    let message: String
+    var sosType: SOSType?
+    var latitude: Double?
+    var longitude: Double?
+    var message: String
     
     // Structured data
     var sharedPeople: [Person]
@@ -35,13 +35,17 @@ struct SavedSOS: Codable, Identifiable, Equatable {
     
     // Victim / reporter info
     let reportingTarget: SOSReportingTarget
-    let victimName: String?
-    let victimPhone: String?
-    let reporterName: String?
-    let reporterPhone: String?
-    let addressQuery: String
-    let resolvedAddress: String?
-    let manualLocation: SOSManualLocation?
+    var victimName: String?
+    var victimPhone: String?
+    var reporterName: String?
+    var reporterPhone: String?
+    var addressQuery: String
+    var resolvedAddress: String?
+    var manualLocation: SOSManualLocation?
+    var serverSosRequestId: Int?
+    var isCompanion: Bool
+    var latestIncidentNote: String?
+    var latestIncidentAt: Date?
     
     /// Kiểm tra có phải của mình không
     var isMine: Bool
@@ -83,6 +87,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.addressQuery = formData.addressQuery
         self.resolvedAddress = formData.resolvedAddress
         self.manualLocation = formData.manualLocation
+        self.serverSosRequestId = nil
+        self.isCompanion = false
+        self.latestIncidentNote = nil
+        self.latestIncidentAt = nil
         self.isMine = true
     }
     
@@ -173,6 +181,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         addressQuery: String,
         resolvedAddress: String?,
         manualLocation: SOSManualLocation?,
+        serverSosRequestId: Int?,
+        isCompanion: Bool,
+        latestIncidentNote: String?,
+        latestIncidentAt: Date?,
         isMine: Bool
     ) {
         self.id = id
@@ -198,6 +210,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         self.addressQuery = addressQuery
         self.resolvedAddress = resolvedAddress
         self.manualLocation = manualLocation
+        self.serverSosRequestId = serverSosRequestId
+        self.isCompanion = isCompanion
+        self.latestIncidentNote = latestIncidentNote
+        self.latestIncidentAt = latestIncidentAt
         self.isMine = isMine
     }
 
@@ -205,6 +221,18 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func serverDate(from rawValue: String?) -> Date? {
+        guard let rawValue = trimmedValue(rawValue) else { return nil }
+
+        let fullFormatter = ISO8601DateFormatter()
+        fullFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let basicFormatter = ISO8601DateFormatter()
+        basicFormatter.formatOptions = [.withInternetDateTime]
+
+        return fullFormatter.date(from: rawValue) ?? basicFormatter.date(from: rawValue)
     }
 
     private static func personType(from rawValue: String, personId: String) -> Person.PersonType {
@@ -448,7 +476,8 @@ struct SavedSOS: Codable, Identifiable, Equatable {
 
         self.init(
             id: record.packetId,
-            timestamp: Date(timeIntervalSince1970: TimeInterval(record.timestamp)),
+            timestamp: Self.serverDate(from: record.createdAt)
+                ?? Date(timeIntervalSince1970: TimeInterval(record.timestamp)),
             sosType: SOSType(rawValue: record.sosType ?? ""),
             latitude: record.latitude,
             longitude: record.longitude,
@@ -477,6 +506,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
                 }
                 return SOSManualLocation(latitude: latitude, longitude: longitude, accuracy: record.locationAccuracy)
             }(),
+            serverSosRequestId: record.id,
+            isCompanion: record.isCompanion ?? false,
+            latestIncidentNote: Self.trimmedValue(record.latestIncidentNote),
+            latestIncidentAt: Self.serverDate(from: record.latestIncidentAt),
             isMine: true
         )
     }
@@ -519,6 +552,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
             addressQuery: Self.trimmedValue(serverSnapshot.addressQuery) ?? addressQuery,
             resolvedAddress: serverSnapshot.resolvedAddress ?? resolvedAddress,
             manualLocation: serverSnapshot.manualLocation ?? manualLocation,
+            serverSosRequestId: serverSnapshot.serverSosRequestId ?? serverSosRequestId,
+            isCompanion: isCompanion || serverSnapshot.isCompanion,
+            latestIncidentNote: serverSnapshot.latestIncidentNote ?? latestIncidentNote,
+            latestIncidentAt: serverSnapshot.latestIncidentAt ?? latestIncidentAt,
             isMine: isMine || serverSnapshot.isMine
         )
     }
@@ -531,6 +568,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         case status, lastUpdated, sendHistory
         case reportingTarget, victimName, victimPhone, reporterName, reporterPhone
         case addressQuery, resolvedAddress, manualLocation
+        case serverSosRequestId, isCompanion, latestIncidentNote, latestIncidentAt
         case senderName, senderPhone, isMine
     }
     
@@ -562,6 +600,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         addressQuery         = try c.decodeIfPresent(String.self, forKey: .addressQuery) ?? ""
         resolvedAddress      = try c.decodeIfPresent(String.self, forKey: .resolvedAddress)
         manualLocation       = try c.decodeIfPresent(SOSManualLocation.self, forKey: .manualLocation)
+        serverSosRequestId   = try c.decodeIfPresent(Int.self, forKey: .serverSosRequestId)
+        isCompanion          = try c.decodeIfPresent(Bool.self, forKey: .isCompanion) ?? false
+        latestIncidentNote   = try c.decodeIfPresent(String.self, forKey: .latestIncidentNote)
+        latestIncidentAt     = try c.decodeIfPresent(Date.self, forKey: .latestIncidentAt)
         isMine               = try c.decode(Bool.self, forKey: .isMine)
     }
 
@@ -590,6 +632,10 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         try c.encode(addressQuery, forKey: .addressQuery)
         try c.encodeIfPresent(resolvedAddress, forKey: .resolvedAddress)
         try c.encodeIfPresent(manualLocation, forKey: .manualLocation)
+        try c.encodeIfPresent(serverSosRequestId, forKey: .serverSosRequestId)
+        try c.encode(isCompanion, forKey: .isCompanion)
+        try c.encodeIfPresent(latestIncidentNote, forKey: .latestIncidentNote)
+        try c.encodeIfPresent(latestIncidentAt, forKey: .latestIncidentAt)
         // Keep legacy keys so older local payloads can still read the victim identity.
         try c.encodeIfPresent(victimName, forKey: .senderName)
         try c.encodeIfPresent(victimPhone, forKey: .senderPhone)
@@ -769,6 +815,11 @@ struct SOSServerRecord: Decodable {
     let lastUpdatedAt: String?
     let reviewedAt: String?
     let reviewedById: String?
+    let latestIncidentNote: String?
+    let latestIncidentAt: String?
+    let isCompanion: Bool?
+    let incidentHistory: [SosIncidentHistoryItem]?
+    let companions: [CompanionResult]?
 
     enum CodingKeys: String, CodingKey {
         case id, packetId, clusterId, userId, sosType, rawMessage, msg
@@ -781,13 +832,16 @@ struct SOSServerRecord: Decodable {
         case originId, status, priorityLevel, waitTimeMinutes
         case latitude, longitude, locationAccuracy, timestamp
         case createdAt, lastUpdatedAt, reviewedAt, reviewedById
+        case latestIncidentNote, latestIncidentAt, isCompanion, incidentHistory, companions
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try container.decode(Int.self, forKey: .id)
-        packetId = try container.decode(String.self, forKey: .packetId)
+        packetId = try container.decodeIfPresent(String.self, forKey: .packetId)
+            ?? container.decodeIfPresent(String.self, forKey: .originId)
+            ?? "server-\(id)"
         clusterId = try container.decodeIfPresent(Int.self, forKey: .clusterId)
         userId = try container.decodeIfPresent(String.self, forKey: .userId)
         sosType = try container.decodeIfPresent(String.self, forKey: .sosType)
@@ -806,11 +860,16 @@ struct SOSServerRecord: Decodable {
         latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
         longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
         locationAccuracy = try container.decodeIfPresent(Double.self, forKey: .locationAccuracy)
-        timestamp = try container.decode(Int64.self, forKey: .timestamp)
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp) ?? 0
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
         lastUpdatedAt = try container.decodeIfPresent(String.self, forKey: .lastUpdatedAt)
         reviewedAt = try container.decodeIfPresent(String.self, forKey: .reviewedAt)
         reviewedById = try container.decodeIfPresent(String.self, forKey: .reviewedById)
+        latestIncidentNote = try container.decodeIfPresent(String.self, forKey: .latestIncidentNote)
+        latestIncidentAt = try container.decodeIfPresent(String.self, forKey: .latestIncidentAt)
+        isCompanion = try container.decodeIfPresent(Bool.self, forKey: .isCompanion)
+        incidentHistory = try container.decodeIfPresent([SosIncidentHistoryItem].self, forKey: .incidentHistory)
+        companions = try container.decodeIfPresent([CompanionResult].self, forKey: .companions)
     }
 
     /// Map server status string → SOSSendStatus
@@ -826,6 +885,39 @@ struct SOSServerRecord: Decodable {
 
 struct SOSServerResponse: Decodable {
     let sosRequests: [SOSServerRecord]
+}
+
+struct SosIncidentHistoryItem: Decodable, Identifiable, Equatable {
+    let id: Int
+    let teamIncidentId: Int?
+    let missionId: Int?
+    let missionTeamId: Int?
+    let missionActivityId: Int?
+    let incidentScope: String?
+    let note: String
+    let reportedById: String?
+    let createdAt: String
+    let teamName: String?
+    let activityType: String?
+}
+
+struct CompanionResult: Decodable, Identifiable, Equatable {
+    let userId: String
+    let fullName: String?
+    let phone: String?
+    let addedAt: String?
+
+    var id: String { userId }
+}
+
+struct SosRequestDetailResponse: Decodable {
+    let sosRequest: SOSServerRecord
+}
+
+struct UpdateVictimSosRequestResponse: Decodable {
+    let sosRequestId: Int
+    let updateType: String
+    let updatedAt: String?
 }
 
 // MARK: - SOS Storage Manager
@@ -919,6 +1011,10 @@ final class SOSStorageManager: ObservableObject {
     func getSOS(id: String) -> SavedSOS? {
         savedSOSList.first { $0.id == id }
     }
+
+    func getSOS(serverSosRequestId: Int) -> SavedSOS? {
+        savedSOSList.first { $0.serverSosRequestId == serverSosRequestId }
+    }
     
     /// SOS do mình gửi
     var mySOS: [SavedSOS] {
@@ -934,11 +1030,15 @@ final class SOSStorageManager: ObservableObject {
             for record in records {
                 let serverTs = Date(timeIntervalSince1970: TimeInterval(record.timestamp))
 
-                // 1. Khớp chính xác theo packetId
-                if let index = savedSOSList.firstIndex(where: { $0.id.caseInsensitiveCompare(record.packetId) == .orderedSame }) {
+                // 1. Khớp theo server numeric id nếu đã có
+                if let index = savedSOSList.firstIndex(where: { $0.serverSosRequestId == record.id }) {
                     savedSOSList[index] = savedSOSList[index].merged(withServer: record)
 
-                // 2. Khớp mờ: cùng sosType + timestamp ±120s (server có thể dùng UUID riêng)
+                // 2. Khớp chính xác theo packetId
+                } else if let index = savedSOSList.firstIndex(where: { $0.id.caseInsensitiveCompare(record.packetId) == .orderedSame }) {
+                    savedSOSList[index] = savedSOSList[index].merged(withServer: record)
+
+                // 3. Khớp mờ: cùng sosType + timestamp ±120s (server có thể dùng UUID riêng)
                 } else if let index = savedSOSList.firstIndex(where: {
                     $0.isMine &&
                     $0.sosType?.rawValue == record.sosType &&
@@ -947,7 +1047,7 @@ final class SOSStorageManager: ObservableObject {
                     print("[SOS Sync] 🔄 Fuzzy match – cập nhật id local \(savedSOSList[index].id) → server \(record.packetId)")
                     savedSOSList[index] = savedSOSList[index].merged(withServer: record)
 
-                // 3. Record chỉ tồn tại trên server (gửi từ session/thiết bị khác)
+                // 4. Record chỉ tồn tại trên server (gửi từ session/thiết bị khác)
                 } else {
                     let saved = SavedSOS(fromServer: record)
                     savedSOSList.append(saved)

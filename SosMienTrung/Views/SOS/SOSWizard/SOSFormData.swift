@@ -1276,25 +1276,101 @@ final class SOSFormData: ObservableObject {
         additionalDescription.nilIfBlank
     }
     
-    /// PriorityScore = (Σ(requestTypeScore) + Σ(personMedicalScore)) × situationMultiplier, capped at 100
-    var priorityScore: Int {
-        let requestTypeScore: Double
-        switch sosType {
-        case .rescue:  requestTypeScore = 30
-        case .relief:  requestTypeScore = 20
-        case .none:    requestTypeScore = 0
+    private var medicalScore: Double {
+        needsRescueStep ? rescueData.weightedMedicalScore : 0
+    }
+
+    private var waterUrgencyScore: Double {
+        guard needsReliefStep, reliefData.supplies.contains(.water) else { return 0 }
+        switch reliefData.waterDuration {
+        case .under6h: return 10
+        case .from6to12h: return 7
+        case .from12to24h: return 4
+        case .from1to2days: return 2
+        case .over2days, .none: return 0
         }
-        
-        let medicalScore = needsRescueStep ? rescueData.weightedMedicalScore : 0
+    }
+
+    private var foodUrgencyScore: Double {
+        guard needsReliefStep, reliefData.supplies.contains(.food) else { return 0 }
+        switch reliefData.foodDuration {
+        case .under12h: return 7
+        case .from12to24h: return 5
+        case .from1to2days: return 3
+        case .from2to3days: return 1
+        case .over3days, .none: return 0
+        }
+    }
+
+    private var blanketUrgencyScore: Double {
+        guard needsReliefStep, reliefData.supplies.contains(.blanket) else { return 0 }
+        guard reliefData.areBlanketsEnough == false else { return 0 }
+
+        let requestedCount = max(0, reliefData.blanketRequestCount ?? 0)
+        guard requestedCount > 0 else { return 0 }
+        if requestedCount == 1 { return 1 }
+
+        let totalPeople = max(sharedPeopleCount.total, 1)
+        if Double(requestedCount) > Double(totalPeople) / 2.0 {
+            return 3
+        }
+        return 2
+    }
+
+    private var clothingUrgencyScore: Double {
+        guard needsReliefStep, reliefData.supplies.contains(.clothes) else { return 0 }
+
+        let neededCount = reliefData.clothingPersonIds.count
+        guard neededCount > 0 else { return 0 }
+        if neededCount == 1 { return 1 }
+
+        let totalPeople = max(sharedPeopleCount.total, 1)
+        if Double(neededCount) > Double(totalPeople) / 2.0 {
+            return 3
+        }
+        return 2
+    }
+
+    private var hasPregnantVictim: Bool {
+        let activePersonIds = Set(sharedPeople.map(\.id))
+        return selectedRelativeSnapshots.contains { snapshot in
+            activePersonIds.contains(snapshot.personId) && snapshot.medicalProfile.specialSituation.isPregnant
+        }
+    }
+
+    /// Supply Urgency Score thành phần cho Relief.
+    var supplyUrgencyScore: Double {
+        guard needsReliefStep else { return 0 }
+        return waterUrgencyScore + foodUrgencyScore + blanketUrgencyScore + clothingUrgencyScore
+    }
+
+    /// Vulnerability Score: CHILD +1, ELDERLY +1, có thai +2; cap = 10% supplyUrgencyScore.
+    var vulnerabilityScore: Double {
+        guard needsReliefStep else { return 0 }
+
+        let vulnerabilityRaw = Double(sharedPeopleCount.children + sharedPeopleCount.elderly)
+            + (hasPregnantVictim ? 2 : 0)
+        let cap = max(0, supplyUrgencyScore * 0.10)
+        return min(vulnerabilityRaw, cap)
+    }
+
+    /// Relief Score = Supply Urgency + Vulnerability.
+    var reliefScore: Double {
+        guard needsReliefStep else { return 0 }
+        return supplyUrgencyScore + vulnerabilityScore
+    }
+
+    /// PriorityScore = (medicalScore + reliefScore) × situationMultiplier
+    var priorityScore: Int {
         let situationMultiplier = rescueData.situation?.situationMultiplier ?? 1.0
         
-        let raw = (requestTypeScore + medicalScore) * situationMultiplier
-        return min(100, Int(raw.rounded()))
+        let raw = (medicalScore + reliefScore) * situationMultiplier
+        return Int(raw.rounded())
     }
     
     // MARK: - Priority Level (P1–P4)
     
-    /// Ngưỡng điểm cho từng mức ưu tiên (thang 0–100)
+    /// Ngưỡng điểm cho từng mức ưu tiên
     private static let p1Threshold = 70
     private static let p2Threshold = 45
     private static let p3Threshold = 25
@@ -1825,10 +1901,6 @@ final class SOSFormData: ObservableObject {
                 parts.append("Nước: \(waterDuration.title)")
             }
 
-            if let waterRemaining = reliefData.waterRemaining {
-                parts.append("Nước còn: \(waterRemaining.title)")
-            }
-
             if let foodDuration = reliefData.foodDuration {
                 parts.append("Thực phẩm: \(foodDuration.title)")
             }
@@ -1991,7 +2063,11 @@ struct SOSStructuredPayload: Codable {
 
 extension SOSFormData {
     /// Convert to unified SOSPacket for server upload
-    func toSOSPacket(originIdOverride: String? = nil) -> SOSPacket {
+    func toSOSPacket(
+        originIdOverride: String? = nil,
+        packetIdOverride: String? = nil,
+        timestampOverride: Date? = nil
+    ) -> SOSPacket {
         let latitude = effectiveLocation?.latitude ?? 0
         let longitude = effectiveLocation?.longitude ?? 0
         let accuracy = effectiveLocation?.accuracy
@@ -2030,10 +2106,12 @@ extension SOSFormData {
         )
 
         let originId = originIdOverride ?? autoInfo?.deviceId ?? UUID().uuidString
+        let timestamp = timestampOverride ?? Date()
 
         return SOSPacket(
+            packetId: packetIdOverride ?? UUID().uuidString,
             originId: originId,
-            timestamp: Date(),
+            timestamp: timestamp,
             latitude: latitude,
             longitude: longitude,
             accuracy: accuracy,
@@ -2065,10 +2143,10 @@ extension SOSFormData {
             .filter { reliefData.medicalNeeds.contains($0) }
             .map(\.rawValue)
 
-        let water = reliefData.waterDuration != nil || reliefData.waterRemaining != nil
+        let water = reliefData.waterDuration != nil
             ? SOSWaterNeedData(
                 duration: reliefData.waterDuration?.rawValue,
-                remaining: reliefData.waterRemaining?.rawValue
+                remaining: nil
             )
             : nil
 

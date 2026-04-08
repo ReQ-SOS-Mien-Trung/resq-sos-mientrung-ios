@@ -18,6 +18,31 @@ final class APIService {
         self.session = URLSession(configuration: config)
     }
 
+    private func authorizedRequest(
+        url: URL,
+        method: String,
+        includeJSONContentType: Bool = false
+    ) -> URLRequest? {
+        guard let token = AuthSessionStore.shared.session?.accessToken else {
+            print("[API] ⚠️ No access token – skip \(method) \(url.absoluteString)")
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if includeJSONContentType {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return request
+    }
+
+    private func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+
     // MARK: - POST /emergency/sos-requests
     /// - Parameter relayingFor: userId gốc của người tạo SOS (khi thiết bị này chỉ relay)
     func uploadSOS(packet: SOSPacket, relayingFor originalUserId: String? = nil) async -> Bool {
@@ -48,8 +73,7 @@ final class APIService {
         }
 
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let encoder = makeEncoder()
             let jsonData = try encoder.encode(packet)
             request.httpBody = jsonData
             let jsonString = String(data: jsonData, encoding: .utf8) ?? "<unreadable>"
@@ -92,14 +116,9 @@ final class APIService {
             print("[API] ✗ Invalid URL for fetchMySOS")
             return nil
         }
-        guard let token = AuthSessionStore.shared.session?.accessToken else {
-            print("[API] ⚠️ No token – skip fetchMySOS")
+        guard let request = authorizedRequest(url: url, method: "GET") else {
             return nil
         }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
         do {
             print("[API] ➜ GET \(url.absoluteString)")
@@ -116,6 +135,75 @@ final class APIService {
             return result.sosRequests
         } catch {
             print("[API] ✗ fetchMySOS: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - GET /emergency/sos-requests/{id}
+    func getSosRequestDetail(id: Int) async -> SOSServerRecord? {
+        guard let url = URL(string: "\(baseURL)/emergency/sos-requests/\(id)") else {
+            print("[API] ✗ Invalid URL for getSosRequestDetail")
+            return nil
+        }
+        guard let request = authorizedRequest(url: url, method: "GET") else {
+            return nil
+        }
+
+        do {
+            print("[API] ➜ GET \(url.absoluteString)")
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200...299).contains(statusCode) else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                print("[API] ✗ getSosRequestDetail HTTP \(statusCode): \(body)")
+                return nil
+            }
+
+            let result = try JSONDecoder().decode(SosRequestDetailResponse.self, from: data)
+            return result.sosRequest
+        } catch {
+            print("[API] ✗ getSosRequestDetail: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - PATCH /emergency/sos-requests/{id}/victim-update
+    func updateVictimSosRequest(
+        id: Int,
+        packet: SOSPacket
+    ) async -> UpdateVictimSosRequestResponse? {
+        guard let url = URL(string: "\(baseURL)/emergency/sos-requests/\(id)/victim-update") else {
+            print("[API] ✗ Invalid URL for updateVictimSosRequest")
+            return nil
+        }
+        guard var request = authorizedRequest(
+            url: url,
+            method: "PATCH",
+            includeJSONContentType: true
+        ) else {
+            return nil
+        }
+
+        do {
+            let jsonData = try makeEncoder().encode(packet)
+            request.httpBody = jsonData
+            let jsonString = String(data: jsonData, encoding: .utf8) ?? "<unreadable>"
+            print("[API] ➜ PATCH \(url.absoluteString)")
+            print("[API] 📤 Victim update JSON:\n\(jsonString)")
+
+            let (data, response) = try await session.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200...299).contains(statusCode) else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                print("[API] ✗ victim-update HTTP \(statusCode): \(body)")
+                return nil
+            }
+
+            let result = try JSONDecoder().decode(UpdateVictimSosRequestResponse.self, from: data)
+            print("[API] ✅ victim-update success for SOS #\(result.sosRequestId)")
+            return result
+        } catch {
+            print("[API] ✗ victim-update: \(error.localizedDescription)")
             return nil
         }
     }

@@ -94,6 +94,27 @@ final class ServerRequestGateway: ObservableObject {
         submit(envelope)
     }
 
+    func submitVictimSosUpdate(
+        requestId: String,
+        targetLocalSosId: String,
+        serverSosRequestId: Int?,
+        packet: SOSPacket,
+        requesterUserId: String?,
+        victimPhone: String?,
+        reporterPhone: String?
+    ) {
+        let envelope = ServerRequestEnvelope.victimSosUpdate(
+            requestId: requestId,
+            targetLocalSosId: targetLocalSosId,
+            serverSosRequestId: serverSosRequestId,
+            packet: packet,
+            requesterUserId: requesterUserId,
+            victimPhone: victimPhone,
+            reporterPhone: reporterPhone
+        )
+        submit(envelope)
+    }
+
     func handleIncomingRequest(_ envelope: ServerRequestEnvelope, transport: TransportSource) {
         stateQueue.async {
             if self.completed.contains(envelope.requestId) {
@@ -156,11 +177,15 @@ final class ServerRequestGateway: ObservableObject {
 
             if isLocalOrigin {
                 DispatchQueue.main.async {
+                    let localTargetId = ack.targetLocalSosId ?? ack.requestId
                     // Nhận ACK từ server qua relay: server đã xác nhận
                     SOSStorageManager.shared.updateStatusWithEvent(
-                        id: ack.requestId,
+                        id: localTargetId,
                         status: .delivered,
-                        event: SOSSendEvent(type: .serverAcknowledged, note: "Server xác nhận qua Mesh relay (originId match)")
+                        event: SOSSendEvent(
+                            type: .serverAcknowledged,
+                            note: self.serverAckNote(for: ack.requestType)
+                        )
                     )
                 }
             }
@@ -267,11 +292,15 @@ final class ServerRequestGateway: ObservableObject {
             // Cập nhật status nếu đây là SOS của mình
             if isLocalOrigin {
                 DispatchQueue.main.async {
+                    let localTargetId = envelope.targetLocalSosId ?? envelope.requestId
                     // Gateway retry thành công: đã gửi lên server
                     SOSStorageManager.shared.updateStatusWithEvent(
-                        id: envelope.requestId,
+                        id: localTargetId,
                         status: .sent,
-                        event: SOSSendEvent(type: .sentViaNetwork, note: "Gửi qua Internet (retry tự động)")
+                        event: SOSSendEvent(
+                            type: .sentViaNetwork,
+                            note: self.networkSuccessNote(for: envelope.type)
+                        )
                     )
                 }
             }
@@ -341,6 +370,23 @@ final class ServerRequestGateway: ObservableObject {
 """)
 
             return await APIService.shared.uploadSOS(enhanced: packet, relayingFor: originalUserId)
+        case .victimSosUpdate:
+            guard AppConfig.supportsRelayedVictimUpdate else {
+                print("[Gateway] ⏸ Relayed victim update is disabled by capability flag")
+                return false
+            }
+
+            guard let payload = envelope.victimSosUpdate,
+                  let serverSosRequestId = payload.serverSosRequestId else {
+                print("[Gateway] ✗ Missing victim update payload or server SOS request id")
+                return false
+            }
+
+            let result = await APIService.shared.updateVictimSosRequest(
+                id: serverSosRequestId,
+                packet: payload.packet
+            )
+            return result != nil
         }
     }
 
@@ -365,7 +411,9 @@ final class ServerRequestGateway: ObservableObject {
             requestId: envelope.requestId,
             originDeviceId: envelope.originDeviceId,
             success: true,
-            timestamp: Int64(Date().timeIntervalSince1970)
+            timestamp: Int64(Date().timeIntervalSince1970),
+            requestType: envelope.type,
+            targetLocalSosId: envelope.targetLocalSosId
         )
 
         switch transport {
@@ -445,6 +493,24 @@ final class ServerRequestGateway: ObservableObject {
                 self?.triggerRetry(reason: .networkChange)
             }
             .store(in: &cancellables)
+    }
+
+    private func networkSuccessNote(for type: ServerRequestType) -> String {
+        switch type {
+        case .sosBasic, .sosEnhanced:
+            return "Gửi qua Internet (retry tự động)"
+        case .victimSosUpdate:
+            return "Đồng bộ cập nhật SOS qua Internet (retry tự động)"
+        }
+    }
+
+    private func serverAckNote(for type: ServerRequestType?) -> String {
+        switch type {
+        case .victimSosUpdate:
+            return "Server xác nhận cập nhật SOS qua Mesh relay"
+        case .sosBasic, .sosEnhanced, .none:
+            return "Server xác nhận qua Mesh relay (originId match)"
+        }
     }
 
 }
