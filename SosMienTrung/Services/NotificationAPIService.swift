@@ -55,9 +55,9 @@ final class NotificationAPIService {
         _ = try await requestData("/notifications/read-all", method: "PATCH")
     }
 
-    func registerFCMToken(_ token: String) async throws {
+    func registerFCMToken(_ token: String, accessToken: String? = nil) async throws {
         let body = try JSONEncoder().encode(FCMTokenRequest(token: token))
-        _ = try await requestData("/identity/user/me/fcm-token", method: "POST", body: body)
+        _ = try await requestData("/identity/user/me/fcm-token", method: "POST", body: body, accessToken: accessToken)
     }
 
     func broadcastAlert(_ payload: BroadcastAlertPayload) async throws {
@@ -65,9 +65,9 @@ final class NotificationAPIService {
         _ = try await requestData("/notifications/broadcast", method: "POST", body: body)
     }
 
-    func unregisterFCMToken(_ token: String) async throws {
+    func unregisterFCMToken(_ token: String, accessToken: String? = nil) async throws {
         let body = try JSONEncoder().encode(FCMTokenRequest(token: token))
-        _ = try await requestData("/identity/user/me/fcm-token", method: "DELETE", body: body)
+        _ = try await requestData("/identity/user/me/fcm-token", method: "DELETE", body: body, accessToken: accessToken)
     }
 
     func logout() async throws {
@@ -91,9 +91,11 @@ final class NotificationAPIService {
     private func requestData(
         _ path: String,
         method: String = "GET",
-        body: Data? = nil
+        body: Data? = nil,
+        accessToken: String? = nil
     ) async throws -> Data {
-        guard let token = AuthSessionStore.shared.session?.accessToken, !token.isEmpty else {
+        let resolvedAccessToken = accessToken ?? AuthSessionStore.shared.session?.accessToken
+        guard let token = resolvedAccessToken, !token.isEmpty else {
             throw NotificationAPIError.notAuthenticated
         }
 

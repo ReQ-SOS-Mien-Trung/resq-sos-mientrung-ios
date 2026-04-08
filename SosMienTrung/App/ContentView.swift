@@ -12,6 +12,7 @@ struct ContentView: View {
     @ObservedObject private var appearance = AppearanceManager.shared
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
+    @State private var lastObservedAuthSession: AuthSession? = AuthSessionStore.shared.session
     
     init() {
         let manager = NearbyInteractionManager()
@@ -105,6 +106,15 @@ struct ContentView: View {
                 }
             }
             .onChange(of: authSession.session) { newSession in
+                let previousSession = lastObservedAuthSession
+                lastObservedAuthSession = newSession
+
+                if newSession != nil {
+                    Task { @MainActor in
+                        await notificationHub.handleAuthSessionTransition(from: previousSession, to: newSession)
+                    }
+                }
+
                 if newSession == nil {
                     isSetupComplete = false
                     teardownAuthenticatedNetworking()

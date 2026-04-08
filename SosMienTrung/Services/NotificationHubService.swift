@@ -220,17 +220,29 @@ final class NotificationHubService: ObservableObject {
         }
     }
 
-    func prepareForLogout() async {
-        if let token = devicePushToken, !token.isEmpty {
-            do {
-                try await apiService.unregisterFCMToken(token)
-                clearRegisteredPushTokenKey()
-                log("FCM token unregistered")
-            } catch {
-                log("Failed to unregister FCM token: \(error.localizedDescription)")
-            }
+    func handleAuthSessionTransition(from previousSession: AuthSession?, to newSession: AuthSession?) async {
+        let previousUserId = previousSession?.userId
+        let newUserId = newSession?.userId
+
+        guard previousUserId != newUserId else { return }
+
+        if let previousSession {
+            await unregisterDevicePushToken(using: previousSession, reason: "session switched away from \(previousSession.userId)")
         }
 
+        clearRegisteredPushTokenKey()
+
+        if let newSession {
+            await registerDevicePushTokenIfNeeded(force: true, session: newSession)
+        }
+    }
+
+    func prepareForLogout() async {
+        if let session = AuthSessionStore.shared.session {
+            await unregisterDevicePushToken(using: session, reason: "logout")
+        }
+
+        clearRegisteredPushTokenKey()
         disconnect()
     }
 
@@ -348,8 +360,9 @@ final class NotificationHubService: ObservableObject {
         UIApplication.shared.applicationIconBadgeNumber = unreadCount
     }
 
-    private func registerDevicePushTokenIfNeeded(force: Bool = false) async {
-        guard let session = AuthSessionStore.shared.session, session.expiresAt > Date() else {
+    private func registerDevicePushTokenIfNeeded(force: Bool = false, session: AuthSession? = nil) async {
+        let resolvedSession = session ?? AuthSessionStore.shared.session
+        guard let resolvedSession, resolvedSession.expiresAt > Date() else {
             return
         }
 
@@ -357,26 +370,37 @@ final class NotificationHubService: ObservableObject {
             return
         }
 
-        let registrationKey = "\(session.userId)|\(token)"
+        let registrationKey = "\(resolvedSession.userId)|\(token)"
         if force == false, registeredPushTokenKey == registrationKey {
             return
         }
 
         do {
-            try await apiService.registerFCMToken(token)
+            try await apiService.registerFCMToken(token, accessToken: resolvedSession.accessToken)
             registeredPushTokenKey = registrationKey
             UserDefaults.standard.set(registrationKey, forKey: registeredPushTokenDefaultsKey)
             errorMessage = nil
-            log("FCM token registered")
+            log("FCM token registered for user \(resolvedSession.userId)")
         } catch {
             errorMessage = error.localizedDescription
-            log("Register FCM token failed: \(error.localizedDescription)")
+            log("Register FCM token failed for user \(resolvedSession.userId): \(error.localizedDescription)")
         }
     }
 
     private func clearRegisteredPushTokenKey() {
         registeredPushTokenKey = nil
         UserDefaults.standard.removeObject(forKey: registeredPushTokenDefaultsKey)
+    }
+
+    private func unregisterDevicePushToken(using session: AuthSession, reason: String) async {
+        guard let token = devicePushToken, !token.isEmpty else { return }
+
+        do {
+            try await apiService.unregisterFCMToken(token, accessToken: session.accessToken)
+            log("FCM token unregistered for user \(session.userId) (\(reason))")
+        } catch {
+            log("Failed to unregister FCM token for user \(session.userId) (\(reason)): \(error.localizedDescription)")
+        }
     }
 
     private func makeHubURL(accessToken: String) -> URL? {
