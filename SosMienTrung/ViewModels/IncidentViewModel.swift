@@ -12,32 +12,27 @@ final class IncidentViewModel: ObservableObject {
     func reportMissionIncident(
         missionId: Int,
         missionTeamId: Int,
-        description: String,
-        lat: Double,
-        lng: Double,
-        needsRescueAssistance: Bool,
-        assistanceSos: IncidentAssistanceSosRequestData?
+        request: MissionIncidentReportRequest
     ) {
         isSubmitting = true
         errorMessage = nil
         Task {
             do {
-                let req = ReportMissionTeamIncidentRequest(
-                    description: description,
-                    latitude: lat,
-                    longitude: lng,
-                    needsRescueAssistance: needsRescueAssistance,
-                    assistanceSos: assistanceSos
-                )
                 let response = try await IncidentService.shared.reportMissionTeamIncident(
                     missionId: missionId,
                     missionTeamId: missionTeamId,
-                    request: req
+                    request: request
                 )
-                if let assistanceId = response.assistanceSosRequestId {
-                    successMessage = "Đã báo sự cố và tạo yêu cầu hỗ trợ SOS #\(assistanceId)"
+                if request.rescueRequest != nil {
+                    if let assistanceId = response.assistanceSosRequestId {
+                        successMessage = "Đã báo sự cố mission và tạo yêu cầu giải cứu #\(assistanceId)"
+                    } else {
+                        successMessage = "Đã báo sự cố mission và gửi kèm yêu cầu giải cứu team"
+                    }
+                } else if request.handover != nil {
+                    successMessage = "Đã báo sự cố mission và gửi thông tin bàn giao"
                 } else {
-                    successMessage = "Đã báo sự cố cho toàn đội trong nhiệm vụ"
+                    successMessage = "Đã báo sự cố mission cho toàn đội"
                 }
             } catch {
                 errorMessage = "Báo cáo thất bại: \(error.localizedDescription)"
@@ -46,22 +41,23 @@ final class IncidentViewModel: ObservableObject {
         }
     }
 
-    func reportActivityIncident(missionId: Int, activityId: Int, description: String, lat: Double, lng: Double) {
+    func reportActivityIncident(
+        missionId: Int,
+        missionTeamId: Int,
+        request: ActivityIncidentReportRequest
+    ) {
         isSubmitting = true
         errorMessage = nil
         Task {
             do {
-                let req = ReportMissionActivityIncidentRequest(
-                    description: description,
-                    latitude: lat,
-                    longitude: lng
-                )
-                _ = try await IncidentService.shared.reportMissionActivityIncident(
+                _ = try await IncidentService.shared.reportTeamActivityIncident(
                     missionId: missionId,
-                    activityId: activityId,
-                    request: req
+                    missionTeamId: missionTeamId,
+                    request: request
                 )
-                successMessage = "Đã báo sự cố cho hoạt động"
+                successMessage = request.supportRequest != nil
+                    ? "Đã báo sự cố activity và gửi kèm yêu cầu hỗ trợ"
+                    : "Đã báo sự cố activity"
             } catch {
                 errorMessage = "Báo cáo thất bại: \(error.localizedDescription)"
             }

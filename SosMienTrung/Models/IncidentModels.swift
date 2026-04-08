@@ -51,39 +51,6 @@ struct MissionIncidentsResponse: Codable {
     let incidents: [Incident]
 }
 
-struct IncidentAssistanceSosRequestData: Codable, Equatable {
-    let rawMessage: String?
-    let latitude: Double?
-    let longitude: Double?
-    let sosType: String?
-    let situation: String?
-    let hasInjured: Bool?
-    let adultCount: Int?
-    let childCount: Int?
-    let elderlyCount: Int?
-    let medicalIssues: [String]?
-    let address: String?
-    let additionalDescription: String?
-}
-
-// MARK: - Report Mission Team Incident Request
-/// POST /operations/missions/{missionId}/teams/{missionTeamId}/incident
-struct ReportMissionTeamIncidentRequest: Codable {
-    let description: String
-    let latitude: Double
-    let longitude: Double
-    let needsRescueAssistance: Bool
-    let assistanceSos: IncidentAssistanceSosRequestData?
-}
-
-// MARK: - Report Mission Activity Incident Request
-/// POST /operations/missions/{missionId}/activities/{activityId}/incident
-struct ReportMissionActivityIncidentRequest: Codable {
-    let description: String
-    let latitude: Double
-    let longitude: Double
-}
-
 // MARK: - Update Incident Status Request
 /// PATCH /operations/team-incidents/{incidentId}/status
 /// Valid status values: InProgress, Resolved

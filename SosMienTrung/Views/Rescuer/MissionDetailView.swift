@@ -7,6 +7,7 @@ struct MissionDetailView: View {
     @ObservedObject private var authSession = AuthSessionStore.shared
     @State private var showReportIncident = false
     @State private var showAggregateRoute = false
+    @State private var showMissionInventory = false
     @State private var missionStatus: String
 
     init(mission: Mission) {
@@ -58,6 +59,8 @@ struct MissionDetailView: View {
 
                     activitiesSection
 
+                    inventorySection
+
                     sectionHeader(
                         title: "Báo cáo nhiệm vụ",
                         subtitle: "Cập nhật kết quả và tiến độ của đội"
@@ -94,25 +97,11 @@ struct MissionDetailView: View {
             }
         }
         .sheet(isPresented: $showReportIncident) {
-            if let teamId = missionTeamId {
-                ReportIncidentView(
-                    missionTeamId: teamId,
-                    activities: displayedActivities,
-                    incidentVM: incidentVM,
-                    missionId: mission.id
-                )
-            } else {
-                VStack(spacing: DS.Spacing.md) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 40))
-                        .foregroundColor(DS.Colors.accent)
-                    Text("Không tìm thấy thông tin team")
-                        .font(DS.Typography.headline)
-                        .foregroundColor(DS.Colors.textSecondary)
-                }
-                .padding()
-                .presentationDetents([.medium])
-            }
+            ReportIncidentView(
+                mission: mission,
+                activities: displayedActivities,
+                incidentVM: incidentVM
+            )
         }
         .sheet(isPresented: $showAggregateRoute) {
             NavigationStack {
@@ -126,6 +115,21 @@ struct MissionDetailView: View {
                             }
                         }
                     }
+            }
+        }
+        .sheet(isPresented: $showMissionInventory) {
+            NavigationStack {
+                MissionInventoryView(
+                    missionTitle: mission.title,
+                    activities: displayedActivities
+                )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Đóng") {
+                            showMissionInventory = false
+                        }
+                    }
+                }
             }
         }
         .alert("Lỗi", isPresented: Binding(
@@ -424,6 +428,55 @@ struct MissionDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private var inventorySection: some View {
+        if inventoryEntryCount > 0 {
+            Button {
+                showMissionInventory = true
+            } label: {
+                HStack(spacing: DS.Spacing.md) {
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
+                        .frame(width: 42, height: 42)
+                        .background(DS.Colors.info.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Inventory nhiệm vụ")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(DS.Colors.text)
+
+                        Text("Theo dõi \(inventoryItemTypeCount) loại vật tư và \(inventoryQuantityTotal) đơn vị đang gắn trong các activity của team.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: DS.Spacing.xs) {
+                            StatusBadge(text: "\(inventoryPendingPickupTotal) cần lấy", color: DS.Colors.warning)
+                            StatusBadge(text: "\(inventoryInHandTotal) đang giữ", color: DS.Colors.accent)
+                            StatusBadge(text: "\(inventoryDeliveredTotal) đã giao/dùng", color: DS.Colors.success)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(DS.Colors.textTertiary)
+                }
+                .padding(DS.Spacing.md)
+                .sharpCard(
+                    borderColor: DS.Colors.borderSubtle,
+                    borderWidth: DS.Border.thin,
+                    shadow: DS.Shadow.none,
+                    backgroundColor: DS.Colors.surface,
+                    radius: 16
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var incidentSectionHeader: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 6) {
@@ -607,6 +660,58 @@ struct MissionDetailView: View {
         return Double(completedActivityCount) / Double(activityCount)
     }
 
+    private var inventoryActivities: [Activity] {
+        displayedActivities.filter { ($0.suppliesToCollect ?? []).isEmpty == false }
+    }
+
+    private var inventoryEntries: [(activity: Activity, supply: MissionSupply)] {
+        inventoryActivities.flatMap { activity in
+            (activity.suppliesToCollect ?? []).map { (activity: activity, supply: $0) }
+        }
+    }
+
+    private var inventoryEntryCount: Int {
+        inventoryEntries.count
+    }
+
+    private var inventoryItemTypeCount: Int {
+        Set(inventoryEntries.map {
+            let name = $0.supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Vật tư"
+            let unit = $0.supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return "\(name)|\(unit)"
+        }).count
+    }
+
+    private var inventoryQuantityTotal: Int {
+        inventoryEntries.reduce(0) { $0 + $1.supply.quantity }
+    }
+
+    private var inventoryPendingPickupTotal: Int {
+        inventoryQuantity(forTypes: ["collectsupplies"], statuses: ["planned", "pending", "scheduled", "ongoing", "inprogress"])
+    }
+
+    private var inventoryInHandTotal: Int {
+        inventoryQuantity(forTypes: ["collectsupplies", "deliversupplies"], statuses: ["succeed", "completed", "ongoing", "inprogress", "planned", "pending", "scheduled"], custom: { activity, normalizedType, normalizedStatus in
+            if normalizedType == "collectsupplies" {
+                return normalizedStatus == "succeed" || normalizedStatus == "completed"
+            }
+            if normalizedType == "deliversupplies" {
+                return normalizedStatus == "planned" || normalizedStatus == "pending" || normalizedStatus == "scheduled" || normalizedStatus == "ongoing" || normalizedStatus == "inprogress"
+            }
+            return false
+        })
+    }
+
+    private var inventoryDeliveredTotal: Int {
+        inventoryQuantity(forTypes: ["deliversupplies"], statuses: ["succeed", "completed"])
+            + inventoryQuantity(forTypes: [], statuses: [], custom: { _, normalizedType, normalizedStatus in
+                normalizedType != "collectsupplies"
+                    && normalizedType != "deliversupplies"
+                    && normalizedType != "returnsupplies"
+                    && (normalizedStatus == "succeed" || normalizedStatus == "completed")
+            })
+    }
+
     private var restrictedNotice: some View {
         HStack(alignment: .top, spacing: DS.Spacing.sm) {
             Image(systemName: "lock.fill")
@@ -633,6 +738,31 @@ struct MissionDetailView: View {
             backgroundColor: DS.Colors.surface,
             radius: 16
         )
+    }
+
+    private func inventoryQuantity(
+        forTypes types: Set<String>,
+        statuses: Set<String>,
+        custom: ((Activity, String, String) -> Bool)? = nil
+    ) -> Int {
+        inventoryEntries.reduce(0) { partialResult, item in
+            let normalizedType = (item.activity.activityType ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: "-", with: "")
+                .lowercased()
+            let normalizedStatus = normalizedStatus(item.activity.status)
+
+            let matches: Bool
+            if let custom {
+                matches = custom(item.activity, normalizedType, normalizedStatus)
+            } else {
+                matches = (types.isEmpty || types.contains(normalizedType))
+                    && (statuses.isEmpty || statuses.contains(normalizedStatus))
+            }
+
+            return partialResult + (matches ? item.supply.quantity : 0)
+        }
     }
 
     private func isActivityActionUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {

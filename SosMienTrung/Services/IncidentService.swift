@@ -44,7 +44,7 @@ final class IncidentService {
     func reportMissionTeamIncident(
         missionId: Int,
         missionTeamId: Int,
-        request: ReportMissionTeamIncidentRequest
+        request: MissionIncidentReportRequest
     ) async throws -> IncidentResponse {
         guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/incident") else {
             throw URLError(.badURL)
@@ -53,13 +53,13 @@ final class IncidentService {
         return try await postIncident(url: url, payload: request)
     }
 
-    // MARK: - POST /operations/missions/{missionId}/activities/{activityId}/incident
-    func reportMissionActivityIncident(
+    // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/activity-incident
+    func reportTeamActivityIncident(
         missionId: Int,
-        activityId: Int,
-        request: ReportMissionActivityIncidentRequest
+        missionTeamId: Int,
+        request: ActivityIncidentReportRequest
     ) async throws -> IncidentResponse {
-        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/incident") else {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/activity-incident") else {
             throw URLError(.badURL)
         }
 
