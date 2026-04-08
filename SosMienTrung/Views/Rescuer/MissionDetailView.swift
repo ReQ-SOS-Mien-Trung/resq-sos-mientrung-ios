@@ -98,14 +98,6 @@ struct MissionDetailView: View {
         } message: {
             Text(vm.errorMessage ?? "")
         }
-        .alert("Thông báo", isPresented: Binding(
-            get: { vm.successMessage != nil },
-            set: { if !$0 { vm.successMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { vm.successMessage = nil }
-        } message: {
-            Text(vm.successMessage ?? "")
-        }
         .onAppear {
             vm.loadActivities(missionId: mission.id)
             incidentVM.loadIncidents(missionId: mission.id)
@@ -261,13 +253,17 @@ struct MissionDetailView: View {
         } else {
             LazyVStack(spacing: DS.Spacing.sm) {
                 ForEach(list) { activity in
-                    ActivityRowView(activity: activity) { status in
-                        guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else {
-                            return
-                        }
+                    ActivityRowView(
+                        activity: activity,
+                        onStatusChange: { status in
+                            guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else {
+                                return
+                            }
 
-                        vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
-                    }
+                            vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
+                        },
+                        allowsCompletionActions: isActivityActionUnlocked(activity, within: list)
+                    )
                 }
             }
         }
@@ -480,6 +476,7 @@ struct MissionDetailView: View {
                 let didUpdate = await vm.updateMissionStatus(missionId: mission.id, status: "OnGoing")
                 if didUpdate {
                     missionStatus = "OnGoing"
+                    vm.loadActivities(missionId: mission.id)
                 }
             }
         } label: {
@@ -563,6 +560,23 @@ struct MissionDetailView: View {
     private var activityProgress: Double {
         guard activityCount > 0 else { return 0 }
         return Double(completedActivityCount) / Double(activityCount)
+    }
+
+    private func isActivityActionUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
+        guard let currentStep = activity.step, currentStep > 1 else {
+            return true
+        }
+
+        let previousSteps = list.filter { candidate in
+            guard let candidateStep = candidate.step else { return false }
+            return candidateStep < currentStep
+        }
+
+        guard previousSteps.isEmpty == false else {
+            return true
+        }
+
+        return previousSteps.allSatisfy { $0.activityStatus == .succeed }
     }
 
     private func formattedDisplayDate(_ raw: String?) -> String? {
