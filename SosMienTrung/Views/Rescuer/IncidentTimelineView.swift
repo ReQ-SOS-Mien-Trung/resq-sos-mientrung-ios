@@ -79,8 +79,11 @@ struct IncidentRowView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         StatusBadge(text: RescuerStatusBadgeText.incident(incident.status), color: statusColor)
+                        if let scopeLabel = incidentScopeLabel {
+                            StatusBadge(text: scopeLabel, color: DS.Colors.textSecondary)
+                        }
                         Spacer()
-                        if let raw = incident.createdAt {
+                        if let raw = incident.reportedAt {
                             Text(formattedDate(raw))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(DS.Colors.textTertiary)
@@ -94,14 +97,13 @@ struct IncidentRowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
+                    if let reporterName = incident.reportedBy?.displayName, reporterName != "Ẩn danh" {
+                        Label(reporterName, systemImage: "person.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+
                     HStack(spacing: DS.Spacing.xs) {
-                        if incident.needsAssistance == true {
-                            incidentFlag(
-                                title: "Cần hỗ trợ",
-                                icon: "hand.raised.fill",
-                                tint: DS.Colors.accent
-                            )
-                        }
                         if incident.hasInjuredMember == true {
                             incidentFlag(
                                 title: "Có thương vong",
@@ -127,16 +129,23 @@ struct IncidentRowView: View {
         switch RescuerStatusBadgeText.normalized(incident.status) {
         case "reported":
             return DS.Colors.accent
-        case "acknowledged":
-            return DS.Colors.info
         case "inprogress":
-            return DS.Colors.accent
+            return DS.Colors.warning
         case "resolved":
             return DS.Colors.success
-        case "closed":
-            return DS.Colors.textTertiary
         default:
             return DS.Colors.textSecondary
+        }
+    }
+
+    private var incidentScopeLabel: String? {
+        switch RescuerStatusBadgeText.normalized(incident.incidentScope) {
+        case "mission":
+            return "Toàn đội"
+        case "activity":
+            return "Theo activity"
+        default:
+            return nil
         }
     }
 

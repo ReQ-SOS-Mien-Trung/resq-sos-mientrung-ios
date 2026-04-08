@@ -94,14 +94,10 @@ enum RescuerStatusBadgeText {
         switch normalized(status) {
         case "reported":
             return "Đã báo cáo"
-        case "acknowledged":
-            return "Đã tiếp nhận"
         case "inprogress":
             return "Đang xử lý"
         case "resolved":
             return "Đã xử lý"
-        case "closed":
-            return "Đã đóng"
         default:
             return fallbackLabel(from: status)
         }

@@ -98,7 +98,7 @@ struct MissionTeamMember: Codable, Identifiable {
 }
 
 // MARK: - MissionTeam
-/// Holds missionTeamId — required when reporting incidents via POST /operations/team-incidents
+/// Holds missionTeamId — required when reporting incidents via mission route endpoints.
 struct MissionTeam: Codable, Identifiable {
     let id: Int
     let teamId: Int?
@@ -209,7 +209,7 @@ struct Mission: Codable, Identifiable {
     var startDate: String? { startTime }
     var endDate: String? { expectedEndTime }
 
-    /// Convenience: first team's id = missionTeamId used for incident reporting
+    /// Convenience: first team's id = missionTeamId used for mission-level incident reporting
     var missionTeamId: Int? { teams?.first?.id }
 }
 
