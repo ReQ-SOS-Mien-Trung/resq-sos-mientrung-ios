@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActivityRowView: View {
     let activity: Activity
+    let isStatusEditable: Bool
     let onStatusChange: (String) -> Void
     let onNavigateTap: (() -> Void)?
 
@@ -9,10 +10,12 @@ struct ActivityRowView: View {
 
     init(
         activity: Activity,
+        isStatusEditable: Bool = true,
         onStatusChange: @escaping (String) -> Void,
         onNavigateTap: (() -> Void)? = nil
     ) {
         self.activity = activity
+        self.isStatusEditable = isStatusEditable
         self.onStatusChange = onStatusChange
         self.onNavigateTap = onNavigateTap
     }
@@ -240,6 +243,8 @@ struct ActivityRowView: View {
     }
 
     private var availableActions: [ActivityAction] {
+        guard isStatusEditable else { return [] }
+
         switch activity.activityStatus {
         case .planned:
             return [

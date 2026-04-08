@@ -12,13 +12,18 @@ struct MainTabView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
+    @ObservedObject private var authSession = AuthSessionStore.shared
     @Binding var selectedPeer: MCPeerID?
     @State private var selectedTab: Int = 0
     
     var unreadMessagesCount: Int {
         bridgefyManager.messages.filter { !$0.isFromMe && $0.recipientId == nil }.count
     }
-    
+
+    private var canAccessSosHistory: Bool {
+        authSession.session?.canCreateSosRequest ?? false
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             HomeView(
@@ -32,11 +37,13 @@ struct MainTabView: View {
             }
             .tag(0)
 
-            SOSHistoryView(bridgefyManager: bridgefyManager)
-                .tabItem {
-                    Label("Quản lý SOS", systemImage: "list.clipboard.fill")
-                }
-                .tag(1)
+            if canAccessSosHistory {
+                SOSHistoryView(bridgefyManager: bridgefyManager)
+                    .tabItem {
+                        Label("Quản lý SOS", systemImage: "list.clipboard.fill")
+                    }
+                    .tag(1)
+            }
 
             ChatRoomsView(bridgefyManager: bridgefyManager)
                 .tabItem {
@@ -74,9 +81,20 @@ struct MainTabView: View {
 
             UITabBar.appearance().standardAppearance = tabBarAppearance
             UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+            normalizeSelectedTab()
+        }
+        .onChange(of: authSession.session) { _ in
+            normalizeSelectedTab()
         }
         // setActivePeer được xử lý bởi RescuersView (sau khi token được trao đổi xong)
         // Không gọi ở đây để tránh race condition với token exchange
+    }
+
+    private func normalizeSelectedTab() {
+        let availableTabs = [0] + (canAccessSosHistory ? [1] : []) + [2, 3, 4]
+        if availableTabs.contains(selectedTab) == false {
+            selectedTab = availableTabs.first ?? 0
+        }
     }
 }
 

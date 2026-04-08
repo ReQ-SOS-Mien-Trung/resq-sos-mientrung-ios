@@ -218,6 +218,7 @@ struct MissionRowView: View {
 struct RescuerDashboardView: View {
     @StateObject private var vm = RescuerMissionViewModel()
     @StateObject private var assemblyVM = RescuerAssemblyEventsViewModel()
+    @ObservedObject private var authSession = AuthSessionStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
 
@@ -289,11 +290,26 @@ struct RescuerDashboardView: View {
         assemblyVM.events.contains(where: { $0.isCheckedIn })
     }
 
+    private var canAccessRescuerWorkspace: Bool {
+        authSession.session?.canAccessRescuerWorkspace ?? false
+    }
+
+    private var canViewMissionWorkspace: Bool {
+        authSession.session?.canViewMissionWorkspace ?? false
+    }
+
+    private var canManageTeamAvailability: Bool {
+        authSession.session?.canManageTeamAvailability ?? false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                    if isMissionAccessUnlocked {
+                    if canAccessRescuerWorkspace == false {
+                        restrictedStateView
+                            .padding(.top, DS.Spacing.md)
+                    } else if isMissionAccessUnlocked && canViewMissionWorkspace {
                         teamCard
                             .padding(.top, DS.Spacing.md)
 
@@ -314,7 +330,9 @@ struct RescuerDashboardView: View {
 
                         assemblyEventsSection
 
-                        checkInGateMessage
+                        if canViewMissionWorkspace {
+                            checkInGateMessage
+                        }
                     }
 
                     Spacer(minLength: 80)
@@ -329,18 +347,20 @@ struct RescuerDashboardView: View {
                     Button("Đóng") { dismiss() }
                         .foregroundColor(DS.Colors.accent)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        if isMissionAccessUnlocked {
-                            vm.refreshDashboard()
-                        } else {
-                            assemblyVM.refresh()
+                if canAccessRescuerWorkspace {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            if isMissionAccessUnlocked && canViewMissionWorkspace {
+                                vm.refreshDashboard()
+                            } else {
+                                assemblyVM.refresh()
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
                         }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+                        .foregroundColor(DS.Colors.warning)
+                        .disabled(vm.isLoading || assemblyVM.isLoading)
                     }
-                    .foregroundColor(DS.Colors.warning)
-                    .disabled(vm.isLoading || assemblyVM.isLoading)
                 }
             }
             .alert("Lỗi", isPresented: Binding(
@@ -377,16 +397,18 @@ struct RescuerDashboardView: View {
             }
         }
         .onAppear {
+            guard canAccessRescuerWorkspace else { return }
+
             if assemblyVM.events.isEmpty {
                 assemblyVM.refresh()
             }
 
-            if isMissionAccessUnlocked {
+            if isMissionAccessUnlocked && canViewMissionWorkspace {
                 vm.refreshDashboard()
             }
         }
         .onChange(of: isMissionAccessUnlocked) { unlocked in
-            if unlocked {
+            if unlocked && canViewMissionWorkspace {
                 vm.refreshDashboard()
             }
         }
@@ -429,9 +451,14 @@ struct RescuerDashboardView: View {
                     memberDropdown(members: members)
                 }
 
-                if isCurrentUserLeader {
+                if isCurrentUserLeader && canManageTeamAvailability {
                     teamAvailabilityButton
                     .padding(.top, DS.Spacing.xs)
+                } else if isCurrentUserLeader {
+                    Label("Tài khoản hiện tại chưa được cấp quyền đổi trạng thái team", systemImage: "lock.fill")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .padding(.top, DS.Spacing.xs)
                 } else {
                     Label("Chỉ đội trưởng có thể đổi trạng thái sẵn sàng của team", systemImage: "lock.fill")
                         .font(DS.Typography.caption)
@@ -712,6 +739,24 @@ struct RescuerDashboardView: View {
                 }
             }
         }
+    }
+
+    private var restrictedStateView: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            EyebrowLabel(text: "TRUY CẬP BỊ GIỚI HẠN")
+
+            Text("Tài khoản hiện tại chưa được cấp quyền truy cập khu vực nhiệm vụ cứu hộ.")
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
+
+            Text("Ứng dụng đang đồng bộ quyền từ `/identity/user/me`. Khi backend cấp một trong các quyền mission, activity hoặc personnel liên quan, nút truy cập sẽ tự hiển thị.")
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.surface)
+        .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
     }
 }
 

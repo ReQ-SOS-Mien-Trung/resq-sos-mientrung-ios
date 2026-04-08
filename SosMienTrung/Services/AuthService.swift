@@ -30,6 +30,7 @@ struct FirebasePhoneLoginResponse: Codable {
     let firstName: String?
     let lastName: String?
     let roleId: Int?
+    let permissions: [String]?
     let isNewUser: Bool
     let isOnboarded: Bool
 
@@ -116,6 +117,7 @@ struct GoogleLoginResponse: Codable {
     let firstName: String?
     let lastName: String?
     let roleId: Int?
+    let permissions: [String]?
     let isNewUser: Bool
     let isOnboarded: Bool
 
@@ -146,6 +148,7 @@ struct CurrentUserResponse: Codable {
     let isOnboarded: Bool
     let isEligibleRescuer: Bool
     let avatarUrl: String?
+    let permissions: [String]?
 
     var displayName: String? {
         let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }
@@ -186,6 +189,7 @@ struct CurrentUserResponse: Codable {
         isOnboarded = Self.decodeBool(from: container, keys: ["isOnboarded", "onboarded", "is_onboarded"]) ?? false
         isEligibleRescuer = Self.decodeBool(from: container, keys: ["isEligibleRescuer", "eligibleRescuer", "is_eligible_rescuer"]) ?? false
         avatarUrl = Self.decodeString(from: container, keys: ["avatarUrl", "avatarURL", "avatar", "photoUrl", "photoURL"])
+        permissions = Self.decodeStringArray(from: container, keys: ["permissions"])
     }
 
     private static func decodeNestedUser(
@@ -289,6 +293,23 @@ struct CurrentUserResponse: Codable {
                 if let parsed = Double(normalized) {
                     return parsed
                 }
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeStringArray(
+        from container: KeyedDecodingContainer<DynamicCodingKey>,
+        keys: [String]
+    ) -> [String]? {
+        for rawKey in keys {
+            let key = DynamicCodingKey(rawValue: rawKey)
+
+            if let values = try? container.decode([String].self, forKey: key) {
+                return values.map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                }.filter { !$0.isEmpty }
             }
         }
 
