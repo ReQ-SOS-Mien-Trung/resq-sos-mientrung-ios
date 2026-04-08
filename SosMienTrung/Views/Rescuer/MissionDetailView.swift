@@ -62,7 +62,12 @@ struct MissionDetailView: View {
         }
         .sheet(isPresented: $showReportIncident) {
             if let teamId = missionTeamId {
-                ReportIncidentView(missionTeamId: teamId, incidentVM: incidentVM, missionId: mission.id)
+                ReportIncidentView(
+                    missionTeamId: teamId,
+                    activities: displayedActivities,
+                    incidentVM: incidentVM,
+                    missionId: mission.id
+                )
             } else {
                 VStack(spacing: DS.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle")

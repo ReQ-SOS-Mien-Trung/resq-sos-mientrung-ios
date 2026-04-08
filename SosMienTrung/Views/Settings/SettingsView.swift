@@ -304,14 +304,21 @@ struct SettingsView: View {
                     .frame(width: 88, height: 88)
                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
 
-                if let firstChar = userProfile.currentUser?.name.first {
-                    Text(String(firstChar).uppercased())
-                        .font(.system(size: 36, weight: .black))
-                        .foregroundColor(DS.Colors.accent)
+                if let avatarURL = profileAvatarURL {
+                    AsyncImage(url: avatarURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 88, height: 88)
+                                .clipped()
+                        default:
+                            profileAvatarFallbackView
+                        }
+                    }
                 } else {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(DS.Colors.accent)
+                    profileAvatarFallbackView
                 }
             }
 
@@ -325,6 +332,28 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, DS.Spacing.md)
+    }
+
+    private var profileAvatarURL: URL? {
+        guard let rawURL = userProfile.currentUser?.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawURL.isEmpty else {
+            return nil
+        }
+        return URL(string: rawURL)
+    }
+
+    private var profileAvatarFallbackView: some View {
+        Group {
+            if let firstChar = userProfile.currentUser?.name.first {
+                Text(String(firstChar).uppercased())
+                    .font(.system(size: 36, weight: .black))
+                    .foregroundColor(DS.Colors.accent)
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(DS.Colors.accent)
+            }
+        }
     }
 
     // MARK: - Settings Section Builder

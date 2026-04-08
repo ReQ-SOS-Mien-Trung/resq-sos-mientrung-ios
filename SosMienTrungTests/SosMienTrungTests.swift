@@ -229,15 +229,19 @@ final class SosMienTrungTests: XCTestCase {
         let packet = SOSPacketEnhanced(from: formData, originId: "origin", latitude: 16.0, longitude: 108.0)
         let data = try JSONEncoder().encode(packet)
         let decoded = try JSONDecoder().decode(SOSPacketEnhanced.self, from: data)
-        let supplyDetails = try XCTUnwrap(decoded.structuredData?.supplyDetails)
+        let groupNeeds = try XCTUnwrap(decoded.structuredData?.groupNeeds)
+        let victims = try XCTUnwrap(decoded.structuredData?.victims)
+        let primaryVictim = try XCTUnwrap(victims.first(where: { $0.personId == "adult_1" }))
 
-        XCTAssertEqual(supplyDetails.specialDietPersons?.first?.name, "Bé Tí")
-        XCTAssertEqual(Set(supplyDetails.medicalNeeds ?? []), Set([MedicalSupportNeed.commonMedicine.rawValue, MedicalSupportNeed.minorInjury.rawValue]))
-        XCTAssertEqual(supplyDetails.areBlanketsEnough, false)
-        XCTAssertEqual(supplyDetails.blanketRequestCount, 1)
-        XCTAssertEqual(supplyDetails.clothingPersons?.first?.gender, ClothingGender.male.rawValue)
+        XCTAssertEqual(primaryVictim.customName, "Bé Tí")
+        XCTAssertEqual(primaryVictim.personalNeeds.diet.hasSpecialDiet, true)
+        XCTAssertEqual(primaryVictim.personalNeeds.diet.description, "Cần thức ăn mềm")
+        XCTAssertEqual(Set(groupNeeds.medicine?.medicalNeeds ?? []), Set([MedicalSupportNeed.commonMedicine.rawValue, MedicalSupportNeed.minorInjury.rawValue]))
+        XCTAssertEqual(groupNeeds.blanket?.requestCount, 1)
+        XCTAssertEqual(primaryVictim.personalNeeds.clothing.needed, true)
+        XCTAssertEqual(primaryVictim.personalNeeds.clothing.gender, ClothingGender.male.rawValue)
         XCTAssertEqual(decoded.structuredData?.address, "12 Le Loi, Hue, Viet Nam")
-        XCTAssertEqual(decoded.victimInfo?.userId, "user-1")
+        XCTAssertNil(decoded.victimInfo)
         XCTAssertEqual(decoded.reporterInfo?.userId, "user-1")
         XCTAssertEqual(decoded.isSentOnBehalf, false)
     }
@@ -268,16 +272,16 @@ final class SosMienTrungTests: XCTestCase {
 
         XCTAssertEqual(packet.location.lat, 16.467)
         XCTAssertEqual(packet.location.lng, 107.584)
-        XCTAssertEqual(packet.victimInfo?.userId, nil)
-        XCTAssertEqual(packet.victimInfo?.userName, "Tran Thi B")
-        XCTAssertNil(packet.victimInfo?.userPhone)
+        XCTAssertNil(packet.victimInfo)
+        XCTAssertNil(packet.structuredData?.victims)
         XCTAssertEqual(packet.reporterInfo?.userId, "reporter-1")
         XCTAssertEqual(packet.reporterInfo?.userName, "Nguoi gui")
         XCTAssertEqual(packet.reporterInfo?.batteryLevel, nil)
         XCTAssertEqual(packet.reporterInfo?.isOnline, false)
         XCTAssertEqual(packet.isSentOnBehalf, true)
         XCTAssertEqual(packet.senderInfo?.userId, "reporter-1")
-        XCTAssertEqual(packet.senderInfo?.userName, "Tran Thi B")
+        XCTAssertEqual(packet.senderInfo?.userName, "Nguoi gui")
+        XCTAssertEqual(packet.senderInfo?.userPhone, "0911222333")
         XCTAssertNil(packet.senderInfo?.batteryLevel)
         XCTAssertEqual(packet.senderInfo?.isOnline, false)
         XCTAssertEqual(packet.structuredData?.address, "Cho Dong Ba, Hue, Viet Nam")
@@ -412,7 +416,6 @@ final class SosMienTrungTests: XCTestCase {
             personType: .elderly,
             gender: .female,
             relationGroup: .nhaNgoai,
-            tags: ["huyết áp", "xe lăn"],
             medicalProfile: RelativeMedicalProfile(
                 chronicConditions: [.hypertension, .diabetes],
                 mobilityStatus: .wheelchair,
@@ -424,7 +427,7 @@ final class SosMienTrungTests: XCTestCase {
             displayName: "Bé Na",
             personType: .child,
             relationGroup: .hangXom,
-            tags: ["trẻ nhỏ"],
+            specialNeedsNote: "Trẻ nhỏ",
             specialDietNote: "Cần sữa"
         ))
 
@@ -433,7 +436,7 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertEqual(store.filteredProfiles(searchText: "Nữ").count, 1)
         XCTAssertEqual(store.filteredProfiles(searchText: "tiểu đường").count, 1)
         XCTAssertEqual(store.filteredProfiles(relationGroup: .hangXom).count, 1)
-        XCTAssertEqual(store.filteredProfiles(tag: "xe lăn").count, 1)
+        XCTAssertEqual(store.filteredProfiles(searchText: "xe lăn").count, 1)
 
         activeUserId = "user-b"
         store.reloadCurrentUser()
@@ -449,7 +452,8 @@ final class SosMienTrungTests: XCTestCase {
         activeUserId = "user-a"
         store.reloadCurrentUser()
         XCTAssertEqual(store.profiles.count, 2)
-        XCTAssertEqual(store.availableTags, ["huyết áp", "trẻ nhỏ", "xe lăn"])
+        XCTAssertEqual(store.filteredProfiles(searchText: "huyết áp").count, 1)
+        XCTAssertEqual(store.filteredProfiles(searchText: "trẻ nhỏ").count, 1)
     }
 
     func testApplyingSavedRelativeProfilesSupportsZeroAdultsAndPrefillsDiet() {
@@ -662,6 +666,208 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(summary.contains("Cần hỗ trợ"))
         XCTAssertTrue(summary.contains("máy hút đàm"))
         XCTAssertTrue(summary.contains("Nhóm máu: O-"))
+    }
+
+    func testMissionIncidentsResponseDecodesWrappedPayload() throws {
+        let json = """
+        {
+          "missionId": 91,
+          "incidents": [
+            {
+              "incidentId": 22,
+              "missionTeamId": 7,
+              "missionActivityId": 18,
+              "incidentScope": "Activity",
+              "description": "Lở đất chặn đường",
+              "latitude": 16.4637,
+              "longitude": 107.5909,
+              "status": "Reported",
+              "reportedBy": {
+                "id": "b3f8b7e0-2cbf-4d26-8b9d-95f1fcefa222",
+                "firstName": "An",
+                "lastName": "Nguyen"
+              },
+              "reportedAt": "2026-04-08T10:00:00Z"
+            }
+          ]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            MissionIncidentsResponse.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(decoded.missionId, 91)
+        XCTAssertEqual(decoded.incidents.count, 1)
+        XCTAssertEqual(decoded.incidents.first?.id, 22)
+        XCTAssertEqual(decoded.incidents.first?.missionActivityId, 18)
+        XCTAssertEqual(decoded.incidents.first?.incidentScope, "Activity")
+        XCTAssertEqual(decoded.incidents.first?.reportedBy?.displayName, "Nguyen An")
+    }
+
+    func testIncidentReportResponseDecodesAssistanceFields() throws {
+        let json = """
+        {
+          "incidentId": 33,
+          "missionId": 11,
+          "missionTeamId": 5,
+          "missionActivityId": null,
+          "incidentScope": "Mission",
+          "status": "Reported",
+          "incidentSosRequestIds": [101, 102],
+          "assistanceSosRequestId": 401,
+          "assistanceSosStatus": "Pending",
+          "assistanceSosPriorityLevel": "P2",
+          "reportedAt": "2026-04-08T11:45:00Z"
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            IncidentResponse.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(decoded.incidentId, 33)
+        XCTAssertEqual(decoded.missionId, 11)
+        XCTAssertEqual(decoded.incidentSosRequestIds, [101, 102])
+        XCTAssertEqual(decoded.assistanceSosRequestId, 401)
+        XCTAssertEqual(decoded.assistanceSosPriorityLevel, "P2")
+    }
+
+    func testFetchMySOSDecodesIncidentSummaryFields() throws {
+        let json = """
+        {
+          "sosRequests": [
+            {
+              "id": 55,
+              "packetId": "packet-55",
+              "userId": "2c79ce03-9bdb-4cef-bdd0-eab3f0d6de87",
+              "sosType": "RESCUE",
+              "msg": "Cần hỗ trợ khẩn cấp",
+              "status": "InProgress",
+              "latitude": 16.47,
+              "longitude": 107.58,
+              "timestamp": 1712570400,
+              "latestIncidentNote": "Đội cứu hộ đang tiếp cận",
+              "latestIncidentAt": "2026-04-08T12:15:00Z",
+              "isCompanion": true
+            }
+          ]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            SOSServerResponse.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        let record = try XCTUnwrap(decoded.sosRequests.first)
+        XCTAssertEqual(record.id, 55)
+        XCTAssertEqual(record.latestIncidentNote, "Đội cứu hộ đang tiếp cận")
+        XCTAssertEqual(record.latestIncidentAt, "2026-04-08T12:15:00Z")
+        XCTAssertEqual(record.isCompanion, true)
+    }
+
+    func testSosRequestDetailDecodesIncidentHistoryAndCompanions() throws {
+        let json = """
+        {
+          "sosRequest": {
+            "id": 70,
+            "packetId": "packet-70",
+            "userId": "3f20f9c8-13dc-4861-9457-b31b4b6dbab3",
+            "sosType": "RELIEF",
+            "msg": "Cần nước và thuốc",
+            "status": "Pending",
+            "latitude": 16.1,
+            "longitude": 108.2,
+            "timestamp": 1712574000,
+            "latestIncidentNote": "Đã ghi nhận yêu cầu",
+            "latestIncidentAt": "2026-04-08T13:00:00Z",
+            "incidentHistory": [
+              {
+                "id": 1,
+                "teamIncidentId": 99,
+                "missionId": 8,
+                "missionTeamId": 6,
+                "missionActivityId": null,
+                "incidentScope": "Mission",
+                "note": "Đội A đã tiếp cận khu vực",
+                "reportedById": "90d9c5d4-8a1d-4b97-99d5-3303b64f65e2",
+                "createdAt": "2026-04-08T13:10:00Z",
+                "teamName": "Đội A",
+                "activityType": null
+              }
+            ],
+            "companions": [
+              {
+                "userId": "7474c6f2-cc94-4db9-bf80-72ceeceea1cc",
+                "fullName": "Tran Thi Lan",
+                "phone": "0905000111",
+                "addedAt": "2026-04-08T13:12:00Z"
+              }
+            ]
+          }
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            SosRequestDetailResponse.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(decoded.sosRequest.id, 70)
+        XCTAssertEqual(decoded.sosRequest.incidentHistory?.first?.note, "Đội A đã tiếp cận khu vực")
+        XCTAssertEqual(decoded.sosRequest.companions?.first?.fullName, "Tran Thi Lan")
+    }
+
+    func testServerRequestEnvelopeAndAckEncodeDecodeVictimUpdate() throws {
+        let packet = SOSPacket(
+            packetId: "packet-update",
+            originId: "device-1",
+            timestamp: Date(timeIntervalSince1970: 1712577600),
+            latitude: 16.46,
+            longitude: 107.59,
+            sosType: "RESCUE",
+            message: "Cập nhật vị trí",
+            structuredData: nil,
+            victimInfo: nil,
+            reporterInfo: nil,
+            isSentOnBehalf: false,
+            senderInfo: nil,
+            hopCount: 0,
+            path: ["device-1"]
+        )
+
+        let envelope = ServerRequestEnvelope.victimSosUpdate(
+            requestId: "update-req-1",
+            targetLocalSosId: "packet-update",
+            serverSosRequestId: 88,
+            packet: packet,
+            requesterUserId: "user-1",
+            victimPhone: "0901234567",
+            reporterPhone: "0907654321"
+        )
+        let ack = ServerRequestAck(
+            requestId: "update-req-1",
+            originDeviceId: "device-1",
+            success: true,
+            timestamp: 1712577601,
+            requestType: .victimSosUpdate,
+            targetLocalSosId: "packet-update"
+        )
+
+        let encodedEnvelope = try JSONEncoder().encode(envelope)
+        let decodedEnvelope = try JSONDecoder().decode(ServerRequestEnvelope.self, from: encodedEnvelope)
+        XCTAssertEqual(decodedEnvelope.type, .victimSosUpdate)
+        XCTAssertEqual(decodedEnvelope.targetLocalSosId, "packet-update")
+        XCTAssertEqual(decodedEnvelope.serverSosRequestId, 88)
+        XCTAssertEqual(decodedEnvelope.victimSosUpdate?.packet.packetId, "packet-update")
+
+        let encodedAck = try JSONEncoder().encode(ack)
+        let decodedAck = try JSONDecoder().decode(ServerRequestAck.self, from: encodedAck)
+        XCTAssertEqual(decodedAck.requestType, .victimSosUpdate)
+        XCTAssertEqual(decodedAck.targetLocalSosId, "packet-update")
     }
 
     func testPerformanceExample() throws {

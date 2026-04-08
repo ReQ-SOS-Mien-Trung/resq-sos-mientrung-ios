@@ -27,13 +27,9 @@ final class IncidentService {
         return req
     }
 
-    // MARK: - POST /operations/team-incidents
-    func reportIncident(_ request: ReportIncidentRequest) async throws -> IncidentResponse {
-        guard let url = URL(string: "\(baseURL)/operations/team-incidents") else {
-            throw URLError(.badURL)
-        }
+    private func postIncident<Request: Encodable>(url: URL, payload: Request) async throws -> IncidentResponse {
         var req = authorizedRequest(url: url, method: "POST")
-        req.httpBody = try JSONEncoder().encode(request)
+        req.httpBody = try JSONEncoder().encode(payload)
         print("[IncidentService] → POST \(url.absoluteString)")
         let (data, response) = try await session.data(for: req)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -41,7 +37,33 @@ final class IncidentService {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw URLError(.badServerResponse)
         }
-        return (try? JSONDecoder().decode(IncidentResponse.self, from: data)) ?? IncidentResponse(id: nil, message: "OK")
+        return try JSONDecoder().decode(IncidentResponse.self, from: data)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/incident
+    func reportMissionTeamIncident(
+        missionId: Int,
+        missionTeamId: Int,
+        request: ReportMissionTeamIncidentRequest
+    ) async throws -> IncidentResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/incident") else {
+            throw URLError(.badURL)
+        }
+
+        return try await postIncident(url: url, payload: request)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/activities/{activityId}/incident
+    func reportMissionActivityIncident(
+        missionId: Int,
+        activityId: Int,
+        request: ReportMissionActivityIncidentRequest
+    ) async throws -> IncidentResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/incident") else {
+            throw URLError(.badURL)
+        }
+
+        return try await postIncident(url: url, payload: request)
     }
 
     // MARK: - GET /operations/team-incidents/by-mission/{missionId}
@@ -53,11 +75,11 @@ final class IncidentService {
         let (data, response) = try await session.data(for: authorizedRequest(url: url))
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
-        return try JSONDecoder().decode([Incident].self, from: data)
+        return try JSONDecoder().decode(MissionIncidentsResponse.self, from: data).incidents
     }
 
     // MARK: - PATCH /operations/team-incidents/{incidentId}/status
-    /// Valid status values: Reported, Acknowledged, InProgress, Resolved, Closed
+    /// Valid status values: InProgress, Resolved
     func updateIncidentStatus(incidentId: Int, request: UpdateIncidentStatusRequest) async throws {
         guard let url = URL(string: "\(baseURL)/operations/team-incidents/\(incidentId)/status") else {
             throw URLError(.badURL)

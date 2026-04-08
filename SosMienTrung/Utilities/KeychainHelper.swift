@@ -38,6 +38,7 @@ struct KeychainHelper {
 enum AppConfig {
     private static let fallbackBaseURLDevice = "https://resq.somee.com/"
     private static let fallbackBaseURLSimulator = "https://resq.somee.com/"
+    static let supportsRelayedVictimUpdate = false
 
     private static func normalizedURLString(_ raw: String?) -> String? {
         guard let raw else { return nil }

@@ -17,6 +17,8 @@ struct SOSDetailView: View {
     @State private var showResendConfirm = false
     @State private var showDeleteConfirm = false
     @State private var isSending = false
+    @State private var serverDetail: SOSServerRecord?
+    @State private var isLoadingServerDetail = false
     
     var body: some View {
         NavigationStack {
@@ -30,6 +32,18 @@ struct SOSDetailView: View {
                         
                         // Send history timeline
                         sendHistoryCard
+
+                        if let summaryIncidentCard = summaryIncidentCard {
+                            summaryIncidentCard
+                        }
+
+                        if let incidentHistoryCard = incidentHistoryCard {
+                            incidentHistoryCard
+                        }
+
+                        if let companionsCard = companionsCard {
+                            companionsCard
+                        }
 
                         sosContentCard
                         
@@ -79,7 +93,7 @@ struct SOSDetailView: View {
             }
             .sheet(isPresented: $isEditing) {
                 SOSEditView(
-                    savedSOS: savedSOS,
+                    savedSOS: currentSOS,
                     bridgefyManager: bridgefyManager
                 )
             }
@@ -94,11 +108,14 @@ struct SOSDetailView: View {
             .alert("Xóa SOS?", isPresented: $showDeleteConfirm) {
                 Button("Hủy", role: .cancel) {}
                 Button("Xóa", role: .destructive) {
-                    SOSStorageManager.shared.deleteSOS(id: savedSOS.id)
+                    SOSStorageManager.shared.deleteSOS(id: currentSOS.id)
                     dismiss()
                 }
             } message: {
                 Text("SOS này sẽ bị xóa khỏi danh sách đã lưu.")
+            }
+            .task(id: currentSOS.serverSosRequestId) {
+                await loadServerDetailIfNeeded()
             }
         }
     }
@@ -110,30 +127,49 @@ struct SOSDetailView: View {
     private var currentSOS: SavedSOS {
         sosStorage.getSOS(id: savedSOS.id) ?? savedSOS
     }
+
+    private var displaySOS: SavedSOS {
+        guard let serverDetail else { return currentSOS }
+        return currentSOS.merged(withServer: serverDetail)
+    }
+
+    private var displayIncidentHistory: [SosIncidentHistoryItem] {
+        serverDetail?.incidentHistory ?? []
+    }
+
+    private var displayCompanions: [CompanionResult] {
+        serverDetail?.companions ?? []
+    }
     
     private var statusHeader: some View {
         VStack(spacing: 12) {
             // Status badge
             HStack {
-                Image(systemName: currentSOS.status.icon)
+                Image(systemName: displaySOS.status.icon)
                     .font(.title2)
-                Text(currentSOS.status.title)
+                Text(displaySOS.status.title)
                     .font(DS.Typography.headline)
             }
-            .foregroundColor(currentSOS.status.color)
+            .foregroundColor(displaySOS.status.color)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .background(currentSOS.status.color.opacity(0.2))
+            .background(displaySOS.status.color.opacity(0.2))
             
             
             // Timestamps
             VStack(spacing: 4) {
-                Text("Tạo lúc: \(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                Text("Tạo lúc: \(displaySOS.timestamp.formatted(date: .abbreviated, time: .shortened))")
                     .font(DS.Typography.subheadline)
                     .foregroundColor(DS.Colors.text)
                 
-                if currentSOS.lastUpdated != savedSOS.timestamp {
+                if currentSOS.lastUpdated != displaySOS.timestamp {
                     Text("Cập nhật: \(currentSOS.lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+
+                if isLoadingServerDetail {
+                    Text("Đang đồng bộ chi tiết từ server...")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -143,6 +179,120 @@ struct SOSDetailView: View {
         .frame(maxWidth: .infinity)
         .background(DS.Colors.surface)
         
+    }
+
+    private var summaryIncidentCard: AnyView? {
+        guard let latestIncidentNote = displaySOS.latestIncidentNote, !latestIncidentNote.isEmpty else {
+            return nil
+        }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "exclamationmark.bubble.fill")
+                        .foregroundColor(DS.Colors.accent)
+                    Text("Cập nhật Incident mới nhất")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
+                    Spacer()
+                    if let latestIncidentAt = displaySOS.latestIncidentAt {
+                        Text(latestIncidentAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+                }
+
+                Text(latestIncidentNote)
+                    .font(DS.Typography.subheadline)
+                    .foregroundColor(DS.Colors.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding()
+            .background(DS.Colors.surface)
+        )
+    }
+
+    private var incidentHistoryCard: AnyView? {
+        guard !displayIncidentHistory.isEmpty else { return nil }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle.portrait")
+                        .foregroundColor(DS.Colors.accent)
+                    Text("Lịch sử Incident")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
+                    Spacer()
+                    Text("\(displayIncidentHistory.count)")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+
+                ForEach(displayIncidentHistory) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(scopeLabel(for: item.incidentScope))
+                                .font(DS.Typography.caption.bold())
+                                .foregroundColor(DS.Colors.accent)
+                            Spacer()
+                            Text(formatServerDate(item.createdAt) ?? item.createdAt)
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.textSecondary)
+                        }
+
+                        Text(item.note)
+                            .font(DS.Typography.subheadline)
+                            .foregroundColor(DS.Colors.text)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if let teamName = item.teamName, !teamName.isEmpty {
+                            Text(teamName)
+                                .font(DS.Typography.caption)
+                                .foregroundColor(DS.Colors.textSecondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+            .background(DS.Colors.surface)
+        )
+    }
+
+    private var companionsCard: AnyView? {
+        guard !displayCompanions.isEmpty else { return nil }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "person.2.fill")
+                        .foregroundColor(DS.Colors.info)
+                    Text("Companion liên quan")
+                        .font(DS.Typography.headline)
+                        .foregroundColor(DS.Colors.text)
+                }
+
+                ForEach(displayCompanions) { companion in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(companion.fullName ?? "Không rõ tên")
+                                .font(DS.Typography.subheadline)
+                                .foregroundColor(DS.Colors.text)
+                            if let phone = companion.phone, !phone.isEmpty {
+                                Text(phone)
+                                    .font(DS.Typography.caption)
+                                    .foregroundColor(DS.Colors.textSecondary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+            .padding()
+            .background(DS.Colors.surface)
+        )
     }
     
     // MARK: - Send History Card
@@ -330,7 +480,7 @@ struct SOSDetailView: View {
                 Spacer()
             }
             
-            if let lat = savedSOS.latitude, let lon = savedSOS.longitude {
+            if let lat = displaySOS.latitude, let lon = displaySOS.longitude {
                 // Mini map
                 Map(coordinateRegion: .constant(MKCoordinateRegion(
                     center: CLLocationCoordinate2D(latitude: lat, longitude: lon),
@@ -398,15 +548,15 @@ struct SOSDetailView: View {
     private var detailSelectedTypes: [SOSType] {
         var types: [SOSType] = []
 
-        if currentSOS.rescueData != nil {
+        if displaySOS.rescueData != nil {
             types.append(.rescue)
         }
 
-        if currentSOS.reliefData != nil {
+        if displaySOS.reliefData != nil {
             types.append(.relief)
         }
 
-        if types.isEmpty, let type = currentSOS.sosType {
+        if types.isEmpty, let type = displaySOS.sosType {
             types.append(type)
         }
 
@@ -414,11 +564,11 @@ struct SOSDetailView: View {
     }
 
     private var detailPeople: [Person] {
-        if !currentSOS.sharedPeople.isEmpty {
-            return currentSOS.sharedPeople
+        if !displaySOS.sharedPeople.isEmpty {
+            return displaySOS.sharedPeople
         }
 
-        if let rescuePeople = currentSOS.rescueData?.people, !rescuePeople.isEmpty {
+        if let rescuePeople = displaySOS.rescueData?.people, !rescuePeople.isEmpty {
             return rescuePeople
         }
 
@@ -434,11 +584,11 @@ struct SOSDetailView: View {
             )
         }
 
-        if let rescueCount = currentSOS.rescueData?.peopleCount {
+        if let rescueCount = displaySOS.rescueData?.peopleCount {
             return rescueCount
         }
 
-        if let reliefCount = currentSOS.reliefData?.peopleCount {
+        if let reliefCount = displaySOS.reliefData?.peopleCount {
             return reliefCount
         }
 
@@ -447,7 +597,7 @@ struct SOSDetailView: View {
 
     private var sosContentCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let lat = currentSOS.latitude, let lon = currentSOS.longitude {
+            if let lat = displaySOS.latitude, let lon = displaySOS.longitude {
                 ReviewRow(icon: "📍", title: "Vị trí", value: String(format: "%.4f, %.4f", lat, lon))
             }
 
@@ -464,7 +614,7 @@ struct SOSDetailView: View {
                 )
             }
 
-            if let rescue = currentSOS.rescueData {
+            if let rescue = displaySOS.rescueData {
                 Divider()
                     .background(DS.Colors.surface)
 
@@ -509,7 +659,7 @@ struct SOSDetailView: View {
                 }
             }
 
-            if let relief = currentSOS.reliefData {
+            if let relief = displaySOS.reliefData {
                 Divider()
                     .background(DS.Colors.surface)
 
@@ -523,16 +673,16 @@ struct SOSDetailView: View {
                 )
             }
 
-            if !currentSOS.additionalDescription.isEmpty {
+            if !displaySOS.additionalDescription.isEmpty {
                 Divider()
                     .background(DS.Colors.surface)
-                ReviewRow(icon: "📝", title: "Ghi chú", value: currentSOS.additionalDescription)
+                ReviewRow(icon: "📝", title: "Ghi chú", value: displaySOS.additionalDescription)
             }
 
             ReviewRow(
                 icon: "🕒",
                 title: "Thời gian",
-                value: currentSOS.timestamp.formatted(date: .abbreviated, time: .shortened)
+                value: displaySOS.timestamp.formatted(date: .abbreviated, time: .shortened)
             )
         }
         .padding()
@@ -652,7 +802,7 @@ struct SOSDetailView: View {
             if currentSOS.status != .resolved {
                 Button {
                     SOSStorageManager.shared.updateStatusWithEvent(
-                        id: savedSOS.id,
+                        id: currentSOS.id,
                         status: .resolved,
                         event: SOSSendEvent(type: .serverAcknowledged, note: "Người dùng đánh dấu đã xử lý")
                     )
@@ -748,8 +898,8 @@ struct SOSDetailView: View {
     }
 
     private func savedPerson(_ personId: String) -> Person? {
-        savedSOS.sharedPeople.first(where: { $0.id == personId }) ??
-            savedSOS.rescueData?.people.first(where: { $0.id == personId })
+        displaySOS.sharedPeople.first(where: { $0.id == personId }) ??
+            displaySOS.rescueData?.people.first(where: { $0.id == personId })
     }
     
     private func openInMaps(lat: Double, lon: Double) {
@@ -764,11 +914,11 @@ struct SOSDetailView: View {
         
         // Ghi sự kiện đang thử gửi lại
         SOSStorageManager.shared.addSendEvent(
-            id: savedSOS.id,
+            id: currentSOS.id,
             event: SOSSendEvent(type: .pendingRetry, note: "Người dùng yêu cầu gửi lại")
         )
         
-        let formData = savedSOS.toFormData()
+        let formData = currentSOS.toFormData()
         
         Task {
             let success = await bridgefyManager.sendStructuredSOS(formData)
@@ -780,6 +930,48 @@ struct SOSDetailView: View {
                 }
             }
         }
+    }
+
+    private func loadServerDetailIfNeeded() async {
+        guard let serverSosRequestId = currentSOS.serverSosRequestId,
+              NetworkMonitor.shared.isConnected else {
+            return
+        }
+
+        await MainActor.run {
+            isLoadingServerDetail = true
+        }
+
+        let detail = await APIService.shared.getSosRequestDetail(id: serverSosRequestId)
+
+        await MainActor.run {
+            serverDetail = detail
+            isLoadingServerDetail = false
+        }
+    }
+
+    private func scopeLabel(for rawValue: String?) -> String {
+        switch RescuerStatusBadgeText.normalized(rawValue) {
+        case "mission":
+            return "Toàn đội"
+        case "activity":
+            return "Theo activity"
+        default:
+            return "Incident"
+        }
+    }
+
+    private func formatServerDate(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+
+        let fullFormatter = ISO8601DateFormatter()
+        fullFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let basicFormatter = ISO8601DateFormatter()
+        basicFormatter.formatOptions = [.withInternetDateTime]
+
+        let date = fullFormatter.date(from: rawValue) ?? basicFormatter.date(from: rawValue)
+        return date?.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
@@ -815,11 +1007,13 @@ struct DetailRow: View {
 struct SOSEditView: View {
     let savedSOS: SavedSOS
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @Environment(\.dismiss) var dismiss
     
     @State private var formData: SOSFormData
     @State private var isSending = false
     @State private var showSuccess = false
+    @State private var successMessage = "Đã cập nhật SOS!"
     
     init(savedSOS: SavedSOS, bridgefyManager: BridgefyNetworkManager) {
         self.savedSOS = savedSOS
@@ -845,7 +1039,7 @@ struct SOSEditView: View {
                     .foregroundColor(DS.Colors.text)
                 }
             }
-            .alert("Đã cập nhật SOS!", isPresented: $showSuccess) {
+            .alert(successMessage, isPresented: $showSuccess) {
                 Button("OK") {
                     dismiss()
                 }
@@ -857,42 +1051,92 @@ struct SOSEditView: View {
         isSending = true
         
         Task {
-            // Gửi như SOS mới (tạo packet mới, tự lưu vào storage)
-            _ = await bridgefyManager.sendStructuredSOS(formData)
-            
-            // Cập nhật nội dung của SOS cũ (giữ lịch sử) nhưng không ghi đè sendHistory
-            var updated = savedSOS
-            updated.lastUpdated = Date()
-            updated.sharedPeople = formData.sharedPeople
-            updated.personSourceMode = formData.personSourceMode
-            updated.selectedRelativeSnapshots = formData.selectedRelativeSnapshots
-            updated.additionalDescription = formData.additionalDescription
-            
-            // Lưu cả relief và rescue data nếu có
-            if formData.needsReliefStep {
-                updated.reliefData = formData.reliefData
-            } else {
-                updated.reliefData = nil
+            let didSyncDirectly = await performDirectVictimUpdateIfPossible()
+
+            if !didSyncDirectly {
+                _ = await bridgefyManager.sendStructuredSOS(formData)
+
+                var updated = updatedLocalSnapshot()
+                updated.status = .pending
+                SOSStorageManager.shared.updateSOS(updated)
+                SOSStorageManager.shared.addSendEvent(
+                    id: savedSOS.id,
+                    event: SOSSendEvent(type: .pendingRetry, note: "Đã chỉnh sửa nội dung và gửi lại như SOS mới")
+                )
             }
-            
-            if formData.needsRescueStep {
-                updated.rescueData = SavedRescueData(from: formData.rescueData)
-            } else {
-                updated.rescueData = nil
-            }
-            
-            SOSStorageManager.shared.updateSOS(updated)
-            // Ghi sự kiện "đã chỉnh sửa & gửi lại"
-            SOSStorageManager.shared.addSendEvent(
-                id: savedSOS.id,
-                event: SOSSendEvent(type: .pendingRetry, note: "Đã chỉnh sửa nội dung và gửi lại")
-            )
-            
+
             await MainActor.run {
                 isSending = false
+                successMessage = didSyncDirectly
+                    ? "Đã cập nhật SOS trên server"
+                    : "Đã lưu chỉnh sửa và gửi lại qua luồng SOS hiện tại"
                 showSuccess = true
             }
         }
+    }
+
+    private func performDirectVictimUpdateIfPossible() async -> Bool {
+        guard networkMonitor.isConnected,
+              let serverSosRequestId = savedSOS.serverSosRequestId else {
+            return false
+        }
+
+        let packet = formData.toSOSPacket(
+            originIdOverride: bridgefyManager.currentUserId?.uuidString,
+            packetIdOverride: savedSOS.id,
+            timestampOverride: Date()
+        )
+
+        guard let response = await APIService.shared.updateVictimSosRequest(
+            id: serverSosRequestId,
+            packet: packet
+        ) else {
+            return false
+        }
+
+        var updated = updatedLocalSnapshot()
+        updated.serverSosRequestId = response.sosRequestId
+        updated.status = .delivered
+        SOSStorageManager.shared.updateSOS(updated)
+        SOSStorageManager.shared.addSendEvent(
+            id: savedSOS.id,
+            event: SOSSendEvent(type: .serverAcknowledged, note: "Đã cập nhật SOS trực tiếp trên server")
+        )
+        return true
+    }
+
+    private func updatedLocalSnapshot() -> SavedSOS {
+        var updated = savedSOS
+        updated.lastUpdated = Date()
+        updated.sharedPeople = formData.sharedPeople
+        updated.personSourceMode = formData.personSourceMode
+        updated.selectedRelativeSnapshots = formData.selectedRelativeSnapshots
+        updated.additionalDescription = formData.additionalDescription
+        updated.message = formData.toSOSMessage()
+        updated.sosType = formData.sosType
+        updated.latitude = formData.effectiveLocation?.latitude ?? savedSOS.latitude
+        updated.longitude = formData.effectiveLocation?.longitude ?? savedSOS.longitude
+        updated.victimName = formData.effectiveVictimName
+        updated.victimPhone = formData.effectiveVictimPhone
+        updated.reporterName = formData.autoInfo?.userName ?? savedSOS.reporterName
+        updated.reporterPhone = formData.autoInfo?.userPhone ?? savedSOS.reporterPhone
+        updated.addressQuery = formData.addressQuery
+        updated.resolvedAddress = formData.resolvedAddress
+        updated.manualLocation = formData.manualLocation
+
+        if formData.needsReliefStep {
+            updated.reliefData = formData.reliefData
+        } else {
+            updated.reliefData = nil
+        }
+
+        if formData.needsRescueStep {
+            updated.rescueData = SavedRescueData(from: formData.rescueData)
+        } else {
+            updated.rescueData = nil
+        }
+
+        return updated
     }
 }
 

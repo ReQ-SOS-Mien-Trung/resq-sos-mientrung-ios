@@ -1204,21 +1204,6 @@ struct Step2AReliefView: View {
                     formData.reliefData.waterDuration = option
                 }
             }
-            
-            Divider().padding(.vertical, 4)
-            
-            Text("Bạn còn khoảng bao nhiêu nước uống?")
-                .font(DS.Typography.subheadline)
-                .foregroundColor(DS.Colors.text)
-            
-            ForEach(WaterRemaining.allCases) { option in
-                ReliefRadioRow(
-                    title: option.title,
-                    isSelected: formData.reliefData.waterRemaining == option
-                ) {
-                    formData.reliefData.waterRemaining = option
-                }
-            }
         }
         .padding()
         .background(DS.Colors.surface)
@@ -3386,9 +3371,6 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         var lines: [ReliefSupplyCardLine] = []
         if let duration = relief.waterDuration {
             lines.append(line("water_duration", "Còn duy trì", duration.title))
-        }
-        if let remaining = relief.waterRemaining {
-            lines.append(line("water_remaining", "Lượng còn lại", remaining.title))
         }
         cards.append(
             ReliefSupplyCardModel(

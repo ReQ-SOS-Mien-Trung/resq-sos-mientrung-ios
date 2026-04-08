@@ -225,6 +225,10 @@ struct SavedSOSCard: View {
                                 .foregroundColor(DS.Colors.text)
 
                             ResQBadge(text: savedSOS.status.title, color: savedSOS.status.color)
+
+                            if savedSOS.isCompanion {
+                                ResQBadge(text: "Companion", color: DS.Colors.info)
+                            }
                         }
 
                         Text(savedSOS.timestamp.formatted(date: .abbreviated, time: .shortened))
@@ -275,6 +279,26 @@ struct SavedSOSCard: View {
                         Text(String(format: "%.4f, %.4f", lat, lon))
                             .font(.caption)
                             .foregroundColor(DS.Colors.textSecondary)
+                    }
+                }
+
+                if let latestIncidentNote = savedSOS.latestIncidentNote, !latestIncidentNote.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Divider()
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.bubble.fill")
+                                .font(.caption)
+                                .foregroundColor(DS.Colors.accent)
+                            Text("Incident mới nhất")
+                                .font(DS.Typography.caption.bold())
+                                .foregroundColor(DS.Colors.text)
+                        }
+
+                        Text(latestIncidentNote)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
