@@ -17,94 +17,85 @@ struct ReportIncidentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                    headerSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                headerSection
 
-                    if missionTeamId != nil {
-                        NavigationLink(value: IncidentReportRoute.activity) {
-                            chooserCard(
-                                eyebrow: "ACTIVITY",
-                                title: "Báo sự cố activity",
-                                description: "Dùng khi activity gặp vấn đề cần hỗ trợ, đổi thiết bị, đổi phương tiện hoặc thêm đội.",
-                                outcome: "Phù hợp với sự cố cục bộ, có thể ảnh hưởng một hoặc nhiều activity nhưng chưa làm toàn đội mất khả năng tiếp tục mission.",
-                                icon: "figure.run.square.stack.fill",
-                                tone: DS.Colors.warning
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        NavigationLink(value: IncidentReportRoute.mission) {
-                            chooserCard(
-                                eyebrow: "MISSION",
-                                title: "Báo sự cố mission",
-                                description: "Dùng khi toàn đội không thể tiếp tục nhiệm vụ hoặc cần giải cứu khẩn.",
-                                outcome: "Phù hợp với tình huống ảnh hưởng toàn mission: mắc kẹt, nhiều người bị thương, mất phương tiện chính hoặc buộc dừng / bàn giao mission.",
-                                icon: "shield.lefthalf.filled.trianglebadge.exclamationmark",
-                                tone: DS.Colors.danger
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        IncidentFormSection(
-                            title: "Không tìm thấy thông tin team",
-                            subtitle: "Mission hiện tại chưa có `missionTeamId`, nên chưa thể mở form báo sự cố mới."
-                        ) {
-                            IncidentInlineNotice(
-                                icon: "exclamationmark.triangle.fill",
-                                text: "Hãy thử tải lại mission hoặc kiểm tra dữ liệu team được gán từ backend.",
-                                tone: DS.Colors.danger
-                            )
-                        }
-                    }
-                }
-                .padding(DS.Spacing.md)
-            }
-            .background(DS.Colors.background.ignoresSafeArea())
-            .navigationTitle("Báo sự cố")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Đóng") { dismiss() }
-                        .foregroundColor(DS.Colors.accent)
-                }
-            }
-            .navigationDestination(for: IncidentReportRoute.self) { route in
-                if let missionTeamId {
-                    switch route {
-                    case .activity:
-                        ActivityIncidentReportFormView(
-                            mission: mission,
-                            missionTeamId: missionTeamId,
-                            activities: activities,
-                            incidentVM: incidentVM
+                if missionTeamId != nil {
+                    NavigationLink(value: IncidentReportRoute.activity) {
+                        chooserCard(
+                            eyebrow: "ACTIVITY",
+                            title: "Báo sự cố activity",
+                            description: "Dùng khi activity gặp vấn đề cần hỗ trợ, đổi thiết bị, đổi phương tiện hoặc thêm đội.",
+                            outcome: "Phù hợp với sự cố cục bộ, có thể ảnh hưởng một hoặc nhiều activity nhưng chưa làm toàn đội mất khả năng tiếp tục mission.",
+                            icon: "figure.run.square.stack.fill",
+                            tone: DS.Colors.warning
                         )
-                    case .mission:
-                        MissionIncidentReportFormView(
-                            mission: mission,
-                            missionTeamId: missionTeamId,
-                            activities: activities,
-                            incidentVM: incidentVM
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink(value: IncidentReportRoute.mission) {
+                        chooserCard(
+                            eyebrow: "MISSION",
+                            title: "Báo sự cố mission",
+                            description: "Dùng khi toàn đội không thể tiếp tục nhiệm vụ hoặc cần giải cứu khẩn.",
+                            outcome: "Phù hợp với tình huống ảnh hưởng toàn mission: mắc kẹt, nhiều người bị thương, mất phương tiện chính hoặc buộc dừng / bàn giao mission.",
+                            icon: "shield.lefthalf.filled.trianglebadge.exclamationmark",
+                            tone: DS.Colors.danger
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    IncidentFormSection(
+                        title: "Không tìm thấy thông tin team",
+                        subtitle: "Mission hiện tại chưa có `missionTeamId`, nên chưa thể mở form báo sự cố mới."
+                    ) {
+                        IncidentInlineNotice(
+                            icon: "exclamationmark.triangle.fill",
+                            text: "Hãy thử tải lại mission hoặc kiểm tra dữ liệu team được gán từ backend.",
+                            tone: DS.Colors.danger
                         )
                     }
                 }
             }
-            .alert("Lỗi", isPresented: Binding(
-                get: { incidentVM.errorMessage != nil },
-                set: { if !$0 { incidentVM.errorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) { incidentVM.errorMessage = nil }
-            } message: {
-                Text(incidentVM.errorMessage ?? "")
-            }
-            .onChange(of: incidentVM.successMessage) { message in
-                guard message != nil else { return }
-                incidentVM.loadIncidents(missionId: mission.id)
-                dismiss()
+            .padding(DS.Spacing.md)
+        }
+        .background(DS.Colors.background.ignoresSafeArea())
+        .navigationTitle("Báo sự cố")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: IncidentReportRoute.self) { route in
+            if let missionTeamId {
+                switch route {
+                case .activity:
+                    ActivityIncidentReportFormView(
+                        mission: mission,
+                        missionTeamId: missionTeamId,
+                        activities: activities,
+                        incidentVM: incidentVM
+                    )
+                case .mission:
+                    MissionIncidentReportFormView(
+                        mission: mission,
+                        missionTeamId: missionTeamId,
+                        activities: activities,
+                        incidentVM: incidentVM
+                    )
+                }
             }
         }
-        .presentationDetents([.medium, .large])
+        .alert("Lỗi", isPresented: Binding(
+            get: { incidentVM.errorMessage != nil },
+            set: { if !$0 { incidentVM.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { incidentVM.errorMessage = nil }
+        } message: {
+            Text(incidentVM.errorMessage ?? "")
+        }
+        .onChange(of: incidentVM.successMessage) { message in
+            guard message != nil else { return }
+            incidentVM.loadIncidents(missionId: mission.id)
+            dismiss()
+        }
     }
 
     private var headerSection: some View {

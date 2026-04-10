@@ -11,11 +11,11 @@ struct WaitingCoordinatorView: View {
                     .scaleEffect(1.5)
                     .padding(.top, DS.Spacing.xl)
 
-                Text("Đang chờ Coordinator")
+                Text("Đang chờ Người điều phối")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
 
-                Text("Vui lòng giữ ứng dụng mở.\nBạn sẽ được kết nối khi có Coordinator sẵn sàng.")
+                Text("Vui lòng giữ ứng dụng mở.\nBạn sẽ được kết nối khi có Người điều phối sẵn sàng.")
                     .font(DS.Typography.subheadline)
                     .foregroundColor(DS.Colors.textSecondary)
                     .multilineTextAlignment(.center)

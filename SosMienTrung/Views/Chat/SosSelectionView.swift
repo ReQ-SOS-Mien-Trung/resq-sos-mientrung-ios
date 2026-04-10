@@ -33,17 +33,18 @@ struct SosSelectionView: View {
                                     .font(DS.Typography.headline)
                                     .foregroundColor(DS.Colors.text)
                                 Spacer()
-                                Text(sos.status)
+                                let statusColor = statusColor(for: sos.status)
+                                Text(SosDisplayFormatter.localizedStatus(sos.status))
                                     .font(DS.Typography.caption)
-                                    .foregroundColor(DS.Colors.warning)
+                                    .foregroundColor(statusColor)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
-                                    .background(DS.Colors.warning.opacity(0.15))
+                                    .background(statusColor.opacity(0.15))
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
                             }
 
-                            if let type = sos.sosType {
-                                Text("Loại: \(type)")
+                            if let localizedType = SosDisplayFormatter.localizedType(sos.sosType) {
+                                Text("Loại: \(localizedType)")
                                     .font(DS.Typography.subheadline)
                                     .foregroundColor(DS.Colors.textSecondary)
                             }
@@ -73,5 +74,20 @@ struct SosSelectionView: View {
         .background(DS.Colors.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func statusColor(for rawStatus: String) -> Color {
+        switch SosDisplayFormatter.normalizedKey(rawStatus) {
+        case "pending", "waiting", "queued", "new":
+            return DS.Colors.warning
+        case "approved", "accepted", "inprogress", "ongoing", "processing":
+            return DS.Colors.info
+        case "resolved", "closed", "completed", "done":
+            return DS.Colors.success
+        case "rejected", "declined", "cancelled", "canceled", "cancel":
+            return DS.Colors.danger
+        default:
+            return DS.Colors.textSecondary
+        }
     }
 }

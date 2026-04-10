@@ -12,14 +12,54 @@ enum ActivityStatus: String, Codable, CaseIterable {
     case succeed = "Succeed"
     case failed = "Failed"
     case cancelled = "Cancelled"
+
+    init?(apiValue: String?) {
+        switch normalizedActivityStatusKey(apiValue) {
+        case "planned", "pending", "scheduled":
+            self = .planned
+        case "ongoing", "inprogress":
+            self = .onGoing
+        case "pendingconfirmation":
+            self = .planned
+        case "completed", "complete", "succeed", "succeeded", "success", "done":
+            self = .succeed
+        case "failed", "fail":
+            self = .failed
+        case "cancelled", "canceled", "cancel":
+            self = .cancelled
+        default:
+            return nil
+        }
+    }
+
+    var apiUpdateCandidates: [String] {
+        switch self {
+        case .planned:
+            return ["Planned"]
+        case .onGoing:
+            return ["OnGoing"]
+        case .succeed:
+            return ["Succeed"]
+        case .failed:
+            return ["Failed"]
+        case .cancelled:
+            return ["Cancelled"]
+        }
+    }
 }
 
 // MARK: - Activity Supply
 struct MissionSupply: Codable, Identifiable {
     let itemId: Int?
     let itemName: String?
+    let imageUrl: String?
     let quantity: Int
     let unit: String?
+    let bufferRatio: Double?
+    let bufferQuantity: Int?
+    let bufferUsedQuantity: Int?
+    let bufferUsedReason: String?
+    let actualDeliveredQuantity: Int?
 
     var id: String {
         "\(itemId ?? -1)-\(itemName ?? "supply")-\(quantity)"
@@ -49,7 +89,7 @@ struct Activity: Codable, Identifiable {
     let completedBy: String?
 
     var activityStatus: ActivityStatus {
-        ActivityStatus(rawValue: status) ?? .planned
+        ActivityStatus(apiValue: status) ?? .planned
     }
 
     var missionId: Int? { nil }
@@ -72,15 +112,31 @@ struct Activity: Codable, Identifiable {
         }
 
         if let step {
-            return "Hoạt động #\(step)"
+            return "Bước thực hiện #\(step)"
         }
 
-        return "Hoạt động"
+        return "Bước thực hiện"
     }
 
     var latitude: Double? { targetLatitude }
     var longitude: Double? { targetLongitude }
     var assignedTeamId: Int? { missionTeamId }
+
+    var normalizedActivityTypeKey: String {
+        (activityType ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+    }
+
+    var isCollectSuppliesActivity: Bool {
+        normalizedActivityTypeKey == "collectsupplies"
+    }
+
+    var isDeliverSuppliesActivity: Bool {
+        normalizedActivityTypeKey == "deliversupplies"
+    }
 }
 
 // MARK: - Mission Team Member
@@ -283,9 +339,9 @@ func localizedActivityTypeDisplay(_ rawValue: String?) -> String? {
 
     switch normalizedActivityKey(rawValue) {
     case "collectsupplies":
-        return "Thu gom vật tư"
+        return "Tiếp nhận vật phẩm"
     case "deliversupplies":
-        return "Bàn giao vật tư"
+        return "Phân phát vật phẩm"
     case "rescue":
         return "Cứu hộ"
     case "medicalaid":
@@ -340,6 +396,15 @@ private func normalizedActivityKey(_ rawValue: String) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .replacingOccurrences(of: "_", with: "")
         .replacingOccurrences(of: "-", with: "")
+        .lowercased()
+}
+
+func normalizedActivityStatusKey(_ rawValue: String?) -> String {
+    (rawValue ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "_", with: "")
+        .replacingOccurrences(of: "-", with: "")
+        .replacingOccurrences(of: " ", with: "")
         .lowercased()
 }
 

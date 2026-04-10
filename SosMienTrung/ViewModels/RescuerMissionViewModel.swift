@@ -4,6 +4,14 @@ import CoreLocation
 
 @MainActor
 final class RescuerMissionViewModel: ObservableObject {
+    private enum CheckInLocationError: LocalizedError {
+        case unavailable
+
+        var errorDescription: String? {
+            "Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí hoặc chờ GPS cập nhật rồi thử lại."
+        }
+    }
+
     @Published var team: RescueTeam?
     @Published var isLoadingTeam = false
     @Published var noTeamMessage: String?
@@ -18,6 +26,15 @@ final class RescuerMissionViewModel: ObservableObject {
 
     private var loadingCount = 0
     private let locationManager = LocationManager()
+
+    func startLocationTracking() {
+        locationManager.requestPermission()
+        locationManager.startContinuousUpdates()
+    }
+
+    func stopLocationTracking() {
+        locationManager.stopContinuousUpdates()
+    }
 
     func refreshDashboard() {
         errorMessage = nil
@@ -60,7 +77,7 @@ final class RescuerMissionViewModel: ObservableObject {
     func checkIn() {
         guard let currentTeam = team else { return }
         guard let assemblyPointId = currentTeam.assemblyPointId else {
-            errorMessage = "Không tìm thấy assemblyPointId để check-in. Vui lòng đồng bộ lại dữ liệu team."
+            errorMessage = "Không tìm thấy assemblyPointId để xác nhận có mặt. Vui lòng đồng bộ lại dữ liệu đội cứu hộ."
             return
         }
 
@@ -75,39 +92,42 @@ final class RescuerMissionViewModel: ObservableObject {
                     assemblyPointId: assemblyPointId,
                     preferredEventId: currentTeam.eventId
                 )
-                let coordinates = await resolveCheckInCoordinates()
+                let coordinates = try await resolveCheckInCoordinates()
                 let response = try await RescueTeamService.shared.checkIn(
                     eventId: eventId,
                     latitude: coordinates.latitude,
                     longitude: coordinates.longitude
                 )
                 team = try await RescueTeamService.shared.getMyTeam()
-                successMessage = response.message ?? "Check-in thành công"
+                successMessage = response.message ?? "Xác nhận có mặt thành công"
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
-                errorMessage = "Check-in thất bại: \(serviceError.localizedDescription)"
+                errorMessage = "Xác nhận có mặt thất bại: \(serviceError.localizedDescription)"
             } catch {
-                errorMessage = "Check-in thất bại: \(error.localizedDescription)"
+                errorMessage = "Xác nhận có mặt thất bại: \(error.localizedDescription)"
             }
         }
     }
 
-    private func resolveCheckInCoordinates() async -> (latitude: Double, longitude: Double) {
-        if let coordinates = locationManager.coordinates {
-            return coordinates
-        }
-
+    private func resolveCheckInCoordinates() async throws -> (latitude: Double, longitude: Double) {
         let location: CLLocation? = await withCheckedContinuation { continuation in
-            locationManager.requestLocation { resolved in
+            locationManager.requestLocation(forceFresh: true) { resolved in
                 continuation.resume(returning: resolved)
             }
         }
 
-        guard let location else {
-            // Keep request compatible with backend contract even if GPS fix is unavailable.
-            return (latitude: 0, longitude: 0)
+        guard let resolvedLocation = location ?? locationManager.currentLocation else {
+            throw CheckInLocationError.unavailable
         }
 
-        return (location.coordinate.latitude, location.coordinate.longitude)
+        guard resolvedLocation.coordinate.latitude != 0 || resolvedLocation.coordinate.longitude != 0 else {
+            throw CheckInLocationError.unavailable
+        }
+
+        print(
+            "[CheckIn] Resolved location lat=\(resolvedLocation.coordinate.latitude), lon=\(resolvedLocation.coordinate.longitude), accuracy=\(resolvedLocation.horizontalAccuracy), timestamp=\(resolvedLocation.timestamp)"
+        )
+
+        return (resolvedLocation.coordinate.latitude, resolvedLocation.coordinate.longitude)
     }
 
     func setTeamAvailable() {
@@ -187,7 +207,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 let fetched = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
                 activities = sortActivities(fetched)
             } catch {
-                errorMessage = "Không thể tải danh sách hoạt động: \(error.localizedDescription)"
+                errorMessage = "Không thể tải các bước thực hiện: \(error.localizedDescription)"
             }
         }
     }
@@ -205,10 +225,80 @@ final class RescuerMissionViewModel: ObservableObject {
                 try await MissionService.shared.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
                 let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
                 activities = sortActivities(refreshed)
-                successMessage = "Đã cập nhật: \(status)"
+                successMessage = "Đã cập nhật trạng thái bước thực hiện"
             } catch {
-                errorMessage = "Cập nhật thất bại: \(error.localizedDescription)"
+                errorMessage = "Cập nhật trạng thái bước thực hiện thất bại: \(error.localizedDescription)"
             }
+        }
+    }
+
+    func confirmPickup(
+        missionId: Int,
+        activityId: Int,
+        bufferUsages: [MissionPickupBufferUsageRequest]
+    ) async -> Bool {
+        errorMessage = nil
+        successMessage = nil
+        isLoadingActivities = true
+
+        defer {
+            isLoadingActivities = false
+            hasLoadedActivities = true
+        }
+
+        do {
+            _ = try await MissionService.shared.confirmActivityPickup(
+                missionId: missionId,
+                activityId: activityId,
+                bufferUsages: bufferUsages
+            )
+
+            try await MissionService.shared.updateActivityStatus(
+                missionId: missionId,
+                activityId: activityId,
+                status: ActivityStatus.succeed.rawValue
+            )
+
+            let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+            activities = sortActivities(refreshed)
+            successMessage = "Đã xác nhận tiếp nhận vật phẩm"
+            return true
+        } catch {
+            errorMessage = "Xác nhận tiếp nhận vật phẩm thất bại: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func confirmDelivery(
+        missionId: Int,
+        activityId: Int,
+        actualDeliveredItems: [MissionActualDeliveredItemRequest],
+        deliveryNote: String?
+    ) async -> Bool {
+        errorMessage = nil
+        successMessage = nil
+        isLoadingActivities = true
+
+        defer {
+            isLoadingActivities = false
+            hasLoadedActivities = true
+        }
+
+        do {
+            let response = try await MissionService.shared.confirmActivityDelivery(
+                missionId: missionId,
+                activityId: activityId,
+                actualDeliveredItems: actualDeliveredItems,
+                deliveryNote: deliveryNote
+            )
+
+            let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+            activities = sortActivities(refreshed)
+            successMessage = response.message
+            return true
+        } catch {
+            errorMessage = "Xác nhận phân phát vật phẩm thất bại: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -260,6 +350,14 @@ final class RescuerMissionViewModel: ObservableObject {
 
 @MainActor
 final class RescuerAssemblyEventsViewModel: ObservableObject {
+    private enum CheckInLocationError: LocalizedError {
+        case unavailable
+
+        var errorDescription: String? {
+            "Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí hoặc chờ GPS cập nhật rồi thử lại."
+        }
+    }
+
     @Published var events: [AssemblyPointEvent] = []
     @Published var isLoading = false
     @Published var loadingEventId: Int?
@@ -269,6 +367,15 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
     private(set) var pageNumber = 1
     private(set) var pageSize = 10
     private let locationManager = LocationManager()
+
+    func startLocationTracking() {
+        locationManager.requestPermission()
+        locationManager.startContinuousUpdates()
+    }
+
+    func stopLocationTracking() {
+        locationManager.stopContinuousUpdates()
+    }
 
     func refresh(pageNumber: Int = 1, pageSize: Int = 10) {
         self.pageNumber = pageNumber
@@ -301,37 +408,41 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
         Task {
             defer { loadingEventId = nil }
             do {
-                let coordinates = await resolveCheckInCoordinates()
+                let coordinates = try await resolveCheckInCoordinates()
                 let response = try await RescueTeamService.shared.checkIn(
                     eventId: event.eventId,
                     latitude: coordinates.latitude,
                     longitude: coordinates.longitude
                 )
-                successMessage = response.message ?? "Check-in thành công"
+                successMessage = response.message ?? "Xác nhận có mặt thành công"
                 refresh(pageNumber: pageNumber, pageSize: pageSize)
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
-                errorMessage = "Check-in thất bại: \(serviceError.localizedDescription)"
+                errorMessage = "Xác nhận có mặt thất bại: \(serviceError.localizedDescription)"
             } catch {
-                errorMessage = "Check-in thất bại: \(error.localizedDescription)"
+                errorMessage = "Xác nhận có mặt thất bại: \(error.localizedDescription)"
             }
         }
     }
 
-    private func resolveCheckInCoordinates() async -> (latitude: Double, longitude: Double) {
-        if let coordinates = locationManager.coordinates {
-            return coordinates
-        }
-
+    private func resolveCheckInCoordinates() async throws -> (latitude: Double, longitude: Double) {
         let location: CLLocation? = await withCheckedContinuation { continuation in
-            locationManager.requestLocation { resolved in
+            locationManager.requestLocation(forceFresh: true) { resolved in
                 continuation.resume(returning: resolved)
             }
         }
 
-        guard let location else {
-            return (latitude: 0, longitude: 0)
+        guard let resolvedLocation = location ?? locationManager.currentLocation else {
+            throw CheckInLocationError.unavailable
         }
 
-        return (location.coordinate.latitude, location.coordinate.longitude)
+        guard resolvedLocation.coordinate.latitude != 0 || resolvedLocation.coordinate.longitude != 0 else {
+            throw CheckInLocationError.unavailable
+        }
+
+        print(
+            "[AssemblyCheckIn] Resolved location lat=\(resolvedLocation.coordinate.latitude), lon=\(resolvedLocation.coordinate.longitude), accuracy=\(resolvedLocation.horizontalAccuracy), timestamp=\(resolvedLocation.timestamp)"
+        )
+
+        return (resolvedLocation.coordinate.latitude, resolvedLocation.coordinate.longitude)
     }
 }

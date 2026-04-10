@@ -306,7 +306,7 @@ struct ActivityIncidentReportFormView: View {
                 }
             case .lostSupplies:
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                    IncidentTextInputField(title: "Đồ / vật tư bị mất", placeholder: "Ví dụ: dây cứu hộ, túi y tế, bộ đàm", text: $draft.lostSupplyName)
+                    IncidentTextInputField(title: "Đồ / vật phẩm bị mất", placeholder: "Ví dụ: dây cứu hộ, túi y tế, bộ đàm", text: $draft.lostSupplyName)
                     IncidentTextInputField(
                         title: "Số lượng",
                         placeholder: "Nhập số lượng nếu có",
@@ -351,7 +351,7 @@ struct ActivityIncidentReportFormView: View {
             case .missingEquipment:
                 IncidentInlineNotice(
                     icon: "shippingbox.fill",
-                    text: "Phần báo cáo vật tư / thiết bị của mission sẽ được gắn API sau. Hiện tại hãy mô tả rõ loại thiết bị còn thiếu và tác động ở phần ghi chú.",
+                    text: "Phần báo cáo vật phẩm / thiết bị của mission sẽ được gắn API sau. Hiện tại hãy mô tả rõ loại thiết bị còn thiếu và tác động ở phần ghi chú.",
                     tone: DS.Colors.info
                 )
             case .accessRouteBlocked, .sceneMoreDangerous, .beyondCurrentCapability, .handOverToAnotherTeam, .other, .none:

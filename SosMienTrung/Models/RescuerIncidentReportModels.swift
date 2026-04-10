@@ -21,7 +21,7 @@ enum RescuerActivityIncidentType: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .lostSupplies: return "Mất đồ / thất lạc vật tư"
+        case .lostSupplies: return "Mất đồ / thất lạc vật phẩm"
         case .equipmentDamage: return "Hư hỏng thiết bị"
         case .vehicleDamage: return "Hư hỏng phương tiện"
         case .missingEquipment: return "Thiếu thiết bị để tiếp tục"

@@ -96,10 +96,8 @@ final class MissionService {
             throw URLError(.badURL)
         }
         print("[MissionService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: authorizedRequest(url: url))
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
-        return try JSONDecoder().decode([Activity].self, from: data)
+        let data = try await send(authorizedRequest(url: url))
+        return try missionDecoder().decode([Activity].self, from: data)
     }
 
     // MARK: - Backward-compatible wrapper
@@ -108,20 +106,61 @@ final class MissionService {
     }
 
     // MARK: - PATCH /operations/missions/{missionId}/activities/{activityId}/status
-    /// Valid status values: Planned, OnGoing, Succeed, Failed, Cancelled
+    /// Contract aligned with the web client: Planned, OnGoing, Succeed, PendingConfirmation, Failed, Cancelled.
     func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws {
         guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/status") else {
             throw URLError(.badURL)
         }
+
+        let normalizedStatus = ActivityStatus(apiValue: status)?.apiUpdateCandidates.first ?? status
         var req = authorizedRequest(url: url, method: "PATCH")
-        req.httpBody = try JSONEncoder().encode(ActivityStatusUpdate(status: status))
-        print("[MissionService] → PATCH \(url.absoluteString) status=\(status)")
-        let (data, response) = try await session.data(for: req)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else {
-            print("[MissionService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
+        req.httpBody = try JSONEncoder().encode(ActivityStatusUpdate(status: normalizedStatus))
+        print("[MissionService] → PATCH \(url.absoluteString) status=\(normalizedStatus)")
+        _ = try await send(req)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/activities/{activityId}/confirm-pickup
+    func confirmActivityPickup(
+        missionId: Int,
+        activityId: Int,
+        bufferUsages: [MissionPickupBufferUsageRequest]
+    ) async throws -> MissionConfirmPickupResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/confirm-pickup") else {
+            throw URLError(.badURL)
         }
+
+        var req = authorizedRequest(url: url, method: "POST")
+        let payload = MissionConfirmPickupRequest(
+            bufferUsages: bufferUsages.isEmpty ? nil : bufferUsages
+        )
+        req.httpBody = try JSONEncoder().encode(payload)
+        print("[MissionService] → POST \(url.absoluteString) bufferUsages=\(bufferUsages.count)")
+
+        let data = try await send(req)
+        return try missionDecoder().decode(MissionConfirmPickupResponse.self, from: data)
+    }
+
+    // MARK: - POST /operations/missions/{missionId}/activities/{activityId}/confirm-delivery
+    func confirmActivityDelivery(
+        missionId: Int,
+        activityId: Int,
+        actualDeliveredItems: [MissionActualDeliveredItemRequest],
+        deliveryNote: String?
+    ) async throws -> MissionConfirmDeliveryResponse {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/confirm-delivery") else {
+            throw URLError(.badURL)
+        }
+
+        var req = authorizedRequest(url: url, method: "POST")
+        let payload = MissionConfirmDeliveryRequest(
+            actualDeliveredItems: actualDeliveredItems,
+            deliveryNote: deliveryNote?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
+        req.httpBody = try JSONEncoder().encode(payload)
+        print("[MissionService] → POST \(url.absoluteString) deliveredItems=\(actualDeliveredItems.count)")
+
+        let data = try await send(req)
+        return try missionDecoder().decode(MissionConfirmDeliveryResponse.self, from: data)
     }
 
     // MARK: - PATCH /operations/missions/{missionId}/status
@@ -260,5 +299,11 @@ final class MissionService {
         print("[MissionService] → POST \(url.absoluteString)")
         let data = try await send(req)
         return try JSONDecoder().decode(MissionTeamReportResponse.self, from: data)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

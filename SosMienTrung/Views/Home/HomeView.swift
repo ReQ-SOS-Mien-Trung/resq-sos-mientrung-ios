@@ -44,6 +44,10 @@ struct HomeView: View {
         authSession.session?.canUseRescuerTracking ?? false
     }
 
+    private var canOpenCoordinatorChat: Bool {
+        authSession.session?.roleId != 3
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -62,7 +66,9 @@ struct HomeView: View {
                     }
 
                     // MARK: - Coordinator Chat Button
-                    coordinatorChatButton
+                    if canOpenCoordinatorChat {
+                        coordinatorChatButton
+                    }
 
                     // MARK: - Main grid
                     Text("BẢN ĐỒ & CỨU HỘ").sectionHeader()
@@ -283,7 +289,7 @@ struct HomeView: View {
             if canUseRescuerTracking {
                 ResQGridButton(
                     icon: "antenna.radiowaves.left.and.right",
-                    title: "Cứu hộ\n(Rescuer)",
+                    title: "Cứu hộ\n(Cứu hộ viên)",
                     accentColor: DS.Colors.accent
                 ) {
                     showRescuersView = true
@@ -293,7 +299,7 @@ struct HomeView: View {
             if canAccessRescuerWorkspace {
                 ResQGridButton(
                     icon: "checklist",
-                    title: "Nhiệm vụ\n& Check-in",
+                    title: "Nhiệm vụ\n& Xác nhận có mặt",
                     accentColor: DS.Colors.warning
                 ) {
                     showRescuerDashboard = true

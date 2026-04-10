@@ -164,7 +164,7 @@ struct MissionRowView: View {
                 )
 
                 if mission.activityCount > 0 {
-                    Label("\(mission.activityCount) hoạt động", systemImage: "checklist")
+                    Label("\(mission.activityCount) bước", systemImage: "checklist")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -312,18 +312,18 @@ struct RescuerDashboardView: View {
         let checkedInCount = assemblyVM.events.filter(\.isCheckedIn).count
 
         guard totalCount > 0 else {
-            return "Xem lịch triệu tập và check-in của bạn"
+            return "Xem lịch triệu tập và xác nhận có mặt của bạn"
         }
 
         if checkedInCount == totalCount {
-            return "Bạn đã check-in đầy đủ \(totalCount) sự kiện"
+            return "Bạn đã xác nhận có mặt đầy đủ \(totalCount) sự kiện"
         }
 
         if checkedInCount > 0 {
-            return "Bạn đã check-in \(checkedInCount)/\(totalCount) sự kiện"
+            return "Bạn đã xác nhận có mặt \(checkedInCount)/\(totalCount) sự kiện"
         }
 
-        return "Có \(totalCount) sự kiện đang chờ check-in"
+        return "Có \(totalCount) sự kiện đang chờ xác nhận"
     }
 
     var body: some View {
@@ -403,7 +403,7 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(vm.successMessage ?? "")
             }
-            .alert("Lỗi check-in", isPresented: Binding(
+            .alert("Lỗi xác nhận có mặt", isPresented: Binding(
                 get: { assemblyVM.errorMessage != nil },
                 set: { if !$0 { assemblyVM.errorMessage = nil } }
             )) {
@@ -411,7 +411,7 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(assemblyVM.errorMessage ?? "")
             }
-            .alert("Thông báo check-in", isPresented: Binding(
+            .alert("Thông báo xác nhận có mặt", isPresented: Binding(
                 get: { assemblyVM.successMessage != nil },
                 set: { if !$0 { assemblyVM.successMessage = nil } }
             )) {
@@ -427,6 +427,9 @@ struct RescuerDashboardView: View {
         .onAppear {
             guard canAccessRescuerWorkspace else { return }
 
+            vm.startLocationTracking()
+            assemblyVM.startLocationTracking()
+
             if assemblyVM.events.isEmpty {
                 assemblyVM.refresh()
             }
@@ -440,6 +443,10 @@ struct RescuerDashboardView: View {
                 vm.refreshDashboard()
             }
         }
+        .onDisappear {
+            vm.stopLocationTracking()
+            assemblyVM.stopLocationTracking()
+        }
     }
 
     // MARK: Team Card
@@ -447,9 +454,7 @@ struct RescuerDashboardView: View {
     private var teamCard: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             HStack {
-                Image(systemName: "person.3.fill")
-                    .foregroundColor(DS.Colors.warning)
-                EyebrowLabel(text: "TEAM CỦA BẠN")
+                EyebrowLabel(text: "ĐỘI CỦA BẠN")
                 Spacer()
 
                 if let status = vm.team?.status {
@@ -486,12 +491,12 @@ struct RescuerDashboardView: View {
                     teamAvailabilityButton
                         .padding(.top, DS.Spacing.xs)
                 } else if isCurrentUserLeader {
-                    Label("Tài khoản hiện tại chưa được cấp quyền đổi trạng thái team", systemImage: "lock.fill")
+                    Label("Tài khoản hiện tại chưa được cấp quyền đổi trạng thái đội cứu hộ", systemImage: "lock.fill")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                         .padding(.top, DS.Spacing.xs)
                 } else {
-                    Label("Chỉ đội trưởng có thể đổi trạng thái sẵn sàng của team", systemImage: "lock.fill")
+                    Label("Chỉ đội trưởng có thể đổi trạng thái sẵn sàng của đội cứu hộ", systemImage: "lock.fill")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                         .padding(.top, DS.Spacing.xs)
@@ -499,7 +504,7 @@ struct RescuerDashboardView: View {
             } else if vm.isLoadingTeam {
                 HStack(spacing: DS.Spacing.sm) {
                     ProgressView()
-                    Text("Đang tải thông tin team...")
+                    Text("Đang tải thông tin đội cứu hộ...")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -520,7 +525,7 @@ struct RescuerDashboardView: View {
                     .frame(width: 40, height: 40)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Bạn chưa có team")
+                        Text("Bạn chưa có đội cứu hộ")
                             .font(DS.Typography.subheadline.bold())
                             .foregroundColor(DS.Colors.text)
 
@@ -643,7 +648,7 @@ struct RescuerDashboardView: View {
             Text("Chưa có nhiệm vụ nào")
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.textSecondary)
-            Text("Team của bạn chưa được giao nhiệm vụ")
+            Text("Đội cứu hộ của bạn chưa được giao nhiệm vụ")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -663,7 +668,7 @@ struct RescuerDashboardView: View {
                     .font(DS.Typography.subheadline.bold())
                     .foregroundColor(DS.Colors.text)
 
-                Text("Sau khi bạn bấm Xác nhận có mặt ở phần Triệu tập & Check-in, thông tin Team của bạn và Nhiệm vụ của team sẽ hiển thị.")
+                Text("Sau khi bạn bấm Xác nhận có mặt ở phần Triệu tập & Xác nhận có mặt, thông tin Đội cứu hộ của bạn và Nhiệm vụ của đội sẽ hiển thị.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -697,7 +702,7 @@ struct RescuerDashboardView: View {
                 Text("Hiện chưa có sự kiện triệu tập")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.textSecondary)
-                Text("Khi tổng đài tạo phiên tập trung, bạn sẽ thấy lịch triệu tập và có thể check-in ngay tại đây.")
+                Text("Khi người điều phối tạo phiên tập trung, bạn sẽ thấy lịch triệu tập và có thể xác nhận có mặt ngay tại đây.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -996,9 +1001,13 @@ struct RescuerAssemblyEventsView: View {
             Text(vm.successMessage ?? "")
         }
         .onAppear {
+            vm.startLocationTracking()
             if vm.events.isEmpty {
                 vm.refresh()
             }
+        }
+        .onDisappear {
+            vm.stopLocationTracking()
         }
         .refreshable {
             vm.refresh()
@@ -1016,7 +1025,7 @@ struct RescuerAssemblyEventsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    EyebrowLabel(text: "Triệu tập & Check-in", color: DS.Colors.info)
+                    EyebrowLabel(text: "Triệu tập & Xác nhận có mặt", color: DS.Colors.info)
                     Text("Theo dõi sự kiện điểm tập kết và xác nhận có mặt đúng phiên tập trung của bạn.")
                         .font(DS.Typography.subheadline)
                         .foregroundColor(DS.Colors.textSecondary)
@@ -1029,13 +1038,13 @@ struct RescuerAssemblyEventsView: View {
             if vm.events.isEmpty == false {
                 HStack(spacing: DS.Spacing.xs) {
                     summaryPill(
-                        title: "Đã check-in",
+                        title: "Đã xác nhận có mặt",
                         value: "\(checkedInCount)",
                         color: DS.Colors.success
                     )
 
                     summaryPill(
-                        title: "Chờ check-in",
+                        title: "Chờ xác nhận",
                         value: "\(pendingCount)",
                         color: DS.Colors.warning
                     )
@@ -1170,7 +1179,7 @@ private struct AssemblyEventRowView: View {
 
             if event.isCheckedIn {
                 Label(
-                    formattedDate(event.checkInTime).map { "Đã check-in lúc \($0)" } ?? "Đã check-in",
+                    formattedDate(event.checkInTime).map { "Đã xác nhận có mặt lúc \($0)" } ?? "Đã xác nhận có mặt",
                     systemImage: "checkmark.seal.fill"
                 )
                 .font(DS.Typography.caption)
@@ -1187,7 +1196,7 @@ private struct AssemblyEventRowView: View {
                         Image(systemName: event.isCheckedIn ? "checkmark.circle.fill" : "location.fill")
                     }
 
-                    Text(event.isCheckedIn ? "ĐÃ CHECK-IN" : "Xác nhận có mặt")
+                    Text(event.isCheckedIn ? "ĐÃ XÁC NHẬN CÓ MẶT" : "Xác nhận có mặt")
                         .font(DS.Typography.caption)
                         .tracking(1)
                 }

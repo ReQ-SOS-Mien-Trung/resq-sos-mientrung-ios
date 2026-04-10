@@ -5,6 +5,9 @@ import Combine
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var pendingRequestCompletion: ((CLLocation?) -> Void)?
+    private var pendingRequestNeedsFreshLocation = false
+    private var pendingRequestStartedAt: Date?
+    private var pendingRequestTimeoutWorkItem: DispatchWorkItem?
     
     @Published var currentLocation: CLLocation?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
@@ -31,16 +34,26 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.requestWhenInUseAuthorization()
     }
 
-    func requestLocation(completion: @escaping (CLLocation?) -> Void) {
+    func requestLocation(forceFresh: Bool = false, completion: @escaping (CLLocation?) -> Void) {
         let status = manager.authorizationStatus
 
         switch status {
         case .notDetermined:
             pendingRequestCompletion = completion
+            pendingRequestNeedsFreshLocation = forceFresh
+            pendingRequestStartedAt = forceFresh ? Date() : nil
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
             pendingRequestCompletion = completion
+            pendingRequestNeedsFreshLocation = forceFresh
+            pendingRequestStartedAt = forceFresh ? Date() : nil
             isFetchingLocation = true
+            if forceFresh {
+                manager.startUpdatingLocation()
+                scheduleFreshLocationTimeout()
+            } else {
+                invalidatePendingRequestTimeout()
+            }
             manager.requestLocation()
         default:
             completion(nil)
@@ -104,6 +117,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
         if status == .authorizedWhenInUse || status == .authorizedAlways {
             if pendingRequestCompletion != nil {
+                if pendingRequestNeedsFreshLocation {
+                    isFetchingLocation = true
+                    manager.startUpdatingLocation()
+                    scheduleFreshLocationTimeout()
+                }
                 manager.requestLocation()
             }
             // Nếu đang chờ continuous updates → bắt đầu ngay
@@ -118,6 +136,13 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         DispatchQueue.main.async {
+            let pendingNeedsFreshLocation = self.pendingRequestNeedsFreshLocation
+            if pendingNeedsFreshLocation,
+               let startedAt = self.pendingRequestStartedAt,
+               location.timestamp < startedAt {
+                return
+            }
+
             let isFirstFix = self.currentLocation == nil
             self.currentLocation = location
             self.locationError = nil
@@ -128,8 +153,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             }
             
             if let completion = self.pendingRequestCompletion {
-                self.pendingRequestCompletion = nil
-                completion(location)
+                self.finishPendingRequest(with: location, completion: completion)
                 return
             }
         }
@@ -142,8 +166,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             print("📍 [Location] Error: \(error.localizedDescription)")
             
             if let completion = self.pendingRequestCompletion {
-                self.pendingRequestCompletion = nil
-                completion(self.currentLocation) // Trả về location cũ nếu có
+                self.finishPendingRequest(with: self.currentLocation, completion: completion) // Trả về location cũ nếu có
             }
             
             // Nếu đang continuous mode và chưa có location → retry
@@ -192,5 +215,35 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     var hasValidLocation: Bool {
         guard let loc = currentLocation else { return false }
         return loc.coordinate.latitude != 0 || loc.coordinate.longitude != 0
+    }
+
+    private func scheduleFreshLocationTimeout() {
+        invalidatePendingRequestTimeout()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self, let completion = self.pendingRequestCompletion else { return }
+            self.finishPendingRequest(with: self.currentLocation, completion: completion)
+        }
+
+        pendingRequestTimeoutWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: workItem)
+    }
+
+    private func invalidatePendingRequestTimeout() {
+        pendingRequestTimeoutWorkItem?.cancel()
+        pendingRequestTimeoutWorkItem = nil
+    }
+
+    private func finishPendingRequest(with location: CLLocation?, completion: @escaping (CLLocation?) -> Void) {
+        pendingRequestCompletion = nil
+        pendingRequestNeedsFreshLocation = false
+        pendingRequestStartedAt = nil
+        invalidatePendingRequestTimeout()
+
+        if continuousUpdateRefCount == 0 {
+            manager.stopUpdatingLocation()
+        }
+
+        completion(location)
     }
 }
