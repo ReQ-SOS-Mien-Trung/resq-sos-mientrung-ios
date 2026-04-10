@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Combine
 @testable import SosMienTrung
 
 @MainActor
@@ -870,10 +871,270 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertEqual(decodedAck.targetLocalSosId, "packet-update")
     }
 
+    func testMissionActivitySyncStoreScopesUpdatesPerUserAndDedupes() throws {
+        let suiteName = "MissionActivitySyncStoreTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        var activeUserId: String? = "user-a"
+        let store = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { activeUserId }
+        )
+
+        XCTAssertNotNil(store.enqueue(
+            missionId: 1,
+            activityId: 101,
+            targetStatus: "Succeed",
+            baseServerStatus: "Planned"
+        ))
+        XCTAssertNil(store.enqueue(
+            missionId: 1,
+            activityId: 101,
+            targetStatus: "Failed",
+            baseServerStatus: "Planned"
+        ))
+        XCTAssertEqual(store.updates.count, 1)
+
+        activeUserId = "user-b"
+        store.reloadCurrentUser()
+        XCTAssertTrue(store.updates.isEmpty)
+
+        XCTAssertNotNil(store.enqueue(
+            missionId: 2,
+            activityId: 202,
+            targetStatus: "Failed",
+            baseServerStatus: "OnGoing"
+        ))
+        XCTAssertEqual(store.updates.count, 1)
+
+        activeUserId = "user-a"
+        store.reloadCurrentUser()
+        XCTAssertEqual(store.updates.count, 1)
+        XCTAssertEqual(store.updates.first?.missionId, 1)
+        XCTAssertEqual(store.updates.first?.activityId, 101)
+        XCTAssertEqual(store.updates.first?.syncState, .queued)
+    }
+
+    func testMissionActivitySyncStoreAppliesLocalOverlayAndUnlocksNextStep() throws {
+        let suiteName = "MissionActivitySyncOverlayTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-a" }
+        )
+
+        let baseActivities = [
+            makeActivity(id: 11, step: 1, status: "Planned"),
+            makeActivity(id: 12, step: 2, status: "Planned")
+        ]
+
+        XCTAssertNotNil(store.enqueue(
+            missionId: 9,
+            activityId: 11,
+            targetStatus: "Succeed",
+            baseServerStatus: "Planned"
+        ))
+
+        let effective = store.effectiveActivities(base: baseActivities, missionId: 9)
+        XCTAssertEqual(effective.first?.activityStatus, .succeed)
+        XCTAssertTrue(missionActivityActionIsUnlocked(effective[1], within: effective))
+        XCTAssertEqual(store.syncState(for: 9, activityId: 11), .queued)
+    }
+
+    func testMissionActivitySyncStoreReloadsPersistedUpdatesAfterRestart() throws {
+        let suiteName = "MissionActivitySyncRestartTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let firstStore = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-restart" }
+        )
+
+        XCTAssertNotNil(firstStore.enqueue(
+            missionId: 4,
+            activityId: 44,
+            targetStatus: "Failed",
+            baseServerStatus: "OnGoing"
+        ))
+        XCTAssertEqual(firstStore.updates.count, 1)
+
+        let reloadedStore = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-restart" }
+        )
+
+        XCTAssertEqual(reloadedStore.updates.count, 1)
+        XCTAssertEqual(reloadedStore.updates.first?.activityId, 44)
+        XCTAssertEqual(reloadedStore.updates.first?.targetStatus, "Failed")
+
+        let effective = reloadedStore.effectiveActivities(
+            base: [makeActivity(id: 44, step: 3, status: "OnGoing")],
+            missionId: 4
+        )
+        XCTAssertEqual(effective.first?.activityStatus, .failed)
+    }
+
+    func testRescuerMissionViewModelOfflineUpdateQueuesWithoutCallingRemoteService() throws {
+        let suiteName = "RescuerMissionViewModelOfflineTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-offline" }
+        )
+        let service = MockMissionActivityRemoteService()
+        let network = FixedNetworkStatusProvider(isConnected: false)
+        let vm = RescuerMissionViewModel(
+            missionService: service,
+            networkStatusProvider: network,
+            missionActivitySyncStore: store
+        )
+
+        let knownActivities = [makeActivity(id: 70, step: 1, status: "Planned")]
+        vm.updateActivity(
+            missionId: 5,
+            activityId: 70,
+            status: "Succeed",
+            knownActivities: knownActivities
+        )
+
+        XCTAssertTrue(service.updatedActivityCalls.isEmpty)
+        XCTAssertEqual(store.pendingCount(for: 5), 1)
+        XCTAssertEqual(vm.pendingSyncState(missionId: 5, activityId: 70), .queued)
+        XCTAssertEqual(vm.effectiveActivities(missionId: 5, fallback: knownActivities).first?.activityStatus, .succeed)
+        XCTAssertEqual(vm.successMessage, "Đã lưu cục bộ. Hoạt động đang chờ đồng bộ máy chủ.")
+    }
+
+    func testRescuerMissionViewModelOnlineUpdateCallsRemoteService() async throws {
+        let suiteName = "RescuerMissionViewModelOnlineTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-online" }
+        )
+        let service = MockMissionActivityRemoteService()
+        let network = FixedNetworkStatusProvider(isConnected: true)
+        let vm = RescuerMissionViewModel(
+            missionService: service,
+            networkStatusProvider: network,
+            missionActivitySyncStore: store
+        )
+
+        let knownActivities = [makeActivity(id: 80, step: 1, status: "Planned")]
+        service.activitiesByMission[7] = [makeActivity(id: 80, step: 1, status: "Succeed")]
+
+        vm.updateActivity(
+            missionId: 7,
+            activityId: 80,
+            status: "Succeed",
+            knownActivities: knownActivities
+        )
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(service.updatedActivityCalls.count, 1)
+        XCTAssertEqual(service.updatedActivityCalls.first?.missionId, 7)
+        XCTAssertEqual(service.updatedActivityCalls.first?.activityId, 80)
+        XCTAssertEqual(service.updatedActivityCalls.first?.status, "Succeed")
+        XCTAssertTrue(store.updates.isEmpty)
+        XCTAssertEqual(vm.activities.first?.activityStatus, .succeed)
+        XCTAssertEqual(vm.successMessage, "Đã cập nhật: Succeed")
+    }
+
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
         self.measure {
             // Put the code you want to measure the time of here.
+        }
+    }
+
+    private func makeMissionActivitySyncStore(
+        userDefaults: UserDefaults,
+        activeUserIdProvider: @escaping () -> String?
+    ) -> MissionActivitySyncStore {
+        MissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: activeUserIdProvider,
+            sessionPublisher: Empty<AuthSession?, Never>(completeImmediately: false).eraseToAnyPublisher(),
+            networkPublisher: Empty<Bool, Never>(completeImmediately: false).eraseToAnyPublisher(),
+            transport: NoopMissionActivitySyncTransport()
+        )
+    }
+
+    private func makeActivity(
+        id: Int,
+        step: Int?,
+        status: String,
+        missionTeamId: Int? = 3
+    ) -> Activity {
+        Activity(
+            id: id,
+            step: step,
+            activityCode: "ACT-\(id)",
+            activityType: "EVACUATE",
+            description: "Sample activity \(id)",
+            priority: "High",
+            estimatedTime: 15,
+            sosRequestId: nil,
+            depotId: nil,
+            depotName: nil,
+            depotAddress: nil,
+            suppliesToCollect: nil,
+            targetLatitude: 16.4637,
+            targetLongitude: 107.5909,
+            status: status,
+            missionTeamId: missionTeamId,
+            assignedAt: nil,
+            completedAt: nil,
+            completedBy: nil
+        )
+    }
+
+    private final class MockMissionActivityRemoteService: MissionActivityRemoteService {
+        var missionsToReturn: [Mission] = []
+        var activitiesByMission: [Int: [Activity]] = [:]
+        var updatedActivityCalls: [(missionId: Int, activityId: Int, status: String)] = []
+        var updatedMissionCalls: [(missionId: Int, status: String)] = []
+
+        func getMyTeamMissions() async throws -> [Mission] {
+            missionsToReturn
+        }
+
+        func getMyTeamActivities(missionId: Int) async throws -> [Activity] {
+            activitiesByMission[missionId] ?? []
+        }
+
+        func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws {
+            updatedActivityCalls.append((missionId, activityId, status))
+        }
+
+        func updateMissionStatus(missionId: Int, status: String) async throws {
+            updatedMissionCalls.append((missionId, status))
+        }
+    }
+
+    private final class FixedNetworkStatusProvider: NetworkStatusProviding {
+        let isConnected: Bool
+
+        init(isConnected: Bool) {
+            self.isConnected = isConnected
         }
     }
 

@@ -81,6 +81,30 @@ struct Activity: Codable, Identifiable {
     var latitude: Double? { targetLatitude }
     var longitude: Double? { targetLongitude }
     var assignedTeamId: Int? { missionTeamId }
+
+    func replacing(status newStatus: String) -> Activity {
+        Activity(
+            id: id,
+            step: step,
+            activityCode: activityCode,
+            activityType: activityType,
+            description: description,
+            priority: priority,
+            estimatedTime: estimatedTime,
+            sosRequestId: sosRequestId,
+            depotId: depotId,
+            depotName: depotName,
+            depotAddress: depotAddress,
+            suppliesToCollect: suppliesToCollect,
+            targetLatitude: targetLatitude,
+            targetLongitude: targetLongitude,
+            status: newStatus,
+            missionTeamId: missionTeamId,
+            assignedAt: assignedAt,
+            completedAt: completedAt,
+            completedBy: completedBy
+        )
+    }
 }
 
 // MARK: - Mission Team Member
@@ -363,6 +387,23 @@ private func humanizedActivityText(_ rawValue: String) -> String? {
 // MARK: - Activity Update Request
 struct ActivityStatusUpdate: Codable {
     let status: String
+}
+
+func missionActivityActionIsUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
+    guard let currentStep = activity.step, currentStep > 1 else {
+        return true
+    }
+
+    let previousSteps = list.filter { candidate in
+        guard let candidateStep = candidate.step else { return false }
+        return candidateStep < currentStep
+    }
+
+    guard previousSteps.isEmpty == false else {
+        return true
+    }
+
+    return previousSteps.allSatisfy { $0.activityStatus == .succeed }
 }
 
 // MARK: - Mission Update Request
