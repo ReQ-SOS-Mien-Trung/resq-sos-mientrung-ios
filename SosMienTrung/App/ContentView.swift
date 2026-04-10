@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var notificationHub = NotificationHubService.shared
     @StateObject private var userProfile = UserProfile.shared
     @StateObject private var authSession = AuthSessionStore.shared
+    @StateObject private var sosRuleConfigStore = SOSRuleConfigStore.shared
     @ObservedObject private var appearance = AppearanceManager.shared
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
@@ -49,6 +50,10 @@ struct ContentView: View {
         Task {
             await notificationHub.applicationDidBecomeActive()
         }
+        Task {
+            await sosRuleConfigStore.refreshIfPossible(force: true)
+        }
+        MissionActivitySyncStore.shared.triggerDeferredSync(reason: .appDidBecomeActive)
     }
 
     private func refreshAuthenticatedAccess(force: Bool = false) {
@@ -94,6 +99,7 @@ struct ContentView: View {
                 isSetupComplete = isFullyAuthenticated
                 if isFullyAuthenticated {
                     refreshAuthenticatedAccess(force: true)
+                    sosRuleConfigStore.loadCachedFallbackIfNeeded()
                 }
             }
             .onChange(of: userProfile.currentUser) { newUser in
@@ -120,12 +126,14 @@ struct ContentView: View {
                     teardownAuthenticatedNetworking()
                 } else if isFullyAuthenticated {
                     isSetupComplete = true
+                    sosRuleConfigStore.loadCachedFallbackIfNeeded()
                     refreshAuthenticatedAccess()
                 }
             }
             .onChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else { return }
                 guard isFullyAuthenticated else { return }
+                MissionActivitySyncStore.shared.triggerDeferredSync(reason: .appDidBecomeActive)
                 refreshAuthenticatedAccess(force: true)
             }
     }

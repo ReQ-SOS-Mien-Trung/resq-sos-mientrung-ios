@@ -60,6 +60,10 @@ struct MissionDetailView: View {
                         subtitle: "\(activityCount) bước cần theo dõi"
                     )
 
+                    if pendingActivitySyncCount > 0 {
+                        pendingSyncBanner
+                    }
+
                     activitiesSection
 
                     inventorySection
@@ -84,7 +88,7 @@ struct MissionDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
-                            refreshMissionWorkspace()
+                            refreshMissionWorkspace(triggerSync: true)
                         } label: {
                             Label("Làm mới", systemImage: "arrow.clockwise")
                         }
@@ -314,6 +318,34 @@ struct MissionDetailView: View {
         }
     }
 
+    private var pendingSyncBanner: some View {
+        HStack(alignment: .top, spacing: DS.Spacing.sm) {
+            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                .foregroundColor(DS.Colors.info)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(pendingActivitySyncCount) activity chưa đồng bộ máy chủ")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(DS.Colors.text)
+
+                Text("Các cập nhật này đã được lưu cục bộ trên thiết bị. App sẽ giữ nguyên trạng thái local cho tới khi backend hỗ trợ đồng bộ batch.")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(DS.Spacing.md)
+        .sharpCard(
+            borderColor: DS.Colors.info.opacity(0.25),
+            borderWidth: DS.Border.thin,
+            shadow: DS.Shadow.none,
+            backgroundColor: DS.Colors.surface,
+            radius: 16
+        )
+    }
+
     @ViewBuilder
     private var activitiesSection: some View {
         let list = displayedActivities
@@ -360,10 +392,13 @@ struct MissionDetailView: View {
                 ForEach(list) { activity in
                     ActivityRowView(
                         activity: activity,
+                        pendingSyncState: vm.pendingSyncState(missionId: mission.id, activityId: activity.id),
                         onStatusChange: { status in
-                            handleActivityStatusChange(status, for: activity)
+                            handleActivityStatusChange(status, for: activity, within: list)
                         },
-                        allowsCompletionActions: canUpdateActivityStatus && isActivityActionUnlocked(activity, within: list)
+                        allowsCompletionActions: canUpdateActivityStatus
+                            && missionActivityActionIsUnlocked(activity, within: list)
+                            && !vm.hasPendingSync(missionId: mission.id, activityId: activity.id)
                     )
                 }
             }
@@ -372,6 +407,7 @@ struct MissionDetailView: View {
 
     private var aggregateRouteButton: some View {
         Button {
+            vm.triggerMissionActivitySync(reason: .manualRefresh)
             vm.loadActivities(missionId: mission.id)
             showAggregateRoute = true
         } label: {
@@ -686,12 +722,15 @@ struct MissionDetailView: View {
         }
     }
 
-    private func refreshMissionWorkspace() {
+    private func refreshMissionWorkspace(triggerSync: Bool = false) {
+        if triggerSync {
+            vm.triggerMissionActivitySync(reason: .manualRefresh)
+        }
         vm.loadActivities(missionId: mission.id)
         incidentVM.loadIncidents(missionId: mission.id)
     }
 
-    private func handleActivityStatusChange(_ status: String, for activity: Activity) {
+    private func handleActivityStatusChange(_ status: String, for activity: Activity, within knownActivities: [Activity]) {
         guard canUpdateActivityStatus else { return }
         guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else { return }
 
@@ -707,7 +746,12 @@ struct MissionDetailView: View {
             }
         }
 
-        vm.updateActivity(missionId: mission.id, activityId: activity.id, status: status)
+        vm.updateActivity(
+            missionId: mission.id,
+            activityId: activity.id,
+            status: status,
+            knownActivities: knownActivities
+        )
     }
 
     private func normalizedStatus(_ status: String) -> String {
@@ -722,23 +766,12 @@ struct MissionDetailView: View {
         displayedActivities.filter { $0.activityStatus == .succeed }.count
     }
 
+    private var pendingActivitySyncCount: Int {
+        vm.pendingSyncCount(for: mission.id)
+    }
+
     private var displayedActivities: [Activity] {
-        let source = vm.activities.isEmpty ? (mission.activities ?? []) : vm.activities
-
-        return source.sorted { lhs, rhs in
-            switch (lhs.step, rhs.step) {
-            case let (l?, r?):
-                if l != r { return l < r }
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            case (.none, .none):
-                break
-            }
-
-            return lhs.id < rhs.id
-        }
+        vm.effectiveActivities(missionId: mission.id, fallback: mission.activities ?? [])
     }
 
     private var activityProgress: Double {
@@ -849,23 +882,6 @@ struct MissionDetailView: View {
 
             return partialResult + (matches ? item.supply.quantity : 0)
         }
-    }
-
-    private func isActivityActionUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
-        guard let currentStep = activity.step, currentStep > 1 else {
-            return true
-        }
-
-        let previousSteps = list.filter { candidate in
-            guard let candidateStep = candidate.step else { return false }
-            return candidateStep < currentStep
-        }
-
-        guard previousSteps.isEmpty == false else {
-            return true
-        }
-
-        return previousSteps.allSatisfy { $0.activityStatus == .succeed }
     }
 
     private func formattedDisplayDate(_ raw: String?) -> String? {

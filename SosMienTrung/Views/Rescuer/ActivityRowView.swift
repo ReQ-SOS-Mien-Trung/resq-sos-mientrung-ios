@@ -3,6 +3,7 @@ import SwiftUI
 struct ActivityRowView: View {
     let activity: Activity
     let isStatusEditable: Bool
+    let pendingSyncState: MissionActivitySyncState?
     let onStatusChange: (String) -> Void
     let onNavigateTap: (() -> Void)?
     let allowsCompletionActions: Bool
@@ -12,12 +13,14 @@ struct ActivityRowView: View {
     init(
         activity: Activity,
         isStatusEditable: Bool = true,
+        pendingSyncState: MissionActivitySyncState? = nil,
         onStatusChange: @escaping (String) -> Void,
         allowsCompletionActions: Bool = true,
         onNavigateTap: (() -> Void)? = nil
     ) {
         self.activity = activity
         self.isStatusEditable = isStatusEditable
+        self.pendingSyncState = pendingSyncState
         self.onStatusChange = onStatusChange
         self.allowsCompletionActions = allowsCompletionActions
         self.onNavigateTap = onNavigateTap
@@ -81,6 +84,10 @@ struct ActivityRowView: View {
 
             HStack(alignment: .center, spacing: DS.Spacing.sm) {
                 activityStatusBadge
+
+                if let pendingSyncState {
+                    pendingSyncBadge(pendingSyncState)
+                }
 
                 if let estimatedTime = activity.estimatedTime, estimatedTime > 0 {
                     Label("~\(estimatedTime) phút", systemImage: "timer")
@@ -208,6 +215,31 @@ struct ActivityRowView: View {
                 .stroke(badgeColor.opacity(0.45), lineWidth: 1.2)
         )
         .shadow(color: badgeColor.opacity(0.12), radius: 4, x: 0, y: 2)
+    }
+
+    private func pendingSyncBadge(_ state: MissionActivitySyncState) -> some View {
+        let color = pendingSyncBadgeColor(state)
+
+        return HStack(spacing: 6) {
+            Image(systemName: pendingSyncBadgeSymbol(state))
+                .font(.system(size: 11, weight: .bold))
+
+            Text(pendingSyncBadgeLabel(state))
+                .font(.system(size: 12, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(color.opacity(0.12))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(color.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private var statusIcon: some View {
@@ -531,6 +563,45 @@ struct ActivityRowView: View {
             return "xmark.octagon.fill"
         case .cancelled:
             return "slash.circle.fill"
+        }
+    }
+
+    private func pendingSyncBadgeLabel(_ state: MissionActivitySyncState) -> String {
+        switch state {
+        case .queued:
+            return "Chưa đồng bộ"
+        case .syncing:
+            return "Đang đồng bộ"
+        case .failed:
+            return "Lỗi đồng bộ"
+        case .synced:
+            return "Đã đồng bộ"
+        }
+    }
+
+    private func pendingSyncBadgeColor(_ state: MissionActivitySyncState) -> Color {
+        switch state {
+        case .queued:
+            return DS.Colors.info
+        case .syncing:
+            return DS.Colors.warning
+        case .failed:
+            return DS.Colors.accent
+        case .synced:
+            return DS.Colors.success
+        }
+    }
+
+    private func pendingSyncBadgeSymbol(_ state: MissionActivitySyncState) -> String {
+        switch state {
+        case .queued:
+            return "arrow.triangle.2.circlepath.circle"
+        case .syncing:
+            return "icloud.and.arrow.up"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        case .synced:
+            return "checkmark.icloud.fill"
         }
     }
 

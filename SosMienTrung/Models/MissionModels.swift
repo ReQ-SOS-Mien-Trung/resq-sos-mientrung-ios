@@ -122,6 +122,30 @@ struct Activity: Codable, Identifiable {
     var longitude: Double? { targetLongitude }
     var assignedTeamId: Int? { missionTeamId }
 
+    func replacing(status newStatus: String) -> Activity {
+        Activity(
+            id: id,
+            step: step,
+            activityCode: activityCode,
+            activityType: activityType,
+            description: description,
+            priority: priority,
+            estimatedTime: estimatedTime,
+            sosRequestId: sosRequestId,
+            depotId: depotId,
+            depotName: depotName,
+            depotAddress: depotAddress,
+            suppliesToCollect: suppliesToCollect,
+            targetLatitude: targetLatitude,
+            targetLongitude: targetLongitude,
+            status: newStatus,
+            missionTeamId: missionTeamId,
+            assignedAt: assignedAt,
+            completedAt: completedAt,
+            completedBy: completedBy
+        )
+    }
+
     var normalizedActivityTypeKey: String {
         (activityType ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -297,14 +321,14 @@ private func normalizedMissionTypeKey(_ missionType: String) -> String {
         .lowercased()
 }
 
-    private func normalizedMissionLabelForComparison(_ value: String) -> String {
-        value
+private func normalizedMissionLabelForComparison(_ value: String) -> String {
+    value
         .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .replacingOccurrences(of: "_", with: "")
         .replacingOccurrences(of: "-", with: "")
         .replacingOccurrences(of: " ", with: "")
-    }
+}
 
 private func firstNonEmptyTrimmed(_ values: String?...) -> String? {
     for value in values {
@@ -428,6 +452,23 @@ private func humanizedActivityText(_ rawValue: String) -> String? {
 // MARK: - Activity Update Request
 struct ActivityStatusUpdate: Codable {
     let status: String
+}
+
+func missionActivityActionIsUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
+    guard let currentStep = activity.step, currentStep > 1 else {
+        return true
+    }
+
+    let previousSteps = list.filter { candidate in
+        guard let candidateStep = candidate.step else { return false }
+        return candidateStep < currentStep
+    }
+
+    guard previousSteps.isEmpty == false else {
+        return true
+    }
+
+    return previousSteps.allSatisfy { $0.activityStatus == .succeed }
 }
 
 // MARK: - Mission Update Request

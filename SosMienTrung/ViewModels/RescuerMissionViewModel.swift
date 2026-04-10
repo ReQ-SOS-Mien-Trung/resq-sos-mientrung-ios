@@ -2,6 +2,20 @@ import Foundation
 import Combine
 import CoreLocation
 
+protocol MissionActivityRemoteService {
+    func getMyTeamMissions() async throws -> [Mission]
+    func getMyTeamActivities(missionId: Int) async throws -> [Activity]
+    func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws
+    func updateMissionStatus(missionId: Int, status: String) async throws
+}
+
+protocol NetworkStatusProviding {
+    var isConnected: Bool { get }
+}
+
+extension MissionService: MissionActivityRemoteService {}
+extension NetworkMonitor: NetworkStatusProviding {}
+
 @MainActor
 final class RescuerMissionViewModel: ObservableObject {
     private enum CheckInLocationError: LocalizedError {
@@ -23,9 +37,39 @@ final class RescuerMissionViewModel: ObservableObject {
     @Published var hasLoadedActivities = false
     @Published var errorMessage: String?
     @Published var successMessage: String?
+    @Published private(set) var pendingActivityUpdates: [PendingMissionActivityUpdate] = []
 
     private var loadingCount = 0
-    private let locationManager = LocationManager()
+    private let missionService: any MissionActivityRemoteService
+    private let networkStatusProvider: any NetworkStatusProviding
+    private let missionActivitySyncStore: MissionActivitySyncStore
+    private let locationManager: LocationManager
+    private var cancellables: Set<AnyCancellable> = []
+
+    init(
+        missionService: (any MissionActivityRemoteService)? = nil,
+        networkStatusProvider: (any NetworkStatusProviding)? = nil,
+        missionActivitySyncStore: MissionActivitySyncStore? = nil,
+        locationManager: LocationManager? = nil
+    ) {
+        let resolvedMissionService = missionService ?? MissionService.shared
+        let resolvedNetworkStatusProvider = networkStatusProvider ?? NetworkMonitor.shared
+        let resolvedMissionActivitySyncStore = missionActivitySyncStore ?? .shared
+        let resolvedLocationManager = locationManager ?? LocationManager()
+
+        self.missionService = resolvedMissionService
+        self.networkStatusProvider = resolvedNetworkStatusProvider
+        self.missionActivitySyncStore = resolvedMissionActivitySyncStore
+        self.locationManager = resolvedLocationManager
+        self.pendingActivityUpdates = resolvedMissionActivitySyncStore.updates
+
+        resolvedMissionActivitySyncStore.$updates
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] updates in
+                self?.pendingActivityUpdates = updates
+            }
+            .store(in: &cancellables)
+    }
 
     func startLocationTracking() {
         locationManager.requestPermission()
@@ -187,7 +231,7 @@ final class RescuerMissionViewModel: ObservableObject {
         Task {
             defer { endLoading() }
             do {
-                missions = try await MissionService.shared.getMyTeamMissions()
+                missions = try await missionService.getMyTeamMissions()
             } catch {
                 errorMessage = "Không thể tải danh sách nhiệm vụ: \(error.localizedDescription)"
             }
@@ -204,7 +248,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 hasLoadedActivities = true
             }
             do {
-                let fetched = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+                let fetched = try await missionService.getMyTeamActivities(missionId: missionId)
                 activities = sortActivities(fetched)
             } catch {
                 errorMessage = "Không thể tải các bước thực hiện: \(error.localizedDescription)"
@@ -212,9 +256,51 @@ final class RescuerMissionViewModel: ObservableObject {
         }
     }
 
-    func updateActivity(missionId: Int, activityId: Int, status: String) {
+    func updateActivity(
+        missionId: Int,
+        activityId: Int,
+        status: String,
+        knownActivities: [Activity] = []
+    ) {
         errorMessage = nil
         successMessage = nil
+
+        guard missionActivitySyncStore.hasPendingUpdate(missionId: missionId, activityId: activityId) == false else {
+            errorMessage = "Hoạt động này đang chờ đồng bộ máy chủ."
+            hasLoadedActivities = true
+            return
+        }
+
+        if networkStatusProvider.isConnected == false {
+            let baseActivities = baseActivities(fallback: knownActivities)
+            guard let baseActivity = baseActivities.first(where: { $0.id == activityId }) else {
+                errorMessage = "Không tìm thấy hoạt động để lưu cục bộ."
+                hasLoadedActivities = true
+                return
+            }
+
+            let queued = missionActivitySyncStore.enqueue(
+                missionId: missionId,
+                activityId: activityId,
+                targetStatus: status,
+                baseServerStatus: baseActivity.status
+            )
+
+            guard queued != nil else {
+                errorMessage = "Không thể lưu thao tác offline cho hoạt động này."
+                hasLoadedActivities = true
+                return
+            }
+
+            if activities.isEmpty, baseActivities.isEmpty == false {
+                activities = sortActivities(baseActivities)
+            }
+
+            hasLoadedActivities = true
+            successMessage = "Đã lưu cục bộ. Hoạt động đang chờ đồng bộ máy chủ."
+            return
+        }
+
         isLoadingActivities = true
         Task {
             defer {
@@ -222,8 +308,8 @@ final class RescuerMissionViewModel: ObservableObject {
                 hasLoadedActivities = true
             }
             do {
-                try await MissionService.shared.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
-                let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
+                try await missionService.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
+                let refreshed = try await missionService.getMyTeamActivities(missionId: missionId)
                 activities = sortActivities(refreshed)
                 successMessage = "Đã cập nhật trạng thái bước thực hiện"
             } catch {
@@ -310,14 +396,36 @@ final class RescuerMissionViewModel: ObservableObject {
         defer { endLoading() }
 
         do {
-            try await MissionService.shared.updateMissionStatus(missionId: missionId, status: status)
-            missions = try await MissionService.shared.getMyTeamMissions()
+            try await missionService.updateMissionStatus(missionId: missionId, status: status)
+            missions = try await missionService.getMyTeamMissions()
             successMessage = "Đã cập nhật trạng thái nhiệm vụ"
             return true
         } catch {
             errorMessage = "Không thể cập nhật trạng thái nhiệm vụ: \(error.localizedDescription)"
             return false
         }
+    }
+
+    func effectiveActivities(missionId: Int, fallback: [Activity] = []) -> [Activity] {
+        let source = baseActivities(fallback: fallback)
+        let merged = missionActivitySyncStore.effectiveActivities(base: source, missionId: missionId)
+        return sortActivities(merged)
+    }
+
+    func pendingSyncState(missionId: Int, activityId: Int) -> MissionActivitySyncState? {
+        missionActivitySyncStore.syncState(for: missionId, activityId: activityId)
+    }
+
+    func hasPendingSync(missionId: Int, activityId: Int) -> Bool {
+        missionActivitySyncStore.hasPendingUpdate(missionId: missionId, activityId: activityId)
+    }
+
+    func pendingSyncCount(for missionId: Int) -> Int {
+        missionActivitySyncStore.pendingCount(for: missionId)
+    }
+
+    func triggerMissionActivitySync(reason: MissionActivitySyncTriggerReason) {
+        missionActivitySyncStore.triggerDeferredSync(reason: reason)
     }
 
     private func sortActivities(_ items: [Activity]) -> [Activity] {
@@ -335,6 +443,10 @@ final class RescuerMissionViewModel: ObservableObject {
 
             return lhs.id < rhs.id
         }
+    }
+
+    private func baseActivities(fallback: [Activity]) -> [Activity] {
+        activities.isEmpty ? fallback : activities
     }
 
     private func beginLoading() {

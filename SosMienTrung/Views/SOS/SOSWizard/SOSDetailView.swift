@@ -623,7 +623,11 @@ struct SOSDetailView: View {
                     .foregroundColor(DS.Colors.danger)
 
                 if let situation = rescue.situation {
-                    ReviewRow(icon: situation.icon, title: "Tình trạng", value: situation.title)
+                    ReviewRow(
+                        icon: RescueSituation.icon(for: situation),
+                        title: "Tình trạng",
+                        value: RescueSituation.title(for: situation)
+                    )
                 }
 
                 if !rescue.otherSituationDescription.isEmpty {
@@ -700,7 +704,11 @@ struct SOSDetailView: View {
             if let rescue = savedSOS.rescueData {
                 // Situation
                 if let situation = rescue.situation {
-                    DetailRow(icon: situation.icon, title: "Tình trạng", value: situation.title)
+                    DetailRow(
+                        icon: RescueSituation.icon(for: situation),
+                        title: "Tình trạng",
+                        value: RescueSituation.title(for: situation)
+                    )
                 }
                 
                 if !rescue.otherSituationDescription.isEmpty {
@@ -854,9 +862,9 @@ struct SOSDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(info.medicalIssues), id: \.self) { issue in
                         HStack(spacing: 4) {
-                            Text(issue.icon)
+                            Text(MedicalIssue.icon(for: issue))
                                 .font(.caption2)
-                            Text(issue.title)
+                            Text(MedicalIssue.title(for: issue))
                                 .font(.caption2)
                                 .foregroundColor(DS.Colors.textSecondary)
                                 .lineLimit(1)
@@ -1146,6 +1154,7 @@ struct SOSWizardContent: View {
     @ObservedObject var formData: SOSFormData
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var sosRuleConfigStore = SOSRuleConfigStore.shared
     @Binding var isSending: Bool
     var onSend: () -> Void
     @State private var showRelativeProfilePicker = false
@@ -1196,6 +1205,22 @@ struct SOSWizardContent: View {
                 .sheet(isPresented: $showRelativeProfilePicker) {
                     RelativeProfilePickerSheet(initialSelectedProfileIds: formData.selectedRelativeProfileIds) { profiles in
                         formData.applySelectedRelativeProfiles(profiles)
+                    }
+                }
+                .task {
+                    await sosRuleConfigStore.prepareForSOSFormEntry(
+                        isNetworkAvailable: networkMonitor.isConnected
+                    )
+                }
+                .onChange(of: networkMonitor.isConnected) { isConnected in
+                    if isConnected {
+                        Task {
+                            await sosRuleConfigStore.prepareForSOSFormEntry(
+                                isNetworkAvailable: true
+                            )
+                        }
+                    } else {
+                        sosRuleConfigStore.loadCachedFallbackIfNeeded()
                     }
                 }
                 

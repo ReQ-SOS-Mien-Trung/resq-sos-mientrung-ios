@@ -1196,12 +1196,12 @@ struct Step2AReliefView: View {
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.text)
             
-            ForEach(WaterDuration.allCases) { option in
+            ForEach(formData.availableWaterDurationOptions) { option in
                 ReliefRadioRow(
                     title: option.title,
-                    isSelected: formData.reliefData.waterDuration == option
+                    isSelected: formData.reliefData.waterDuration == option.key
                 ) {
-                    formData.reliefData.waterDuration = option
+                    formData.reliefData.waterDuration = option.key
                 }
             }
         }
@@ -1226,12 +1226,12 @@ struct Step2AReliefView: View {
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.text)
             
-            ForEach(FoodDuration.allCases) { option in
+            ForEach(formData.availableFoodDurationOptions) { option in
                 ReliefRadioRow(
                     title: option.title,
-                    isSelected: formData.reliefData.foodDuration == option
+                    isSelected: formData.reliefData.foodDuration == option.key
                 ) {
-                    formData.reliefData.foodDuration = option
+                    formData.reliefData.foodDuration = option.key
                 }
             }
             
@@ -1543,17 +1543,18 @@ struct SituationSection: View {
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
             
-            ForEach(RescueSituation.allCases) { situation in
+            ForEach(formData.availableSituationOptions) { situation in
                 SituationRadio(
-                    situation: situation,
-                    isSelected: formData.rescueData.situation == situation
+                    icon: situation.icon,
+                    title: situation.title,
+                    isSelected: formData.rescueData.situation == situation.key
                 ) {
-                    formData.rescueData.situation = situation
+                    formData.rescueData.situation = situation.key
                 }
             }
             
             // Other description
-            if formData.rescueData.situation == .other {
+            if SOSRuleConfig.normalizeKey(formData.rescueData.situation) == "OTHER" {
                 TextField("Mô tả tình trạng khác...", text: $formData.rescueData.otherSituationDescription)
                     .textFieldStyle(.plain)
                     .padding()
@@ -1813,7 +1814,7 @@ struct PersonInjuredRow: View {
                         if !info.medicalIssues.isEmpty {
                             FlowLayout(spacing: 4) {
                                 ForEach(Array(info.medicalIssues), id: \.self) { issue in
-                                    Text("\(issue.icon) \(issue.title)")
+                                    Text("\(MedicalIssue.icon(for: issue)) \(MedicalIssue.title(for: issue))")
                                         .font(.caption2)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
@@ -2280,7 +2281,7 @@ struct PersonMedicalFormSheet: View {
     let onDismiss: () -> Void
     
     @State private var localName: String = ""
-    @State private var localMedicalIssues: Set<MedicalIssue> = []
+    @State private var localMedicalIssues: Set<String> = []
     @State private var localOtherDescription: String = ""
 
     private var usesSavedProfileIdentity: Bool {
@@ -2373,7 +2374,7 @@ struct PersonMedicalFormSheet: View {
                     }
                     
                     // Medical issues selection — grouped by category
-                    let grouped = MedicalIssue.groupedIssues(for: person.type)
+                    let grouped = formData.availableMedicalIssueGroups(for: person.type)
                     ForEach(grouped, id: \.category) { group in
                         VStack(alignment: .leading, spacing: 10) {
                             Text(group.category.title)
@@ -2382,20 +2383,21 @@ struct PersonMedicalFormSheet: View {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                 ForEach(group.issues) { issue in
                                     MedicalIssueCheckboxLight(
-                                        issue: issue,
-                                        isSelected: localMedicalIssues.contains(issue)
+                                        icon: issue.icon,
+                                        title: issue.title,
+                                        isSelected: localMedicalIssues.contains(issue.key)
                                     ) {
-                                        if localMedicalIssues.contains(issue) {
-                                            localMedicalIssues.remove(issue)
+                                        if localMedicalIssues.contains(issue.key) {
+                                            localMedicalIssues.remove(issue.key)
                                         } else {
-                                            localMedicalIssues.insert(issue)
+                                            localMedicalIssues.insert(issue.key)
                                         }
                                     }
                                 }
                             }
                             
                             // Other description — chỉ hiện ở nhóm "Khác"
-                            if group.category == .other && localMedicalIssues.contains(.other) {
+                            if group.category == .other && localMedicalIssues.contains("OTHER") {
                                 TextField("Mô tả vấn đề khác...", text: $localOtherDescription)
                                     .textFieldStyle(.roundedBorder)
                             }
@@ -2459,7 +2461,8 @@ struct PersonMedicalFormSheet: View {
 }
 
 struct MedicalIssueCheckboxLight: View {
-    let issue: MedicalIssue
+    let icon: String
+    let title: String
     let isSelected: Bool
     let action: () -> Void
     
@@ -2470,9 +2473,9 @@ struct MedicalIssueCheckboxLight: View {
                     .foregroundColor(isSelected ? .red : .gray)
                     .font(.body)
                 
-                Text(issue.icon)
+                Text(icon)
                     .font(.body)
-                Text(issue.title)
+                Text(title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(.primary)
                 
@@ -2765,7 +2768,11 @@ struct Step4ReviewView: View {
                             .foregroundColor(DS.Colors.danger)
                         
                         if let situation = formData.rescueData.situation {
-                            ReviewRow(icon: situation.icon, title: "Tình trạng", value: situation.title)
+                            ReviewRow(
+                                icon: formData.situationIcon(for: situation),
+                                title: "Tình trạng",
+                                value: formData.situationTitle(for: situation)
+                            )
                         }
                         
                         // Thông tin y tế từng người bị thương
@@ -2880,7 +2887,11 @@ struct InjuredPersonReviewCard: View {
             }
             
             if !medicalInfo.medicalIssues.isEmpty {
-                Text(medicalInfo.medicalIssues.map { "\($0.icon) \($0.title)" }.joined(separator: ", "))
+                Text(
+                    medicalInfo.medicalIssues
+                        .map { "\(MedicalIssue.icon(for: $0)) \(MedicalIssue.title(for: $0))" }
+                        .joined(separator: ", ")
+                )
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3117,7 +3128,8 @@ struct SupplyCheckbox: View {
 }
 
 struct SituationRadio: View {
-    let situation: RescueSituation
+    let icon: String
+    let title: String
     let isSelected: Bool
     let action: () -> Void
     
@@ -3127,8 +3139,8 @@ struct SituationRadio: View {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .foregroundColor(isSelected ? .red : DS.Colors.textSecondary)
                 
-                Text(situation.icon)
-                Text(situation.title)
+                Text(icon)
+                Text(title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(DS.Colors.text)
                 
@@ -3370,7 +3382,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
     if relief.supplies.contains(.water) {
         var lines: [ReliefSupplyCardLine] = []
         if let duration = relief.waterDuration {
-            lines.append(line("water_duration", "Còn duy trì", duration.title))
+            lines.append(line("water_duration", "Còn duy trì", WaterDuration.title(for: duration)))
         }
         cards.append(
             ReliefSupplyCardModel(
@@ -3386,7 +3398,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
     if relief.supplies.contains(.food) {
         var lines: [ReliefSupplyCardLine] = []
         if let duration = relief.foodDuration {
-            lines.append(line("food_duration", "Còn duy trì", duration.title))
+            lines.append(line("food_duration", "Còn duy trì", FoodDuration.title(for: duration)))
         }
         cards.append(
             ReliefSupplyCardModel(

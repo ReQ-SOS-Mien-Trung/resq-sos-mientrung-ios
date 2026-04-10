@@ -76,6 +76,7 @@ struct MissionAggregateRouteSheetView: View {
                 .pickerStyle(.segmented)
 
                 Button {
+                    vm.triggerMissionActivitySync(reason: .manualRefresh)
                     Task {
                         await loadAggregateRoute(forceRefresh: true)
                     }
@@ -298,22 +299,7 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private var sourceActivities: [Activity] {
-        let source = vm.activities.isEmpty ? (mission.activities ?? []) : vm.activities
-
-        return source.sorted { lhs, rhs in
-            switch (lhs.step, rhs.step) {
-            case let (l?, r?):
-                if l != r { return l < r }
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            case (.none, .none):
-                break
-            }
-
-            return lhs.id < rhs.id
-        }
+        vm.effectiveActivities(missionId: mission.id, fallback: mission.activities ?? [])
     }
 
     private var remainingActivities: [Activity] {
