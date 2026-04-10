@@ -17,6 +17,7 @@ final class VictimChatService: ObservableObject {
     private let maxJoinRetries = 8
     private var hasJoinedConversation = false
     private var isJoiningConversation = false
+    private var pendingOutgoingMessages: [(conversationId: Int, content: String)] = []
 
     init() {
         self.baseURL = AppConfig.baseURLString
@@ -54,6 +55,7 @@ final class VictimChatService: ObservableObject {
         joinRetryCount = 0
         hasJoinedConversation = false
         isJoiningConversation = false
+        pendingOutgoingMessages.removeAll()
     }
 
     // MARK: - Server → Client handlers
@@ -68,6 +70,7 @@ final class VictimChatService: ObservableObject {
                 self?.joinRetryCount = 0
                 self?.isJoiningConversation = false
                 self?.hasJoinedConversation = true
+                self?.flushPendingMessages()
             }
         }
 
@@ -162,17 +165,47 @@ final class VictimChatService: ObservableObject {
                 self?.joinRetryCount = 0
                 self?.isJoiningConversation = false
                 self?.hasJoinedConversation = true
+                self?.flushPendingMessages()
             }
         }
     }
 
     func sendMessage(conversationId: Int, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Queue until connect() creates a hub connection.
+        guard connection != nil else {
+            pendingOutgoingMessages.append((conversationId: conversationId, content: trimmed))
+            return
+        }
+
+        guard hasJoinedConversation || isConnected else {
+            pendingOutgoingMessages.append((conversationId: conversationId, content: trimmed))
+            joinConversation(conversationId: conversationId)
+            return
+        }
+
+        invokeSendMessage(conversationId: conversationId, content: trimmed)
+    }
+
+    private func invokeSendMessage(conversationId: Int, content: String) {
         connection?.invoke(method: "SendMessage", conversationId, content) { [weak self] error in
             if let error {
                 Task { @MainActor [weak self] in
                     self?.errorMessage = "Gửi thất bại: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    private func flushPendingMessages() {
+        guard !pendingOutgoingMessages.isEmpty else { return }
+
+        let queued = pendingOutgoingMessages
+        pendingOutgoingMessages.removeAll()
+        for message in queued {
+            invokeSendMessage(conversationId: message.conversationId, content: message.content)
         }
     }
 

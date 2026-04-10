@@ -11,6 +11,7 @@ final class VictimChatViewModel: ObservableObject {
     @Published var topicSuggestions: [TopicSuggestion] = []
     @Published var aiGreetingMessage: String?
     @Published var sosRequests: [SosRequestDto] = []
+    @Published var linkedSosRequestId: Int?
 
     // MARK: - UI state
     @Published var phase: ChatPhase = .loading
@@ -78,6 +79,11 @@ final class VictimChatViewModel: ObservableObject {
             conversationId = conv.conversationId
             aiGreetingMessage = conv.aiGreetingMessage
             topicSuggestions = conv.topicSuggestions
+            linkedSosRequestId = conv.linkedSosRequestId
+
+            if conv.linkedSosRequestId != nil {
+                await loadQuickDispatchSosRequestsIfNeeded()
+            }
 
             switch conv.status {
             case .aiAssist:
@@ -107,10 +113,12 @@ final class VictimChatViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let resp = try await api.selectTopic(conversationId: convId, topicKey: topicKey)
-            appendAiMessage(resp.aiResponseMessage, convId: convId)
+            if topicKey != "SosRequestSupport" {
+                appendAiMessage(resp.aiResponseMessage, convId: convId)
+            }
 
             if topicKey == "SosRequestSupport", let list = resp.sosRequests, !list.isEmpty {
-                sosRequests = list
+                sosRequests = list.sorted { $0.id > $1.id }
                 phase = .selectingSos
             } else {
                 phase = .waitingCoordinator
@@ -129,7 +137,7 @@ final class VictimChatViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let resp = try await api.linkSosRequest(conversationId: convId, sosRequestId: sosRequestId)
-            appendAiMessage(resp.aiConfirmationMessage, convId: convId)
+            linkedSosRequestId = resp.linkedSosRequestId
             phase = .waitingCoordinator
             connectSignalR()
         } catch {
@@ -177,6 +185,37 @@ final class VictimChatViewModel: ObservableObject {
         }
     }
 
+    func sendSosQuickDispatchCard(_ sos: SosRequestDto) {
+        guard let convId = conversationId else { return }
+
+        let session = AuthSessionStore.shared.session
+        let sharedByName = session?.fullName ?? session?.username
+        let payload = SosQuickDispatchCardPayload.from(sos: sos, sharedByName: sharedByName)
+        sendMessageContent(payload.encodedMessageContent(), conversationId: convId)
+    }
+
+    func loadQuickDispatchSosRequestsIfNeeded(forceReload: Bool = false) async {
+        if forceReload == false, !sosRequests.isEmpty { return }
+
+        guard let records = await APIService.shared.fetchMySOS() else { return }
+
+        var seenIds = Set<Int>()
+        let mapped = records
+            .map(Self.mapServerSOSRecord)
+            .filter { seenIds.insert($0.id).inserted }
+            .sorted { lhs, rhs in
+                if let leftDate = Self.parseServerDate(lhs.createdAt),
+                   let rightDate = Self.parseServerDate(rhs.createdAt) {
+                    return leftDate > rightDate
+                }
+                return lhs.id > rhs.id
+            }
+
+        if !mapped.isEmpty {
+            sosRequests = mapped
+        }
+    }
+
     func cleanup() {
         historySyncTask?.cancel()
         historySyncTask = nil
@@ -203,6 +242,7 @@ final class VictimChatViewModel: ObservableObject {
         topicSuggestions = []
         aiGreetingMessage = nil
         sosRequests = []
+        linkedSosRequestId = nil
         inputText = ""
         phase = .loading
 
@@ -307,6 +347,25 @@ final class VictimChatViewModel: ObservableObject {
         chatService.sendMessage(conversationId: conversationId, content: trimmed)
     }
 
+    private static func mapServerSOSRecord(_ record: SOSServerRecord) -> SosRequestDto {
+        SosRequestDto(
+            id: record.id,
+            sosType: record.sosType,
+            msg: record.rawMessage,
+            status: record.status ?? "Pending",
+            priorityLevel: record.priorityLevel,
+            waitTimeMinutes: record.waitTimeMinutes,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            createdAt: record.createdAt
+        )
+    }
+
+    private static func parseServerDate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        return ISO8601DateFormatter().date(from: raw)
+    }
+
     private func startHistorySyncLoop() {
         historySyncTask?.cancel()
         historySyncTask = Task { [weak self] in
@@ -321,6 +380,11 @@ final class VictimChatViewModel: ObservableObject {
 
     private func resumeConversation(from summary: VictimConversationSummary) async {
         conversationId = summary.conversationId
+        linkedSosRequestId = summary.linkedSosRequestId
+
+        if summary.linkedSosRequestId != nil {
+            await loadQuickDispatchSosRequestsIfNeeded()
+        }
 
         switch summary.status {
         case .aiAssist:

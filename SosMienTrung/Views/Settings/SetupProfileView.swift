@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MultipeerConnectivity
+import UIKit
 
 enum VietnamPhoneNumber {
     static func sanitizedInput(_ raw: String) -> String {
@@ -64,6 +65,7 @@ struct SetupProfileView: View {
     @State private var otpCode = ""
     @Binding var isSetupComplete: Bool
     @FocusState private var focusedField: Field?
+    @State private var isRescuerPasswordFocused = false
     
     enum Field {
         case name, phone, password, confirmPassword, rescuerEmail, rescuerPassword, otp
@@ -129,10 +131,10 @@ struct SetupProfileView: View {
                                 Image(systemName: "shield.lefthalf.filled")
                                     .foregroundColor(isRescuerMode ? DS.Colors.warning : DS.Colors.textTertiary)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Lính cứu trợ")
+                                    Text("Cứu hộ viên")
                                         .font(DS.Typography.subheadline.bold())
                                         .foregroundColor(DS.Colors.text)
-                                    Text("Đăng nhập với tư cách Rescuer")
+                                    Text("Đăng nhập với tư cách cứu hộ viên")
                                         .font(DS.Typography.caption)
                                         .foregroundColor(DS.Colors.textSecondary)
                                 }
@@ -175,6 +177,11 @@ struct SetupProfileView: View {
                                             .keyboardType(.emailAddress)
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
+                                            .submitLabel(.next)
+                                            .onSubmit {
+                                                focusedField = nil
+                                                isRescuerPasswordFocused = true
+                                            }
                                             .foregroundColor(DS.Colors.text)
                                             .focused($focusedField, equals: .rescuerEmail)
                                     }
@@ -194,21 +201,27 @@ struct SetupProfileView: View {
                                             .foregroundColor(DS.Colors.accent)
                                             .frame(width: 20)
                                         
-                                        Group {
-                                            if showPassword {
-                                                TextField("Nhập mật khẩu", text: $rescuerPassword)
-                                            } else {
-                                                SecureField("Nhập mật khẩu", text: $rescuerPassword)
-                                            }
-                                        }
-                                        .textContentType(.password)
+                                        PasswordVisibilityTextField(
+                                            text: $rescuerPassword,
+                                            placeholder: "Nhập mật khẩu",
+                                            isSecure: Binding(
+                                                get: { !showPassword },
+                                                set: { showPassword = !$0 }
+                                            ),
+                                            isFocused: $isRescuerPasswordFocused
+                                        )
+                                        .frame(maxWidth: .infinity, minHeight: 22)
                                         .foregroundColor(DS.Colors.text)
-                                        .focused($focusedField, equals: .rescuerPassword)
                                         
-                                        Button { showPassword.toggle() } label: {
+                                        Button {
+                                            showPassword.toggle()
+                                            focusedField = nil
+                                            isRescuerPasswordFocused = true
+                                        } label: {
                                             Image(systemName: showPassword ? "eye.slash" : "eye")
                                                 .foregroundColor(DS.Colors.textSecondary)
                                         }
+                                        .buttonStyle(.plain)
                                     }
                                     .padding(DS.Spacing.sm)
                                     .background(DS.Colors.surface)
@@ -512,6 +525,7 @@ struct SetupProfileView: View {
         .simultaneousGesture(
             TapGesture().onEnded {
                 focusedField = nil
+                isRescuerPasswordFocused = false
             }
         )
     }
@@ -954,6 +968,93 @@ struct SetupProfileView: View {
             errorMessage = error.localizedDescription
         }
         showError = true
+    }
+}
+
+private struct PasswordVisibilityTextField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    @Binding var isSecure: Bool
+    @Binding var isFocused: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.placeholder = placeholder
+        textField.text = text
+        textField.isSecureTextEntry = isSecure
+        textField.textContentType = nil
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.spellCheckingType = .no
+        textField.smartDashesType = .no
+        textField.smartQuotesType = .no
+        textField.smartInsertDeleteType = .no
+        textField.borderStyle = .none
+        textField.backgroundColor = .clear
+        textField.returnKeyType = .done
+        textField.clearButtonMode = .never
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+
+        if uiView.placeholder != placeholder {
+            uiView.placeholder = placeholder
+        }
+
+        if uiView.isSecureTextEntry != isSecure {
+            let wasFirstResponder = uiView.isFirstResponder
+            let existingText = uiView.text
+
+            uiView.isSecureTextEntry = isSecure
+            uiView.text = existingText
+
+            if wasFirstResponder {
+                uiView.becomeFirstResponder()
+                let endPosition = uiView.endOfDocument
+                uiView.selectedTextRange = uiView.textRange(from: endPosition, to: endPosition)
+            }
+        }
+
+        if isFocused && !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        } else if !isFocused && uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        private var parent: PasswordVisibilityTextField
+
+        init(_ parent: PasswordVisibilityTextField) {
+            self.parent = parent
+        }
+
+        @objc func textDidChange(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return true
+        }
     }
 }
 

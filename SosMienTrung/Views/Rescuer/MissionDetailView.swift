@@ -6,8 +6,11 @@ struct MissionDetailView: View {
     @StateObject private var incidentVM = IncidentViewModel()
     @ObservedObject private var authSession = AuthSessionStore.shared
     @State private var showReportIncident = false
+    @State private var showMissionReport = false
     @State private var showAggregateRoute = false
     @State private var showMissionInventory = false
+    @State private var pickupConfirmationActivity: Activity?
+    @State private var deliveryConfirmationActivity: Activity?
     @State private var missionStatus: String
 
     init(mission: Mission) {
@@ -53,8 +56,8 @@ struct MissionDetailView: View {
 
                 if canViewMissionWorkspace {
                     sectionHeader(
-                        title: "Danh sách hoạt động",
-                        subtitle: "\(activityCount) hoạt động cần theo dõi"
+                        title: "Các bước thực hiện",
+                        subtitle: "\(activityCount) bước cần theo dõi"
                     )
 
                     if pendingActivitySyncCount > 0 {
@@ -64,13 +67,6 @@ struct MissionDetailView: View {
                     activitiesSection
 
                     inventorySection
-
-                    sectionHeader(
-                        title: "Báo cáo nhiệm vụ",
-                        subtitle: "Cập nhật kết quả và tiến độ của đội"
-                    )
-
-                    reportSection
 
                     incidentSectionHeader
 
@@ -90,23 +86,50 @@ struct MissionDetailView: View {
         .toolbar {
             if canViewMissionWorkspace {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        vm.triggerMissionActivitySync(reason: .manualRefresh)
-                        vm.loadActivities(missionId: mission.id)
-                        incidentVM.loadIncidents(missionId: mission.id)
+                    Menu {
+                        Button {
+                            refreshMissionWorkspace(triggerSync: true)
+                        } label: {
+                            Label("Làm mới", systemImage: "arrow.clockwise")
+                        }
+
+                        if canReportMissionIncidents {
+                            Button {
+                                showReportIncident = true
+                            } label: {
+                                Label("Báo cáo sự cố", systemImage: "exclamationmark.triangle")
+                            }
+                        }
+
+                        if shouldShowMissionReportMenuItem {
+                            Button {
+                                showMissionReport = true
+                            } label: {
+                                Label("Báo cáo nhiệm vụ", systemImage: "doc.text")
+                            }
+                        }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: "ellipsis.circle")
                     }
                     .foregroundColor(DS.Colors.accent)
                 }
             }
         }
-        .sheet(isPresented: $showReportIncident) {
+        .navigationDestination(isPresented: $showReportIncident) {
             ReportIncidentView(
                 mission: mission,
                 activities: displayedActivities,
                 incidentVM: incidentVM
             )
+        }
+        .navigationDestination(isPresented: $showMissionReport) {
+            if let teamId = missionTeamId {
+                MissionTeamReportView(
+                    missionId: mission.id,
+                    missionTeamId: teamId,
+                    missionTitle: mission.title
+                )
+            }
         }
         .sheet(isPresented: $showAggregateRoute) {
             NavigationStack {
@@ -137,6 +160,37 @@ struct MissionDetailView: View {
                 }
             }
         }
+        .sheet(item: $pickupConfirmationActivity) { activity in
+            NavigationStack {
+                PickupConfirmationSheet(
+                    activity: activity,
+                    isSubmitting: vm.isLoadingActivities
+                ) { bufferUsages in
+                    await vm.confirmPickup(
+                        missionId: mission.id,
+                        activityId: activity.id,
+                        bufferUsages: bufferUsages
+                    )
+                }
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $deliveryConfirmationActivity) { activity in
+            NavigationStack {
+                DeliveryConfirmationSheet(
+                    activity: activity,
+                    isSubmitting: vm.isLoadingActivities
+                ) { actualDeliveredItems, deliveryNote in
+                    await vm.confirmDelivery(
+                        missionId: mission.id,
+                        activityId: activity.id,
+                        actualDeliveredItems: actualDeliveredItems,
+                        deliveryNote: deliveryNote
+                    )
+                }
+            }
+            .presentationDetents([.large])
+        }
         .alert("Lỗi", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
@@ -155,8 +209,7 @@ struct MissionDetailView: View {
         }
         .onAppear {
             guard canViewMissionWorkspace else { return }
-            vm.loadActivities(missionId: mission.id)
-            incidentVM.loadIncidents(missionId: mission.id)
+            refreshMissionWorkspace()
         }
     }
 
@@ -232,7 +285,7 @@ struct MissionDetailView: View {
 
             HStack(spacing: DS.Spacing.sm) {
                 infoChip(
-                    title: "Số hoạt động",
+                    title: "Số bước",
                     value: "\(activityCount)",
                     icon: "checklist"
                 )
@@ -299,7 +352,7 @@ struct MissionDetailView: View {
         if vm.isLoadingActivities && list.isEmpty {
             HStack(spacing: DS.Spacing.sm) {
                 ProgressView()
-                Text("Đang tải hoạt động...")
+                Text("Đang tải các bước thực hiện...")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
             }
@@ -317,10 +370,10 @@ struct MissionDetailView: View {
                 Image(systemName: "checklist")
                     .font(.system(size: 32))
                     .foregroundColor(DS.Colors.textTertiary)
-                Text("Chưa có hoạt động nào")
+                Text("Chưa có bước thực hiện nào")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.textSecondary)
-                Text("Nhiệm vụ này chưa có hoạt động được phân công cho team.")
+                Text("Nhiệm vụ này chưa có bước thực hiện nào được phân công cho đội.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -341,18 +394,7 @@ struct MissionDetailView: View {
                         activity: activity,
                         pendingSyncState: vm.pendingSyncState(missionId: mission.id, activityId: activity.id),
                         onStatusChange: { status in
-                            guard canUpdateActivityStatus else { return }
-
-                            guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else {
-                                return
-                            }
-
-                            vm.updateActivity(
-                                missionId: mission.id,
-                                activityId: activity.id,
-                                status: status,
-                                knownActivities: list
-                            )
+                            handleActivityStatusChange(status, for: activity, within: list)
                         },
                         allowsCompletionActions: canUpdateActivityStatus
                             && missionActivityActionIsUnlocked(activity, within: list)
@@ -411,116 +453,105 @@ struct MissionDetailView: View {
     }
 
     @ViewBuilder
-    private var reportSection: some View {
-        if canOpenMissionReports, let teamId = missionTeamId {
-            NavigationLink(destination: MissionTeamReportView(
-                missionId: mission.id,
-                missionTeamId: teamId,
-                missionTitle: mission.title
-            )) {
-                HStack(spacing: DS.Spacing.md) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(DS.Colors.accent)
-                        .frame(width: 42, height: 42)
-                        .background(DS.Colors.accent.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Mở báo cáo đội")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(DS.Colors.text)
-
-                        Text("Lưu nháp, cập nhật kết quả từng hoạt động và nộp báo cáo cuối kỳ.")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(DS.Colors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if let teamStatus = mission.teams?.first?.status, teamStatus.isEmpty == false {
-                            StatusBadge(text: teamStatus, color: missionStatusColor(teamStatus))
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(DS.Colors.textTertiary)
-                }
-                .padding(DS.Spacing.md)
-                .sharpCard(
-                    borderColor: DS.Colors.borderSubtle,
-                    borderWidth: DS.Border.thin,
-                    shadow: DS.Shadow.none,
-                    backgroundColor: DS.Colors.surface,
-                    radius: 16
-                )
-            }
-            .buttonStyle(.plain)
-        } else {
-            HStack(spacing: DS.Spacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(DS.Colors.warning)
-                Text(canOpenMissionReports
-                    ? "Không tìm thấy đội được gán với nhiệm vụ này để mở báo cáo."
-                    : "Tài khoản hiện tại chưa được cấp quyền mở báo cáo đội.")
-                    .font(DS.Typography.caption)
-                    .foregroundColor(DS.Colors.textSecondary)
-            }
-            .padding(DS.Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .sharpCard(
-                borderColor: DS.Colors.warning.opacity(0.25),
-                borderWidth: DS.Border.thin,
-                shadow: DS.Shadow.none,
-                backgroundColor: DS.Colors.surface,
-                radius: 16
-            )
-        }
-    }
-
-    @ViewBuilder
     private var inventorySection: some View {
         if inventoryEntryCount > 0 {
             Button {
                 showMissionInventory = true
             } label: {
-                HStack(spacing: DS.Spacing.md) {
-                    Image(systemName: "shippingbox.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(DS.Colors.info)
-                        .frame(width: 42, height: 42)
-                        .background(DS.Colors.info.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                    HStack(alignment: .top, spacing: DS.Spacing.md) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            DS.Colors.info.opacity(0.16),
+                                            DS.Colors.info.opacity(0.06)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 52, height: 52)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Inventory nhiệm vụ")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(DS.Colors.text)
-
-                        Text("Theo dõi \(inventoryItemTypeCount) loại vật tư và \(inventoryQuantityTotal) đơn vị đang gắn trong các activity của team.")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(DS.Colors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: DS.Spacing.xs) {
-                            StatusBadge(text: "\(inventoryPendingPickupTotal) cần lấy", color: DS.Colors.warning)
-                            StatusBadge(text: "\(inventoryInHandTotal) đang giữ", color: DS.Colors.accent)
-                            StatusBadge(text: "\(inventoryDeliveredTotal) đã giao/dùng", color: DS.Colors.success)
+                            Image(systemName: "shippingbox.fill")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(DS.Colors.info)
                         }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Túi đồ vật phẩm")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(DS.Colors.text)
+
+                            Text("Theo dõi nhanh vật phẩm đội đang cần lấy, đang giữ và đã giao trong nhiệm vụ.")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(DS.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(DS.Colors.textTertiary)
+                            .padding(.top, 6)
                     }
 
-                    Spacer()
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        Text("\(inventoryQuantityTotal)")
+                            .font(.system(size: 32, weight: .black, design: .rounded))
+                            .foregroundColor(DS.Colors.text)
 
-                    Image(systemName: "chevron.right")
+                        Text("đơn vị")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(DS.Colors.textSecondary)
+
+                        Spacer()
+
+                        Text("\(inventoryItemTypeCount) loại vật phẩm")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(DS.Colors.info)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(DS.Colors.info.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+
+                    HStack(spacing: DS.Spacing.sm) {
+                        inventoryMetricTile(
+                            title: "Cần lấy",
+                            value: inventoryPendingPickupTotal,
+                            color: DS.Colors.warning,
+                            icon: "tray.and.arrow.down.fill"
+                        )
+
+                        inventoryMetricTile(
+                            title: "Đang giữ",
+                            value: inventoryInHandTotal,
+                            color: DS.Colors.accent,
+                            icon: "shippingbox.circle.fill"
+                        )
+
+                        inventoryMetricTile(
+                            title: "Đã giao",
+                            value: inventoryDeliveredTotal,
+                            color: DS.Colors.success,
+                            icon: "checkmark.circle.fill"
+                        )
+                    }
+
+                    Text("Mở để xem chi tiết từng vật phẩm theo bước và trạng thái xử lý.")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.textTertiary)
                 }
                 .padding(DS.Spacing.md)
                 .sharpCard(
-                    borderColor: DS.Colors.borderSubtle,
+                    borderColor: DS.Colors.info.opacity(0.18),
                     borderWidth: DS.Border.thin,
                     shadow: DS.Shadow.none,
                     backgroundColor: DS.Colors.surface,
-                    radius: 16
+                    radius: 20
                 )
             }
             .buttonStyle(.plain)
@@ -528,33 +559,14 @@ struct MissionDetailView: View {
     }
 
     private var incidentSectionHeader: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Sự cố trong nhiệm vụ")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(DS.Colors.text)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Sự cố trong nhiệm vụ")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(DS.Colors.text)
 
-                Text("Theo dõi tình huống phát sinh và báo ngay khi cần hỗ trợ")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
-            }
-
-            Spacer()
-
-            if canReportMissionIncidents {
-                Button { showReportIncident = true } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text("Báo sự cố")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, DS.Spacing.sm)
-                    .padding(.vertical, 10)
-                    .background(DS.Colors.accent)
-                    .clipShape(Capsule())
-                }
-            }
+            Text("Theo dõi tình huống phát sinh và báo ngay khi cần hỗ trợ")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
         }
     }
 
@@ -592,6 +604,31 @@ struct MissionDetailView: View {
         }
     }
 
+    private func inventoryMetricTile(title: String, value: Int, color: Color, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(color)
+
+            Text("\(value)")
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundColor(DS.Colors.text)
+
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(color.opacity(0.22), lineWidth: 1)
+        )
+    }
+
     private func missionStatusColor(_ status: String) -> Color {
         switch normalizedStatus(status) {
         case "ongoing", "inprogress":
@@ -612,6 +649,17 @@ struct MissionDetailView: View {
     private var shouldShowStartMissionButton: Bool {
         switch normalizedStatus(missionStatus) {
         case "planned", "pending", "scheduled":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var shouldShowMissionReportMenuItem: Bool {
+        guard canOpenMissionReports, missionTeamId != nil else { return false }
+
+        switch normalizedStatus(missionStatus) {
+        case "completed", "finished":
             return true
         default:
             return false
@@ -674,6 +722,38 @@ struct MissionDetailView: View {
         }
     }
 
+    private func refreshMissionWorkspace(triggerSync: Bool = false) {
+        if triggerSync {
+            vm.triggerMissionActivitySync(reason: .manualRefresh)
+        }
+        vm.loadActivities(missionId: mission.id)
+        incidentVM.loadIncidents(missionId: mission.id)
+    }
+
+    private func handleActivityStatusChange(_ status: String, for activity: Activity, within knownActivities: [Activity]) {
+        guard canUpdateActivityStatus else { return }
+        guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else { return }
+
+        if status.caseInsensitiveCompare(ActivityStatus.succeed.rawValue) == .orderedSame {
+            if activity.isCollectSuppliesActivity {
+                pickupConfirmationActivity = activity
+                return
+            }
+
+            if activity.isDeliverSuppliesActivity {
+                deliveryConfirmationActivity = activity
+                return
+            }
+        }
+
+        vm.updateActivity(
+            missionId: mission.id,
+            activityId: activity.id,
+            status: status,
+            knownActivities: knownActivities
+        )
+    }
+
     private func normalizedStatus(_ status: String) -> String {
         RescuerStatusBadgeText.normalized(status)
     }
@@ -715,7 +795,7 @@ struct MissionDetailView: View {
 
     private var inventoryItemTypeCount: Int {
         Set(inventoryEntries.map {
-            let name = $0.supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Vật tư"
+            let name = $0.supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Vật phẩm"
             let unit = $0.supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return "\(name)|\(unit)"
         }).count

@@ -112,7 +112,7 @@ final class RescueTeamService {
             CheckInRequestBody(latitude: latitude, longitude: longitude)
         )
 
-        print("[RescueTeamService] → POST \(url.absoluteString)")
+        print("[RescueTeamService] → POST \(url.absoluteString) lat=\(latitude) lon=\(longitude)")
 
         do {
             let (data, response) = try await session.data(for: request)

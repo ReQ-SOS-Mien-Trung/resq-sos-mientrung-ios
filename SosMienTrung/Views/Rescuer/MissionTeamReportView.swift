@@ -282,7 +282,7 @@ struct MissionTeamReportView: View {
                     MissionReportTextEditor(
                         title: "Ghi chú hoàn tất",
                         text: $completionNote,
-                        placeholder: "Ví dụ: Đường vào bị ngập, đã đưa nạn nhân đến khu an toàn và bàn giao vật tư hỗ trợ.",
+                        placeholder: "Ví dụ: Đường vào bị ngập, đã đưa nạn nhân đến khu an toàn và bàn giao vật phẩm hỗ trợ.",
                         caption: "Ghi chú này sẽ đi kèm mốc hoàn tất thực địa của đội.",
                         isEditable: true,
                         minHeight: 104

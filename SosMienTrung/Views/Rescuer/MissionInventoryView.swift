@@ -126,7 +126,7 @@ struct MissionInventoryView: View {
             return (activity.suppliesToCollect ?? []).map { supply in
                 MissionInventoryEntry(
                     id: "\(activity.id)-\(supply.id)",
-                    itemName: supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật tư",
+                    itemName: supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm",
                     quantity: supply.quantity,
                     unit: supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
                     activityId: activity.id,
@@ -185,7 +185,7 @@ struct MissionInventoryView: View {
         [
             MissionInventorySummaryMetric(
                 id: "items",
-                title: "Loại vật tư",
+                title: "Loại vật phẩm",
                 value: "\(Set(inventoryEntries.map(\.id)).count == 0 ? 0 : Set(inventoryEntries.map { "\($0.itemName)|\($0.unit ?? "")" }).count)",
                 color: DS.Colors.info
             ),
@@ -229,8 +229,8 @@ struct MissionInventoryView: View {
 
                 if inventoryEntries.isEmpty {
                     IncidentFormSection(
-                        title: "Chưa có vật tư nào gắn với mission",
-                        subtitle: "Backend hiện chỉ trả vật tư qua `activities.suppliesToCollect`. Mission này chưa có activity nào chứa vật tư."
+                        title: "Chưa có vật phẩm nào gắn với mission",
+                        subtitle: "Backend hiện chỉ trả vật phẩm qua `activities.suppliesToCollect`. Mission này chưa có activity nào chứa vật phẩm."
                     ) {
                         IncidentInlineNotice(
                             icon: "shippingbox",
@@ -247,21 +247,86 @@ struct MissionInventoryView: View {
             .padding(DS.Spacing.md)
         }
         .background(DS.Colors.background.ignoresSafeArea())
-        .navigationTitle("Inventory nhiệm vụ")
+        .navigationTitle("Túi đồ vật phẩm")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "MISSION INVENTORY", color: DS.Colors.info)
-            Text(missionTitle)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(DS.Colors.text)
-            Text("Tổng hợp vật tư từ dữ liệu mission hiện có để đội rescuer theo dõi vật tư cần lấy, đang giữ, đã giao hoặc cần hoàn trả.")
-                .font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(alignment: .top, spacing: DS.Spacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    DS.Colors.info.opacity(0.18),
+                                    DS.Colors.info.opacity(0.06)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    EyebrowLabel(text: "TÚI ĐỒ NHIỆM VỤ", color: DS.Colors.info)
+                    Text(missionTitle)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text("Theo dõi vật phẩm từ các activity của đội để biết món nào cần lấy, đang giữ, đã giao hoặc đang trong luồng hoàn trả.")
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
+                Text("\(totalQuantityCount)")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundColor(DS.Colors.text)
+
+                Text("đơn vị")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                Text("\(itemTypeCount) loại")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.info)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(DS.Colors.info.opacity(0.08))
+                    .clipShape(Capsule())
+            }
         }
+        .padding(DS.Spacing.md)
+        .sharpCard(
+            borderColor: DS.Colors.info.opacity(0.18),
+            borderWidth: DS.Border.thin,
+            shadow: DS.Shadow.none,
+            backgroundColor: DS.Colors.surface,
+            radius: 20
+        )
+    }
+
+    private var headlineSummaryMetrics: [MissionInventorySummaryMetric] {
+        summaryMetrics.filter { ["pickup", "inhand", "delivered"].contains($0.id) }
+    }
+
+    private var itemTypeCount: Int {
+        Set(inventoryEntries.map { "\($0.itemName)|\($0.unit ?? "")" }).count
+    }
+
+    private var totalQuantityCount: Int {
+        inventoryEntries.reduce(0) { $0 + $1.quantity }
     }
 
     private var summarySection: some View {
@@ -270,33 +335,33 @@ struct MissionInventoryView: View {
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(DS.Colors.text)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: DS.Spacing.sm)], spacing: DS.Spacing.sm) {
-                ForEach(summaryMetrics) { metric in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(metric.value)
-                            .font(.system(size: 24, weight: .black, design: .rounded))
-                            .foregroundColor(metric.color)
-                        Text(metric.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(DS.Colors.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                    .padding(DS.Spacing.sm)
-                    .sharpCard(
-                        borderColor: metric.color.opacity(0.18),
-                        borderWidth: DS.Border.thin,
-                        shadow: DS.Shadow.none,
-                        backgroundColor: DS.Colors.surface,
-                        radius: 14
-                    )
+            HStack(spacing: DS.Spacing.sm) {
+                ForEach(headlineSummaryMetrics) { metric in
+                    inventorySummaryTile(metric: metric, emphasized: true)
                 }
+            }
+
+            HStack(spacing: DS.Spacing.sm) {
+                infoStripCard(
+                    title: "Tổng số lượng",
+                    value: "\(totalQuantityCount)",
+                    color: DS.Colors.accent,
+                    icon: "sum"
+                )
+
+                infoStripCard(
+                    title: "Hoàn trả",
+                    value: "\(quantity(for: [.readyForReturn, .returning, .returned]))",
+                    color: DS.Colors.textSecondary,
+                    icon: "arrow.uturn.backward.circle"
+                )
             }
         }
     }
 
     private var filterSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            Text("Lọc theo vòng đời vật tư")
+            Text("Lọc theo vòng đời vật phẩm")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(DS.Colors.text)
 
@@ -320,13 +385,96 @@ struct MissionInventoryView: View {
 
     private var inventoryListSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            Text("Danh sách vật tư")
+            Text("Danh sách vật phẩm")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(DS.Colors.text)
 
             ForEach(groupedEntries) { group in
                 MissionInventoryGroupCard(group: group)
             }
+        }
+    }
+
+    private func inventorySummaryTile(metric: MissionInventorySummaryMetric, emphasized: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Circle()
+                .fill(metric.color.opacity(0.14))
+                .frame(width: 30, height: 30)
+                .overlay(
+                    Circle()
+                        .stroke(metric.color.opacity(0.18), lineWidth: 1)
+                )
+                .overlay(
+                    Image(systemName: iconName(for: metric.id))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(metric.color)
+                )
+
+            Text(metric.value)
+                .font(.system(size: emphasized ? 26 : 22, weight: .black, design: .rounded))
+                .foregroundColor(DS.Colors.text)
+
+            Text(metric.title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: emphasized ? 108 : 88, alignment: .leading)
+        .padding(DS.Spacing.sm)
+        .background(metric.color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(metric.color.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private func infoStripCard(title: String, value: String, color: Color, icon: String) -> some View {
+        HStack(spacing: DS.Spacing.sm) {
+            Circle()
+                .fill(color.opacity(0.12))
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(color)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textSecondary)
+                Text(value)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(DS.Colors.text)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.xs)
+        .background(DS.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(color.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private func iconName(for metricId: String) -> String {
+        switch metricId {
+        case "pickup":
+            return "tray.and.arrow.down.fill"
+        case "inhand":
+            return "shippingbox.circle.fill"
+        case "delivered":
+            return "checkmark.circle.fill"
+        case "returned":
+            return "arrow.uturn.backward.circle.fill"
+        case "quantity":
+            return "sum"
+        default:
+            return "shippingbox.fill"
         }
     }
 
@@ -417,12 +565,23 @@ private struct MissionInventoryGroupCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(DS.Colors.info.opacity(0.08))
+                        .frame(width: 42, height: 42)
+
+                    Image(systemName: "cross.case.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(group.itemName)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundColor(DS.Colors.text)
-                    Text("Tổng: \(group.totalQuantity)\(group.unit.map { " \($0)" } ?? "") • \(group.entries.count) allocation")
-                        .font(.system(size: 12, weight: .medium))
+
+                    Text("\(group.totalQuantity)\(group.unit.map { " \($0)" } ?? "") • \(group.entries.count) phân bổ")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(DS.Colors.textSecondary)
                 }
 

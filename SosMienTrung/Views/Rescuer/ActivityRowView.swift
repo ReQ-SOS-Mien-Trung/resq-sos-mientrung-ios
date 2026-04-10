@@ -281,10 +281,15 @@ struct ActivityRowView: View {
         guard isStatusEditable else { return [] }
 
         switch activity.activityStatus {
-        case .planned, .onGoing:
+        case .onGoing:
             guard allowsCompletionActions else { return [] }
             return [
-                ActivityAction(label: "Hoàn thành", icon: "checkmark.circle.fill", color: DS.Colors.success, status: "Succeed"),
+                ActivityAction(
+                    label: primaryCompleteActionLabel,
+                    icon: primaryCompleteActionIcon,
+                    color: DS.Colors.success,
+                    status: "Succeed"
+                ),
                 ActivityAction(label: "Thất bại", icon: "xmark.circle.fill", color: DS.Colors.accent, status: "Failed")
             ]
         default:
@@ -385,7 +390,7 @@ struct ActivityRowView: View {
             let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
             let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật tư"
+            let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật phẩm"
             let unitLabel = (unit?.isEmpty == false ? " \(unit!)" : "")
             return "\(itemLabel) \(quantity)\(unitLabel)"
         }
@@ -394,27 +399,45 @@ struct ActivityRowView: View {
             return rows
         }
 
-        return Array(rows.prefix(2)) + ["+\(rows.count - 2) vật tư khác"]
+        return Array(rows.prefix(2)) + ["+\(rows.count - 2) vật phẩm khác"]
     }
 
     private var normalizedActivityTypeKey: String {
-        (activity.activityType ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .lowercased()
+        activity.normalizedActivityTypeKey
+    }
+
+    private var primaryCompleteActionLabel: String {
+        switch normalizedActivityTypeKey {
+        case "collectsupplies":
+            return "Xác nhận tiếp nhận"
+        case "deliversupplies":
+            return "Xác nhận phân phát"
+        default:
+            return "Hoàn thành"
+        }
+    }
+
+    private var primaryCompleteActionIcon: String {
+        switch normalizedActivityTypeKey {
+        case "collectsupplies":
+            return "shippingbox.fill"
+        case "deliversupplies":
+            return "arrowshape.turn.up.right.circle.fill"
+        default:
+            return "checkmark.circle.fill"
+        }
     }
 
     private var supplyOverviewTitle: String {
         switch normalizedActivityTypeKey {
         case "collectsupplies":
-            return "Cần lấy ở bước này"
+            return "Cần tiếp nhận ở bước này"
         case "deliversupplies":
-            return "Cần giao ở bước này"
+            return "Cần phân phát ở bước này"
         case "medicalaid", "medicalsupport", "medical":
-            return "Vật tư sử dụng ở bước này"
+            return "Vật phẩm sử dụng ở bước này"
         default:
-            return "Vật tư liên quan"
+            return "Vật phẩm liên quan"
         }
     }
 
@@ -446,7 +469,7 @@ struct ActivityRowView: View {
 
     private var detailItems: [ActivityDetailItem] {
         [
-            detailItem("Loại hoạt động", activity.localizedActivityType, icon: "tag"),
+            detailItem("Loại bước thực hiện", activity.localizedActivityType, icon: "tag"),
             detailItem("Công việc", localizedCodeDetailValue, icon: "number"),
             detailItem("Kho tiếp tế", activity.depotName, icon: "shippingbox"),
             detailItem("Địa chỉ kho", activity.depotAddress, icon: "mappin.and.ellipse"),
