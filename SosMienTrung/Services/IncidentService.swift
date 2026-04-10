@@ -35,7 +35,7 @@ final class IncidentService {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
+            throw backendError(statusCode: statusCode, data: data)
         }
         return try JSONDecoder().decode(IncidentResponse.self, from: data)
     }
@@ -50,7 +50,7 @@ final class IncidentService {
             throw URLError(.badURL)
         }
 
-        return try await postIncident(url: url, payload: request)
+        return try await postIncident(url: url, payload: try request.asAPIRequest())
     }
 
     // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/activity-incident
@@ -63,7 +63,7 @@ final class IncidentService {
             throw URLError(.badURL)
         }
 
-        return try await postIncident(url: url, payload: request)
+        return try await postIncident(url: url, payload: try request.asAPIRequest())
     }
 
     // MARK: - GET /operations/team-incidents/by-mission/{missionId}
@@ -74,7 +74,9 @@ final class IncidentService {
         print("[IncidentService] → GET \(url.absoluteString)")
         let (data, response) = try await session.data(for: authorizedRequest(url: url))
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
+        guard (200...299).contains(statusCode) else {
+            throw backendError(statusCode: statusCode, data: data)
+        }
         return try JSONDecoder().decode(MissionIncidentsResponse.self, from: data).incidents
     }
 
@@ -91,7 +93,44 @@ final class IncidentService {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(statusCode) else {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
+            throw backendError(statusCode: statusCode, data: data)
+        }
+    }
+
+    private func backendError(statusCode: Int, data: Data) -> Error {
+        let message = extractBackendErrorMessage(from: data)
+        if message.isEmpty {
+            return IncidentServiceError.backend("Máy chủ trả về lỗi \(statusCode).")
+        }
+        return IncidentServiceError.backend(message)
+    }
+
+    private func extractBackendErrorMessage(from data: Data) -> String {
+        guard !data.isEmpty else { return "" }
+
+        if let decoded = APIErrorResponse.decode(from: data), decoded.message.isEmpty == false {
+            return decoded.message
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "error", "detail", "title"] {
+                if let value = object[key] as? String, value.isEmpty == false {
+                    return value
+                }
+            }
+        }
+
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}
+
+private enum IncidentServiceError: LocalizedError {
+    case backend(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .backend(message):
+            return message
         }
     }
 }
