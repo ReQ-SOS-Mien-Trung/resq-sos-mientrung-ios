@@ -333,7 +333,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         guard shouldCreateRescueData else { return nil }
 
         var rescueData = RescueData()
-        rescueData.situation = incident?.situation.flatMap(RescueSituation.init(rawValue:))
+        rescueData.situation = incident?.situation
         rescueData.otherSituationDescription = incident?.otherSituationDescription ?? ""
         rescueData.peopleCount = peopleCount
         rescueData.people = sharedPeople
@@ -341,9 +341,9 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         rescueData.otherMedicalDescription = incident?.otherMedicalDescription ?? ""
         rescueData.othersAreStable = incident?.othersAreStable ?? false
 
-        var allMedicalIssues: Set<MedicalIssue> = []
+        var allMedicalIssues: Set<String> = []
         for victim in victims where victim.incidentStatus.isInjured || !victim.incidentStatus.medicalIssues.isEmpty {
-            let personIssues = Set(victim.incidentStatus.medicalIssues.compactMap(MedicalIssue.init(rawValue:)))
+            let personIssues = Set(victim.incidentStatus.medicalIssues)
             allMedicalIssues.formUnion(personIssues)
             rescueData.injuredPersonIds.insert(victim.personId)
             rescueData.medicalInfoByPerson[victim.personId] = PersonMedicalInfo(
@@ -382,9 +382,9 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         reliefData.peopleCount = peopleCount
         reliefData.supplies = Set((groupNeeds?.supplies ?? []).compactMap(SupplyNeed.init(rawValue:)))
         reliefData.otherSupplyDescription = groupNeeds?.otherSupplyDescription ?? ""
-        reliefData.waterDuration = groupNeeds?.water?.duration.flatMap(WaterDuration.init(rawValue:))
+        reliefData.waterDuration = groupNeeds?.water?.duration
         reliefData.waterRemaining = groupNeeds?.water?.remaining.flatMap(WaterRemaining.init(rawValue:))
-        reliefData.foodDuration = groupNeeds?.food?.duration.flatMap(FoodDuration.init(rawValue:))
+        reliefData.foodDuration = groupNeeds?.food?.duration
         reliefData.needsUrgentMedicine = groupNeeds?.medicine?.needsUrgentMedicine
         reliefData.medicineConditions = Set((groupNeeds?.medicine?.conditions ?? []).compactMap(MedicineCondition.init(rawValue:)))
         reliefData.medicineOtherDescription = groupNeeds?.medicine?.otherDescription ?? ""
@@ -744,13 +744,13 @@ struct SOSSendEvent: Codable, Identifiable, Equatable {
 
 /// Phiên bản lưu trữ của RescueData (Codable friendly)
 struct SavedRescueData: Codable, Equatable {
-    var situation: RescueSituation?
+    var situation: String?
     var otherSituationDescription: String
     var peopleCount: PeopleCount
     var hasInjured: Bool
     var injuredPersonIds: [String]
     var medicalInfoByPerson: [String: PersonMedicalInfo]
-    var medicalIssues: [MedicalIssue]
+    var medicalIssues: [String]
     var otherMedicalDescription: String
     var othersAreStable: Bool
     var people: [Person]
