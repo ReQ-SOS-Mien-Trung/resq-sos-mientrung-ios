@@ -25,7 +25,6 @@ struct PickupConfirmationSheet: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 IncidentFormSection(
                     title: "Xác nhận tiếp nhận vật phẩm",
-                    subtitle: "Gọi `confirm-pickup` trước khi backend chuyển bước này sang trạng thái hoàn thành."
                 ) {
                     VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                         if let depotName = activity.depotName, depotName.isEmpty == false {
@@ -47,8 +46,8 @@ struct PickupConfirmationSheet: View {
                         IncidentInlineNotice(
                             icon: "info.circle.fill",
                             text: hasBufferedItems
-                                ? "Chỉ nhập số buffer thực tế đã dùng. Nếu không dùng buffer, để 0 và xác nhận."
-                                : "Bước này không có buffer dự trù. Bạn chỉ cần xác nhận để hệ thống trừ đúng số lượng kế hoạch."
+                                ? "Chỉ nhập số vật phẩm dự trù thực tế đã dùng. Nếu không dùng vật phẩm dự trù, để 0 và xác nhận."
+                                : "Bước này không có vật phẩm dự trù. Bạn chỉ cần xác nhận để hệ thống trừ đúng số lượng kế hoạch."
                         )
                     }
                 }
@@ -67,7 +66,7 @@ struct PickupConfirmationSheet: View {
                                 )
 
                                 metricChip(
-                                    title: "Buffer dự trù",
+                                    title: "Vật phẩm dự trù",
                                     value: quantityText(drafts[index].bufferAvailable, unit: drafts[index].unit),
                                     tone: DS.Colors.warning
                                 )
@@ -76,7 +75,7 @@ struct PickupConfirmationSheet: View {
                             if drafts[index].bufferAvailable > 0 {
                                 HStack(spacing: DS.Spacing.xs) {
                                     quickActionChip(
-                                        title: "Không dùng",
+                                        title: "Không dùng dự trù",
                                         isSelected: parsedBufferQuantity(at: index) == 0
                                     ) {
                                         drafts[index].usedBufferText = "0"
@@ -84,7 +83,7 @@ struct PickupConfirmationSheet: View {
                                     }
 
                                     quickActionChip(
-                                        title: "Dùng hết buffer",
+                                        title: "Dùng hết dự trù",
                                         isSelected: parsedBufferQuantity(at: index) == drafts[index].bufferAvailable
                                     ) {
                                         drafts[index].usedBufferText = String(drafts[index].bufferAvailable)
@@ -92,7 +91,7 @@ struct PickupConfirmationSheet: View {
                                 }
 
                                 IncidentTextInputField(
-                                    title: "Buffer đã dùng",
+                                    title: "Vật phẩm dự trù đã dùng",
                                     placeholder: "0",
                                     text: bindingForPickupQuantity(at: index),
                                     keyboardType: .numberPad
@@ -104,7 +103,7 @@ struct PickupConfirmationSheet: View {
 
                                 if parsedBufferQuantity(at: index) > 0 {
                                     IncidentTextInputField(
-                                        title: "Lý do dùng buffer",
+                                        title: "Lý do dùng vật phẩm dự trù",
                                         placeholder: "Ví dụ: tăng số hộ dân thực tế, phát sinh thêm nhu cầu tại hiện trường...",
                                         text: bindingForPickupReason(at: index),
                                         axis: .vertical
@@ -113,7 +112,7 @@ struct PickupConfirmationSheet: View {
                             } else {
                                 IncidentInlineNotice(
                                     icon: "checkmark.circle.fill",
-                                    text: "Item này không có buffer dự trù. Backend sẽ trừ đúng số lượng kế hoạch khi bạn xác nhận."
+                                    text: "Vật phẩm này không có phần dự trù. Hệ thống sẽ trừ đúng số lượng kế hoạch khi bạn xác nhận."
                                 )
                             }
                         }
@@ -190,15 +189,15 @@ struct PickupConfirmationSheet: View {
     private var submitSummaryText: String {
         let usedBufferTotal = submitPayload.reduce(0) { $0 + $1.bufferQuantityUsed }
         if usedBufferTotal > 0 {
-            return "Hệ thống sẽ ghi nhận \(usedBufferTotal) đơn vị buffer đã dùng trước khi hoàn tất bước tiếp nhận."
+            return "Hệ thống sẽ ghi nhận \(usedBufferTotal) đơn vị vật phẩm dự trù đã dùng trước khi hoàn tất bước tiếp nhận."
         }
 
-        return "Chưa dùng buffer dự trù. Hệ thống sẽ chỉ trừ số lượng theo kế hoạch."
+        return "Chưa dùng vật phẩm dự trù. Hệ thống sẽ chỉ trừ số lượng theo kế hoạch."
     }
 
     private func pickupCardSubtitle(for draft: PickupBufferDraft) -> String {
         if draft.bufferAvailable > 0 {
-            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Có thể dùng thêm tối đa \(quantityText(draft.bufferAvailable, unit: draft.unit)) buffer"
+            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Có thể dùng thêm tối đa \(quantityText(draft.bufferAvailable, unit: draft.unit)) vật phẩm dự trù"
         }
 
         return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit))"
@@ -232,13 +231,13 @@ struct PickupConfirmationSheet: View {
             return "Vui lòng nhập số nguyên hợp lệ."
         }
         if usedBuffer < 0 {
-            return "Số lượng buffer không được nhỏ hơn 0."
+            return "Số lượng vật phẩm dự trù không được nhỏ hơn 0."
         }
         if usedBuffer > draft.bufferAvailable {
-            return "Buffer đã dùng không được vượt quá mức dự trù."
+            return "Số lượng vật phẩm dự trù đã dùng không được vượt quá mức dự trù."
         }
         if usedBuffer > 0 && draft.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Cần nhập lý do khi có dùng buffer."
+            return "Cần nhập lý do khi có dùng vật phẩm dự trù."
         }
         return nil
     }
@@ -269,14 +268,14 @@ struct DeliveryConfirmationSheet: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 IncidentFormSection(
                     title: "Xác nhận phân phát vật phẩm",
-                    subtitle: "Backend cần số lượng thực tế từng item trước khi hoàn tất bước giao hàng."
+                    subtitle: "Nhập số lượng thực tế từng vật phẩm trước khi hoàn tất bước phân phát."
                 ) {
                     VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                         IncidentInlineNotice(
                             icon: "arrowshape.turn.up.right.circle.fill",
                             text: hasDiscrepancy
-                                ? "Bạn đang nhập số lượng khác kế hoạch. Nếu giao thiếu, backend sẽ tự tạo bước RETURN_SUPPLIES cho phần còn dư."
-                                : "Giữ nguyên số lượng kế hoạch nếu đội đã giao đủ như dự kiến."
+                                ? "Bạn đang nhập số lượng khác với kế hoạch. Phần vật phẩm chưa phân phát sẽ được chuyển sang bước hoàn trả."
+                                : "Giữ nguyên số lượng kế hoạch nếu đội đã phân phát đủ như dự kiến."
                         )
 
                         HStack(spacing: DS.Spacing.sm) {
@@ -310,7 +309,7 @@ struct DeliveryConfirmationSheet: View {
                                 }
 
                                 quickActionChip(
-                                    title: "0",
+                                    title: "Chưa phát",
                                     isSelected: parsedActualQuantity(at: index) == 0
                                 ) {
                                     drafts[index].actualQuantityText = "0"
@@ -340,14 +339,14 @@ struct DeliveryConfirmationSheet: View {
                 }
 
                 IncidentFormSection(
-                    title: hasDiscrepancy ? "Ghi chú chênh lệch" : "Ghi chú giao hàng",
+                    title: hasDiscrepancy ? "Ghi chú chênh lệch" : "Ghi chú phân phát",
                     subtitle: hasDiscrepancy
-                        ? "Khuyến nghị nhập lý do nếu giao thiếu hoặc giao khác kế hoạch."
-                        : "Có thể để trống nếu đội giao đúng như kế hoạch."
+                        ? "Nên ghi rõ lý do nếu số lượng phân phát khác với kế hoạch."
+                        : "Có thể để trống nếu đội đã phân phát đúng theo kế hoạch."
                 ) {
                     IncidentTextInputField(
                         title: "Ghi chú",
-                        placeholder: "Ví dụ: thiếu 20 chai do phát sinh thêm hộ dân ở điểm trước, hàng còn dư sẽ hoàn trả về kho...",
+                        placeholder: "Ví dụ: một phần vật phẩm chưa phát hết và sẽ chuyển sang hoàn trả về kho...",
                         text: $deliveryNote,
                         axis: .vertical
                     )
@@ -373,7 +372,7 @@ struct DeliveryConfirmationSheet: View {
                 if hasDiscrepancy {
                     IncidentInlineNotice(
                         icon: "shippingbox.circle.fill",
-                        text: "Nếu có item giao thiếu, backend sẽ tự tạo bước trả hàng cho phần còn lại.",
+                        text: "Nếu còn vật phẩm chưa phân phát hết, hệ thống sẽ tạo bước hoàn trả cho phần còn lại.",
                         tone: DS.Colors.warning
                     )
                 }
@@ -461,9 +460,9 @@ struct DeliveryConfirmationSheet: View {
             return nil
         }
         if delta < 0 {
-            return "Đang giao thiếu \(quantityText(abs(delta), unit: draft.unit)) so với kế hoạch."
+            return "Còn thiếu \(quantityText(abs(delta), unit: draft.unit)) so với kế hoạch."
         }
-        return "Đang giao nhiều hơn kế hoạch \(quantityText(delta, unit: draft.unit))."
+        return "Nhiều hơn kế hoạch \(quantityText(delta, unit: draft.unit))."
     }
 }
 

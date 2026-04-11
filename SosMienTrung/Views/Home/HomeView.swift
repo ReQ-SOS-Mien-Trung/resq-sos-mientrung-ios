@@ -14,6 +14,7 @@ struct HomeView: View {
     @ObservedObject var nearbyManager: NearbyInteractionManager
     @ObservedObject var multipeerSession: MultipeerSession
     @ObservedObject private var authSession = AuthSessionStore.shared
+    @ObservedObject private var navigationCoordinator = AppNavigationCoordinator.shared
     @Binding var selectedPeer: MCPeerID?
 
     @StateObject private var locationManager = LocationManager()
@@ -22,7 +23,6 @@ struct HomeView: View {
     @State private var showAssemblyPointMap = false
     @State private var showSOSForm = false
     @State private var showChatBot = false
-    @State private var showNotifications = false
     @State private var showWaterEject = false
     @State private var showRescuersView = false
     @State private var showRescuerDashboard = false
@@ -94,10 +94,6 @@ struct HomeView: View {
         .sheet(isPresented: $showChatBot) {
             ChatBotView()
         }
-        .sheet(isPresented: $showNotifications) {
-            NotificationCenterView(notificationHub: notificationHub)
-                .presentationDetents([.medium, .large])
-        }
         .sheet(isPresented: $showWaterEject) {
             WaterEjectView()
         }
@@ -159,7 +155,7 @@ struct HomeView: View {
 
     private var notificationButton: some View {
         Button {
-            showNotifications = true
+            navigationCoordinator.openNotifications()
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: notificationHub.unreadCount == 0 ? "bell" : "bell.badge.fill")

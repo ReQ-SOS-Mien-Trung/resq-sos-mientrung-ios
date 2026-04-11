@@ -134,6 +134,31 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(notification.isChatMessage)
     }
 
+    func testMissionNotificationDecodesMissionIdentifiers() throws {
+        let json = """
+        {
+          "notificationId": 121,
+          "missionId": "789",
+          "activityId": 33,
+          "incidentId": "11",
+          "type": "supply_request",
+          "title": "Yeu cau tiep te moi",
+          "body": "Team vua tao yeu cau moi",
+          "createdAt": "2026-03-20T04:00:32.373Z"
+        }
+        """
+
+        let notification = try RealtimeNotification.decoder().decode(
+            RealtimeNotification.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(notification.missionId, 789)
+        XCTAssertEqual(notification.activityId, 33)
+        XCTAssertEqual(notification.incidentId, 11)
+        XCTAssertEqual(notification.normalizedType, "supply_request")
+    }
+
     func testSharedPeopleRegenerationPreservesNamesAndFiltersReliefSelections() throws {
         let formData = makeFormData(adults: 1, children: 1)
 

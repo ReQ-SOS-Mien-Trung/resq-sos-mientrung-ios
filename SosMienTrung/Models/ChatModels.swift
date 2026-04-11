@@ -245,6 +245,8 @@ enum SosDisplayFormatter {
             return "Chờ xử lý"
         case "approved", "accepted":
             return "Đã tiếp nhận"
+        case "assigned":
+            return "Đã phân công"
         case "inprogress", "ongoing", "processing":
             return "Đang xử lý"
         case "resolved", "closed", "completed", "done":

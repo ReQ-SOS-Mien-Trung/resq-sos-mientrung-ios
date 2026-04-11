@@ -161,6 +161,221 @@ struct Activity: Codable, Identifiable {
     var isDeliverSuppliesActivity: Bool {
         normalizedActivityTypeKey == "deliversupplies"
     }
+
+    var isReturnSuppliesActivity: Bool {
+        normalizedActivityTypeKey == "returnsupplies"
+    }
+
+    var isDepotSupplyActivity: Bool {
+        isCollectSuppliesActivity || isReturnSuppliesActivity
+    }
+}
+
+struct MissionActivityExecutionContext {
+    let groupKey: String
+    let sosRequestId: Int?
+    let coordinateLabel: String?
+    let coordinateSource: MissionActivityCoordinateSource?
+    let sharedActivityCount: Int
+
+    var badgeText: String {
+        if let sosRequestId {
+            return "SOS #\(sosRequestId)"
+        }
+
+        if sharedActivityCount > 1 {
+            return "Cùng điểm thực hiện"
+        }
+
+        return "Điểm thực hiện"
+    }
+
+    var detailText: String? {
+        var parts: [String] = []
+
+        if sharedActivityCount > 1 {
+            parts.append("\(sharedActivityCount) bước cùng điểm trong mission")
+        }
+
+        if let coordinateLabel {
+            if coordinateSource == .description {
+                parts.append("Đọc từ mô tả: \(coordinateLabel)")
+            } else {
+                parts.append("Tọa độ: \(coordinateLabel)")
+            }
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+}
+
+enum MissionActivityCoordinateSource: Equatable {
+    case target
+    case description
+}
+
+private struct MissionActivityExecutionSeed {
+    let groupKey: String
+    let sosRequestId: Int?
+    let coordinateKey: String?
+    let coordinateLabel: String?
+    let coordinateSource: MissionActivityCoordinateSource?
+    let shouldSurface: Bool
+}
+
+private struct MissionActivityCoordinate {
+    let latitude: Double
+    let longitude: Double
+    let source: MissionActivityCoordinateSource
+}
+
+func buildMissionActivityExecutionContexts(activities: [Activity]) -> [Int: MissionActivityExecutionContext] {
+    let seedsByActivityId = Dictionary(uniqueKeysWithValues: activities.map { activity in
+        (activity.id, missionActivityExecutionSeed(for: activity))
+    })
+
+    var sharedCounts: [String: Int] = [:]
+    for seed in seedsByActivityId.values where seed.coordinateKey != nil || seed.sosRequestId != nil {
+        sharedCounts[seed.groupKey, default: 0] += 1
+    }
+
+    var results: [Int: MissionActivityExecutionContext] = [:]
+
+    for activity in activities {
+        guard let seed = seedsByActivityId[activity.id] else { continue }
+
+        let sharedActivityCount = sharedCounts[seed.groupKey, default: 1]
+        guard seed.shouldSurface || sharedActivityCount > 1 else {
+            continue
+        }
+
+        results[activity.id] = MissionActivityExecutionContext(
+            groupKey: seed.groupKey,
+            sosRequestId: seed.sosRequestId,
+            coordinateLabel: seed.coordinateLabel,
+            coordinateSource: seed.coordinateSource,
+            sharedActivityCount: sharedActivityCount
+        )
+    }
+
+    return results
+}
+
+private func missionActivityExecutionSeed(for activity: Activity) -> MissionActivityExecutionSeed {
+    guard activity.isDepotSupplyActivity == false else {
+        return MissionActivityExecutionSeed(
+            groupKey: "activity-\(activity.id)",
+            sosRequestId: nil,
+            coordinateKey: nil,
+            coordinateLabel: nil,
+            coordinateSource: nil,
+            shouldSurface: false
+        )
+    }
+
+    let resolvedSosRequestId = resolveMissionActivitySOSRequestId(for: activity)
+    let resolvedCoordinate = resolveMissionActivityCoordinate(for: activity)
+    let coordinateKey = resolvedCoordinate.map {
+        String(format: "%.4f:%.4f", $0.latitude, $0.longitude)
+    }
+    let coordinateLabel = resolvedCoordinate.map {
+        String(format: "%.4f, %.4f", $0.latitude, $0.longitude)
+    }
+
+    let groupKey: String
+    if let resolvedSosRequestId, let coordinateKey {
+        groupKey = "sos-\(resolvedSosRequestId)-point-\(coordinateKey)"
+    } else if let resolvedSosRequestId {
+        groupKey = "sos-\(resolvedSosRequestId)"
+    } else if let coordinateKey {
+        groupKey = "point-\(coordinateKey)"
+    } else {
+        groupKey = "activity-\(activity.id)"
+    }
+
+    return MissionActivityExecutionSeed(
+        groupKey: groupKey,
+        sosRequestId: resolvedSosRequestId,
+        coordinateKey: coordinateKey,
+        coordinateLabel: coordinateLabel,
+        coordinateSource: resolvedCoordinate?.source,
+        shouldSurface: resolvedSosRequestId != nil
+    )
+}
+
+private func resolveMissionActivitySOSRequestId(for activity: Activity) -> Int? {
+    if let sosRequestId = activity.sosRequestId, sosRequestId > 0 {
+        return sosRequestId
+    }
+
+    guard let description = activity.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+          description.isEmpty == false else {
+        return nil
+    }
+
+    let regex = try? NSRegularExpression(pattern: #"SOS\s*#?\s*(\d+)"#, options: [.caseInsensitive])
+    let range = NSRange(description.startIndex..<description.endIndex, in: description)
+    guard let match = regex?.firstMatch(in: description, options: [], range: range),
+          let idRange = Range(match.range(at: 1), in: description) else {
+        return nil
+    }
+
+    return Int(description[idRange])
+}
+
+private func resolveMissionActivityCoordinate(for activity: Activity) -> MissionActivityCoordinate? {
+    if let latitude = activity.targetLatitude,
+       let longitude = activity.targetLongitude,
+       isUsableMissionActivityCoordinate(latitude: latitude, longitude: longitude) {
+        return MissionActivityCoordinate(
+            latitude: latitude,
+            longitude: longitude,
+            source: .target
+        )
+    }
+
+    guard let description = activity.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+          description.isEmpty == false else {
+        return nil
+    }
+
+    return extractMissionActivityCoordinate(from: description)
+}
+
+private func extractMissionActivityCoordinate(from description: String) -> MissionActivityCoordinate? {
+    let regex = try? NSRegularExpression(pattern: #"(-?\d{1,2}\.\d{2,6})[,\s]\s*(-?\d{1,3}\.\d{2,6})"#)
+    let range = NSRange(description.startIndex..<description.endIndex, in: description)
+    guard let match = regex?.firstMatch(in: description, options: [], range: range),
+          let firstRange = Range(match.range(at: 1), in: description),
+          let secondRange = Range(match.range(at: 2), in: description),
+          let firstValue = Double(description[firstRange]),
+          let secondValue = Double(description[secondRange]) else {
+        return nil
+    }
+
+    if (8...24).contains(firstValue), (100...115).contains(secondValue) {
+        return MissionActivityCoordinate(
+            latitude: firstValue,
+            longitude: secondValue,
+            source: .description
+        )
+    }
+
+    if (8...24).contains(secondValue), (100...115).contains(firstValue) {
+        return MissionActivityCoordinate(
+            latitude: secondValue,
+            longitude: firstValue,
+            source: .description
+        )
+    }
+
+    return nil
+}
+
+private func isUsableMissionActivityCoordinate(latitude: Double, longitude: Double) -> Bool {
+    (-90...90).contains(latitude)
+        && (-180...180).contains(longitude)
+        && !(abs(latitude) < 0.000001 && abs(longitude) < 0.000001)
 }
 
 // MARK: - Mission Team Member
@@ -366,6 +581,8 @@ func localizedActivityTypeDisplay(_ rawValue: String?) -> String? {
         return "Tiếp nhận vật phẩm"
     case "deliversupplies":
         return "Phân phát vật phẩm"
+    case "returnsupplies":
+        return "Hoàn trả vật phẩm"
     case "rescue":
         return "Cứu hộ"
     case "medicalaid":

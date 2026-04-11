@@ -140,8 +140,18 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
 
+        if Auth.auth().canHandleNotification(userInfo) {
+            completionHandler()
+            return
+        }
+
         Task { @MainActor in
             _ = await NotificationHubService.shared.handleRemoteNotification(userInfo: userInfo)
+            if let notification = NotificationHubService.shared.notificationFromRemotePayload(userInfo: userInfo) {
+                AppNavigationCoordinator.shared.handleNotificationTap(notification)
+            } else {
+                AppNavigationCoordinator.shared.openNotifications()
+            }
             completionHandler()
         }
     }

@@ -75,6 +75,15 @@ enum RescuerStatusBadgeText {
         }
     }
 
+    static func activity(_ rawStatus: String, fallback: ActivityStatus) -> String {
+        switch normalized(rawStatus) {
+        case "pendingconfirmation":
+            return "Chờ kho xác nhận"
+        default:
+            return activity(fallback)
+        }
+    }
+
     static func assemblyEvent(_ status: String?) -> String {
         switch normalized(status) {
         case "scheduled", "planned":

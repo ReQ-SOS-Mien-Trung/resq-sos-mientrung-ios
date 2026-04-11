@@ -1,6 +1,23 @@
 import SwiftUI
+import CoreLocation
 
 struct MissionDetailView: View {
+    private enum ActivityScopeFilter: String, CaseIterable, Identifiable {
+        case myTeam
+        case all
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .myTeam:
+                return "Đội của bạn"
+            case .all:
+                return "Toàn mission"
+            }
+        }
+    }
+
     let mission: Mission
     @StateObject private var vm = RescuerMissionViewModel()
     @StateObject private var incidentVM = IncidentViewModel()
@@ -11,14 +28,23 @@ struct MissionDetailView: View {
     @State private var showMissionInventory = false
     @State private var pickupConfirmationActivity: Activity?
     @State private var deliveryConfirmationActivity: Activity?
+    @State private var routePreviewActivity: Activity?
     @State private var missionStatus: String
+    @State private var missionDetail: Mission?
+    @State private var activityScopeFilter: ActivityScopeFilter = .myTeam
 
     init(mission: Mission) {
         self.mission = mission
         _missionStatus = State(initialValue: mission.status)
     }
 
-    private var missionTeamId: Int? { mission.missionTeamId }
+    private var activeMission: Mission { missionDetail ?? mission }
+
+    private var fallbackViewerMissionTeamId: Int? { mission.missionTeamId }
+
+    private var viewerMissionTeamId: Int? {
+        vm.currentTeamMissionTeamIds.first ?? fallbackViewerMissionTeamId
+    }
 
     private var canViewMissionWorkspace: Bool {
         authSession.session?.canViewMissionWorkspace ?? false
@@ -57,8 +83,10 @@ struct MissionDetailView: View {
                 if canViewMissionWorkspace {
                     sectionHeader(
                         title: "Các bước thực hiện",
-                        subtitle: "\(activityCount) bước cần theo dõi"
+                        subtitle: activitySectionSubtitle
                     )
+
+                    activityScopePicker
 
                     if pendingActivitySyncCount > 0 {
                         pendingSyncBanner
@@ -87,6 +115,14 @@ struct MissionDetailView: View {
             if canViewMissionWorkspace {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        if inventoryEntryCount > 0 {
+                            Button {
+                                showMissionInventory = true
+                            } label: {
+                                Label("Túi đồ vật phẩm", systemImage: "shippingbox")
+                            }
+                        }
+
                         Button {
                             refreshMissionWorkspace(triggerSync: true)
                         } label: {
@@ -117,23 +153,27 @@ struct MissionDetailView: View {
         }
         .navigationDestination(isPresented: $showReportIncident) {
             ReportIncidentView(
-                mission: mission,
-                activities: displayedActivities,
+                mission: activeMission,
+                activities: currentTeamActivities,
                 incidentVM: incidentVM
             )
         }
         .navigationDestination(isPresented: $showMissionReport) {
-            if let teamId = missionTeamId {
+            if let teamId = viewerMissionTeamId {
                 MissionTeamReportView(
-                    missionId: mission.id,
+                    missionId: activeMission.id,
                     missionTeamId: teamId,
-                    missionTitle: mission.title
+                    missionTitle: activeMission.title
                 )
             }
         }
         .sheet(isPresented: $showAggregateRoute) {
             NavigationStack {
-                MissionAggregateRouteSheetView(mission: mission, vm: vm)
+                MissionAggregateRouteSheetView(
+                    mission: activeMission,
+                    vm: vm,
+                    preferredMissionTeamId: viewerMissionTeamId
+                )
                     .navigationTitle("Lộ trình tổng hợp")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -148,7 +188,7 @@ struct MissionDetailView: View {
         .sheet(isPresented: $showMissionInventory) {
             NavigationStack {
                 MissionInventoryView(
-                    missionTitle: mission.title,
+                    missionTitle: activeMission.title,
                     activities: displayedActivities
                 )
                 .toolbar {
@@ -167,7 +207,7 @@ struct MissionDetailView: View {
                     isSubmitting: vm.isLoadingActivities
                 ) { bufferUsages in
                     await vm.confirmPickup(
-                        missionId: mission.id,
+                        missionId: activeMission.id,
                         activityId: activity.id,
                         bufferUsages: bufferUsages
                     )
@@ -182,11 +222,31 @@ struct MissionDetailView: View {
                     isSubmitting: vm.isLoadingActivities
                 ) { actualDeliveredItems, deliveryNote in
                     await vm.confirmDelivery(
-                        missionId: mission.id,
+                        missionId: activeMission.id,
                         activityId: activity.id,
                         actualDeliveredItems: actualDeliveredItems,
                         deliveryNote: deliveryNote
                     )
+                }
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $routePreviewActivity) { activity in
+            NavigationStack {
+                ActivityRouteSheetView(
+                    missionId: activeMission.id,
+                    activity: activity,
+                    fallbackOriginCoordinate: currentTeamCoordinate,
+                    fallbackOriginLabel: currentTeamOriginLabel
+                )
+                .navigationTitle(activity.step.map { "Lộ trình bước \($0)" } ?? "Lộ trình activity")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Đóng") {
+                            routePreviewActivity = nil
+                        }
+                    }
                 }
             }
             .presentationDetents([.large])
@@ -221,16 +281,16 @@ struct MissionDetailView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(DS.Colors.textSecondary)
 
-                    Text(mission.title)
+                    Text(activeMission.title)
                         .font(.system(size: 32, weight: .black))
                         .foregroundColor(DS.Colors.text)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if mission.shouldDisplayMissionTypeBadge,
-                       let missionTypeBadgeText = mission.missionTypeBadgeText {
+                    if activeMission.shouldDisplayMissionTypeBadge,
+                       let missionTypeBadgeText = activeMission.missionTypeBadgeText {
                         StatusBadge(
                             text: missionTypeBadgeText,
-                            color: missionTypeColor(mission.missionTypeBadgeKey)
+                            color: missionTypeColor(activeMission.missionTypeBadgeKey)
                         )
                     }
                 }
@@ -243,7 +303,7 @@ struct MissionDetailView: View {
                 )
             }
 
-            if let desc = mission.description, !desc.isEmpty {
+            if let desc = activeMission.description, !desc.isEmpty {
                 Text(desc)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
@@ -272,13 +332,13 @@ struct MissionDetailView: View {
             HStack(spacing: DS.Spacing.sm) {
                 infoChip(
                     title: "Thời gian bắt đầu",
-                    value: formattedDisplayDate(mission.startDate) ?? "Chưa có",
+                    value: formattedDisplayDate(activeMission.startDate) ?? "Chưa có",
                     icon: "calendar"
                 )
 
                 infoChip(
                     title: "Kết thúc dự kiến",
-                    value: formattedDisplayDate(mission.endDate) ?? "Chưa có",
+                    value: formattedDisplayDate(activeMission.endDate) ?? "Chưa có",
                     icon: "clock"
                 )
             }
@@ -291,8 +351,8 @@ struct MissionDetailView: View {
                 )
 
                 infoChip(
-                    title: "Đội phụ trách",
-                    value: mission.teams?.first?.teamName ?? "Chưa gán",
+                    title: teamSummaryTitle,
+                    value: teamSummaryValue,
                     icon: "person.3"
                 )
             }
@@ -373,7 +433,7 @@ struct MissionDetailView: View {
                 Text("Chưa có bước thực hiện nào")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.textSecondary)
-                Text("Nhiệm vụ này chưa có bước thực hiện nào được phân công cho đội.")
+                Text(emptyActivitiesMessage)
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -392,15 +452,44 @@ struct MissionDetailView: View {
                 ForEach(list) { activity in
                     ActivityRowView(
                         activity: activity,
-                        pendingSyncState: vm.pendingSyncState(missionId: mission.id, activityId: activity.id),
+                        executionContext: activityExecutionContextById[activity.id],
+                        assignmentLabel: assignmentLabel(for: activity),
+                        isStatusEditable: canEditActivity(activity),
+                        pendingSyncState: vm.pendingSyncState(missionId: activeMission.id, activityId: activity.id),
                         onStatusChange: { status in
                             handleActivityStatusChange(status, for: activity, within: list)
                         },
-                        allowsCompletionActions: canUpdateActivityStatus
-                            && missionActivityActionIsUnlocked(activity, within: list)
-                            && !vm.hasPendingSync(missionId: mission.id, activityId: activity.id)
+                        allowsCompletionActions: canEditActivity(activity)
+                            && missionActivityActionIsUnlocked(activity, within: currentTeamActivities)
+                            && !vm.hasPendingSync(missionId: activeMission.id, activityId: activity.id),
+                        onNavigateTap: canOpenDirections(for: activity) ? {
+                            routePreviewActivity = activity
+                        } : nil
                     )
                 }
+            }
+        }
+    }
+
+    private var activityScopePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Phạm vi theo dõi activity", selection: $activityScopeFilter) {
+                ForEach(ActivityScopeFilter.allCases) { scope in
+                    Text(scope.title).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(activityFilterHelperText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let sharedExecutionHelperText {
+                Text(sharedExecutionHelperText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.info)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -408,7 +497,7 @@ struct MissionDetailView: View {
     private var aggregateRouteButton: some View {
         Button {
             vm.triggerMissionActivitySync(reason: .manualRefresh)
-            vm.loadActivities(missionId: mission.id)
+            vm.loadActivities(missionId: activeMission.id)
             showAggregateRoute = true
         } label: {
             HStack(spacing: DS.Spacing.sm) {
@@ -484,7 +573,7 @@ struct MissionDetailView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(DS.Colors.text)
 
-                            Text("Theo dõi nhanh vật phẩm đội đang cần lấy, đang giữ và đã giao trong nhiệm vụ.")
+                            Text("Theo dõi nhanh vật phẩm đang được xử lý trong toàn bộ mission.")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(DS.Colors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -518,30 +607,7 @@ struct MissionDetailView: View {
                             .clipShape(Capsule())
                     }
 
-                    HStack(spacing: DS.Spacing.sm) {
-                        inventoryMetricTile(
-                            title: "Cần lấy",
-                            value: inventoryPendingPickupTotal,
-                            color: DS.Colors.warning,
-                            icon: "tray.and.arrow.down.fill"
-                        )
-
-                        inventoryMetricTile(
-                            title: "Đang giữ",
-                            value: inventoryInHandTotal,
-                            color: DS.Colors.accent,
-                            icon: "shippingbox.circle.fill"
-                        )
-
-                        inventoryMetricTile(
-                            title: "Đã giao",
-                            value: inventoryDeliveredTotal,
-                            color: DS.Colors.success,
-                            icon: "checkmark.circle.fill"
-                        )
-                    }
-
-                    Text("Mở để xem chi tiết từng vật phẩm theo bước và trạng thái xử lý.")
+                    Text("Mở để xem chi tiết vật phẩm theo từng bước xử lý.")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.textTertiary)
                 }
@@ -604,31 +670,6 @@ struct MissionDetailView: View {
         }
     }
 
-    private func inventoryMetricTile(title: String, value: Int, color: Color, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(color)
-
-            Text("\(value)")
-                .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundColor(DS.Colors.text)
-
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(DS.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
-        .padding(.horizontal, DS.Spacing.sm)
-        .padding(.vertical, DS.Spacing.sm)
-        .background(color.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(color.opacity(0.22), lineWidth: 1)
-        )
-    }
-
     private func missionStatusColor(_ status: String) -> Color {
         switch normalizedStatus(status) {
         case "ongoing", "inprogress":
@@ -656,7 +697,7 @@ struct MissionDetailView: View {
     }
 
     private var shouldShowMissionReportMenuItem: Bool {
-        guard canOpenMissionReports, missionTeamId != nil else { return false }
+        guard canOpenMissionReports, viewerMissionTeamId != nil else { return false }
 
         switch normalizedStatus(missionStatus) {
         case "completed", "finished":
@@ -669,10 +710,10 @@ struct MissionDetailView: View {
     private var startMissionButton: some View {
         Button {
             Task {
-                let didUpdate = await vm.updateMissionStatus(missionId: mission.id, status: "OnGoing")
+                let didUpdate = await vm.updateMissionStatus(missionId: activeMission.id, status: "OnGoing")
                 if didUpdate {
                     missionStatus = "OnGoing"
-                    vm.loadActivities(missionId: mission.id)
+                    vm.loadActivities(missionId: activeMission.id)
                 }
             }
         } label: {
@@ -722,16 +763,29 @@ struct MissionDetailView: View {
         }
     }
 
+    private func loadMissionDetail() {
+        Task {
+            do {
+                let detail = try await MissionService.shared.getMission(missionId: mission.id)
+                missionDetail = detail
+                missionStatus = detail.status
+            } catch {
+                // Keep the dashboard snapshot when detail hydration fails.
+            }
+        }
+    }
+
     private func refreshMissionWorkspace(triggerSync: Bool = false) {
         if triggerSync {
             vm.triggerMissionActivitySync(reason: .manualRefresh)
         }
-        vm.loadActivities(missionId: mission.id)
-        incidentVM.loadIncidents(missionId: mission.id)
+        loadMissionDetail()
+        vm.loadActivities(missionId: activeMission.id)
+        incidentVM.loadIncidents(missionId: activeMission.id)
     }
 
     private func handleActivityStatusChange(_ status: String, for activity: Activity, within knownActivities: [Activity]) {
-        guard canUpdateActivityStatus else { return }
+        guard canEditActivity(activity) else { return }
         guard status.caseInsensitiveCompare("Cancelled") != .orderedSame else { return }
 
         if status.caseInsensitiveCompare(ActivityStatus.succeed.rawValue) == .orderedSame {
@@ -747,11 +801,111 @@ struct MissionDetailView: View {
         }
 
         vm.updateActivity(
-            missionId: mission.id,
+            missionId: activeMission.id,
             activityId: activity.id,
             status: status,
-            knownActivities: knownActivities
+            knownActivities: currentTeamActivities.isEmpty ? knownActivities : currentTeamActivities
         )
+    }
+
+    private func canEditActivity(_ activity: Activity) -> Bool {
+        canUpdateActivityStatus && vm.belongsToCurrentTeam(activity, fallbackMissionTeamId: fallbackViewerMissionTeamId)
+    }
+
+    private func canOpenDirections(for activity: Activity) -> Bool {
+        vm.belongsToCurrentTeam(activity, fallbackMissionTeamId: fallbackViewerMissionTeamId)
+            && isActivityRouteAvailable(activity)
+    }
+
+    private var currentTeamCoordinate: CLLocationCoordinate2D? {
+        guard let viewerMissionTeamId,
+              let team = activeMission.teams?.first(where: { $0.id == viewerMissionTeamId }),
+              let latitude = team.latitude,
+              let longitude = team.longitude else {
+            return nil
+        }
+
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              !(abs(latitude) < 0.000_001 && abs(longitude) < 0.000_001) else {
+            return nil
+        }
+
+        return coordinate
+    }
+
+    private var currentTeamOriginLabel: String? {
+        guard let viewerMissionTeamId,
+              let team = activeMission.teams?.first(where: { $0.id == viewerMissionTeamId }) else {
+            return nil
+        }
+
+        if let teamName = team.teamName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           teamName.isEmpty == false {
+            return teamName
+        }
+
+        return team.assemblyPointName
+    }
+
+    private func isActivityRouteAvailable(_ activity: Activity) -> Bool {
+        switch activity.activityStatus {
+        case .planned, .onGoing:
+            return hasRouteHint(activity)
+        case .succeed, .failed, .cancelled:
+            return false
+        }
+    }
+
+    private func hasRouteHint(_ activity: Activity) -> Bool {
+        if let latitude = activity.targetLatitude,
+           let longitude = activity.targetLongitude,
+           CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)),
+           !(abs(latitude) < 0.000_001 && abs(longitude) < 0.000_001) {
+            return true
+        }
+
+        if let depotName = activity.depotName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           depotName.isEmpty == false {
+            return true
+        }
+
+        if let depotAddress = activity.depotAddress?.trimmingCharacters(in: .whitespacesAndNewlines),
+           depotAddress.isEmpty == false {
+            return true
+        }
+
+        guard let description = activity.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+              description.isEmpty == false else {
+            return false
+        }
+
+        let pattern = #"(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})"#
+        return description.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private func assignmentLabel(for activity: Activity) -> String? {
+        guard let missionTeamId = activity.missionTeamId else {
+            return nil
+        }
+
+        let teamName = activeMission.teams?
+            .first(where: { $0.id == missionTeamId })?
+            .teamName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if vm.belongsToCurrentTeam(activity, fallbackMissionTeamId: fallbackViewerMissionTeamId) {
+            if let teamName, teamName.isEmpty == false {
+                return "Đội của bạn: \(teamName)"
+            }
+            return "Đội của bạn"
+        }
+
+        if let teamName, teamName.isEmpty == false {
+            return "Đội phối hợp: \(teamName)"
+        }
+
+        return "Team #\(missionTeamId)"
     }
 
     private func normalizedStatus(_ status: String) -> String {
@@ -759,7 +913,12 @@ struct MissionDetailView: View {
     }
 
     private var activityCount: Int {
-        max(displayedActivities.count, mission.activityCount)
+        switch activityScopeFilter {
+        case .myTeam:
+            return displayedActivities.count
+        case .all:
+            return max(displayedActivities.count, activeMission.activityCount)
+        }
     }
 
     private var completedActivityCount: Int {
@@ -767,11 +926,40 @@ struct MissionDetailView: View {
     }
 
     private var pendingActivitySyncCount: Int {
-        vm.pendingSyncCount(for: mission.id)
+        vm.pendingSyncCount(for: activeMission.id)
     }
 
     private var displayedActivities: [Activity] {
-        vm.effectiveActivities(missionId: mission.id, fallback: mission.activities ?? [])
+        switch activityScopeFilter {
+        case .myTeam:
+            return currentTeamActivities
+        case .all:
+            return vm.effectiveActivities(missionId: activeMission.id, fallback: activeMission.activities ?? [])
+        }
+    }
+
+    private var activityExecutionContextById: [Int: MissionActivityExecutionContext] {
+        buildMissionActivityExecutionContexts(activities: allMissionActivities)
+    }
+
+    private var sharedExecutionHelperText: String? {
+        let visibleContexts = displayedActivities.compactMap { activityExecutionContextById[$0.id] }
+        guard visibleContexts.isEmpty == false else { return nil }
+
+        let sharedGroupCount = Set(visibleContexts.map(\.groupKey)).count
+        if sharedGroupCount == 1 {
+            return "Nhãn SOS/điểm thực hiện đang gom bước theo sosRequestId, tọa độ mục tiêu hoặc tọa độ đọc từ mô tả activity."
+        }
+
+        return "Đang nhận diện \(sharedGroupCount) cụm SOS/điểm thực hiện dựa trên sosRequestId, kinh độ/vĩ độ và mô tả activity."
+    }
+
+    private var currentTeamActivities: [Activity] {
+        vm.effectiveCurrentTeamActivities(
+            missionId: activeMission.id,
+            fallback: activeMission.activities ?? [],
+            fallbackMissionTeamId: fallbackViewerMissionTeamId
+        )
     }
 
     private var activityProgress: Double {
@@ -781,6 +969,71 @@ struct MissionDetailView: View {
 
     private var inventoryActivities: [Activity] {
         displayedActivities.filter { ($0.suppliesToCollect ?? []).isEmpty == false }
+    }
+
+    private var participatingTeamNames: [String] {
+        Array(Set(
+            (activeMission.teams ?? []).compactMap { team in
+                let trimmed = team.teamName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        )).sorted()
+    }
+
+    private var teamSummaryTitle: String {
+        participatingTeamNames.count > 1 ? "Đội tham gia" : "Đội phụ trách"
+    }
+
+    private var teamSummaryValue: String {
+        guard participatingTeamNames.isEmpty == false else { return "Chưa gán" }
+        if participatingTeamNames.count <= 2 {
+            return participatingTeamNames.joined(separator: ", ")
+        }
+        return "\(participatingTeamNames.prefix(2).joined(separator: ", ")) +\(participatingTeamNames.count - 2)"
+    }
+
+    private var activitySectionSubtitle: String {
+        switch activityScopeFilter {
+        case .myTeam:
+            if hiddenActivityCount > 0 {
+                return "\(activityCount) bước của đội bạn • đang ẩn \(hiddenActivityCount) bước đội khác"
+            }
+            return "\(activityCount) bước của đội bạn"
+        case .all:
+            if participatingTeamNames.count > 1 {
+                return "\(activityCount) bước cần theo dõi • \(participatingTeamNames.count) đội cùng mission"
+            }
+            return "\(activityCount) bước cần theo dõi"
+        }
+    }
+
+    private var hiddenActivityCount: Int {
+        max(allMissionActivities.count - currentTeamActivities.count, 0)
+    }
+
+    private var allMissionActivities: [Activity] {
+        vm.effectiveActivities(missionId: activeMission.id, fallback: activeMission.activities ?? [])
+    }
+
+    private var activityFilterHelperText: String {
+        switch activityScopeFilter {
+        case .myTeam:
+            if hiddenActivityCount > 0 {
+                return "Đang ẩn \(hiddenActivityCount) activity của team khác để bạn tập trung theo dõi phần việc của đội mình."
+            }
+            return "Đang chỉ hiển thị activity của đội bạn."
+        case .all:
+            return "Activity của team khác chỉ để theo dõi, không thể bấm hoàn thành hoặc thất bại."
+        }
+    }
+
+    private var emptyActivitiesMessage: String {
+        switch activityScopeFilter {
+        case .myTeam:
+            return "Hiện chưa có activity nào được giao cho đội của bạn."
+        case .all:
+            return "Nhiệm vụ này chưa có bước thực hiện nào để theo dõi."
+        }
     }
 
     private var inventoryEntries: [(activity: Activity, supply: MissionSupply)] {

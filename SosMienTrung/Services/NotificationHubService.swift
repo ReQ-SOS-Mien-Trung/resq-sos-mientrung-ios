@@ -246,26 +246,45 @@ final class NotificationHubService: ObservableObject {
         disconnect()
     }
 
+    func notificationFromRemotePayload(userInfo: [AnyHashable: Any]) -> RealtimeNotification? {
+        guard let type = extractString(for: "type", in: userInfo),
+              !type.isEmpty else {
+            return nil
+        }
+
+        let alertPayload = extractBroadcastAlertPayload(from: userInfo)
+
+        return RealtimeNotification.makeBroadcastPush(
+            title: extractNotificationTitle(from: userInfo),
+            body: extractNotificationBody(from: userInfo, fallbackPayload: alertPayload),
+            type: type,
+            conversationId: extractInt(for: "conversationId", in: userInfo)
+                ?? extractInt(for: "conversation_id", in: userInfo),
+            missionId: extractInt(for: "missionId", in: userInfo)
+                ?? extractInt(for: "mission_id", in: userInfo),
+            activityId: extractInt(for: "activityId", in: userInfo)
+                ?? extractInt(for: "activity_id", in: userInfo),
+            incidentId: extractInt(for: "incidentId", in: userInfo)
+                ?? extractInt(for: "incident_id", in: userInfo),
+            assemblyPointId: extractInt(for: "assemblyPointId", in: userInfo)
+                ?? extractInt(for: "assembly_point_id", in: userInfo),
+            assemblyPointEventId: extractInt(for: "assemblyPointEventId", in: userInfo)
+                ?? extractInt(for: "assembly_point_event_id", in: userInfo)
+                ?? extractInt(for: "eventId", in: userInfo)
+                ?? extractInt(for: "event_id", in: userInfo),
+            messageId: extractString(for: "gcm.message_id", in: userInfo)
+                ?? extractString(for: "google.c.a.c_id", in: userInfo)
+                ?? extractString(for: "message_id", in: userInfo),
+            alertPayload: alertPayload
+        )
+    }
+
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) async -> RemoteNotificationHandling {
         guard AuthSessionStore.shared.isValid else {
             return .ignored
         }
 
-        if let type = extractString(for: "type", in: userInfo),
-           !type.isEmpty {
-            let alertPayload = extractBroadcastAlertPayload(from: userInfo)
-            let broadcastNotification = RealtimeNotification.makeBroadcastPush(
-                title: extractNotificationTitle(from: userInfo),
-                body: extractNotificationBody(from: userInfo, fallbackPayload: alertPayload),
-                type: type,
-                conversationId: extractInt(for: "conversationId", in: userInfo)
-                    ?? extractInt(for: "conversation_id", in: userInfo),
-                messageId: extractString(for: "gcm.message_id", in: userInfo)
-                    ?? extractString(for: "google.c.a.c_id", in: userInfo)
-                    ?? extractString(for: "message_id", in: userInfo),
-                alertPayload: alertPayload
-            )
-
+        if let broadcastNotification = notificationFromRemotePayload(userInfo: userInfo) {
             let shouldPresent = shouldPresentInAppNotification(broadcastNotification)
             handle(notification: broadcastNotification, adjustsBackendUnread: false)
             return shouldPresent ? .display : .silent

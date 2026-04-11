@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotificationCenterView: View {
     @ObservedObject var notificationHub: NotificationHubService
+    @ObservedObject private var navigationCoordinator = AppNavigationCoordinator.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -74,6 +75,7 @@ struct NotificationCenterView: View {
         Button {
             Task {
                 await notificationHub.markAsRead(notification)
+                navigationCoordinator.handleNotificationTap(notification)
             }
         } label: {
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {

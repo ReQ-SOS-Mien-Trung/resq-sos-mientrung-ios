@@ -25,6 +25,7 @@ final class VictimChatViewModel: ObservableObject {
 
     private let api: ConversationAPIService
     private let token: String
+    private let preferredConversationId: Int?
     private let cloudinaryUploader = CloudinaryImageUploader.resQ(folder: "resq/chat")
     private var statusCancellable: AnyCancellable?
     private var chatServiceChangesCancellable: AnyCancellable?
@@ -38,9 +39,10 @@ final class VictimChatViewModel: ObservableObject {
         case chatting             // Đang chat với coordinator
     }
 
-    init() {
+    init(preferredConversationId: Int? = nil) {
         self.token = AuthSessionStore.shared.session?.accessToken ?? ""
         self.api = ConversationAPIService(token: self.token)
+        self.preferredConversationId = preferredConversationId
 
         // Bridge nested ObservableObject updates so SwiftUI redraws immediately.
         self.chatServiceChangesCancellable = chatService.objectWillChange
@@ -63,6 +65,12 @@ final class VictimChatViewModel: ObservableObject {
             if !forceNewConversation {
                 let summaries = try await api.getMyConversations()
                 let skippedConversationId = UserDefaults.standard.object(forKey: Self.skippedConversationIdKey) as? Int
+
+                if let preferredConversationId,
+                   let preferredConversation = summaries.first(where: { $0.conversationId == preferredConversationId }) {
+                    await resumeConversation(from: preferredConversation)
+                    return
+                }
 
                 // Nếu đã có phòng đang hoạt động thì resume lại để không mất lịch sử sau khi refresh.
                 if let latestActive = summaries.first(where: {

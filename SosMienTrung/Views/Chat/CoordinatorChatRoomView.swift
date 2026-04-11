@@ -147,7 +147,7 @@ struct CoordinatorChatRoomView: View {
                 }
 
                 if let linkedSosId = vm.linkedSosRequestId {
-                    Text("SOS #\(linkedSosId) đã liên kết. Khi cần mới bấm nút tia sét để gửi card.")
+                    Text("SOS #\(linkedSosId) đã liên kết. Khi cần mới bấm nút thẻ SOS để gửi card.")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -168,7 +168,7 @@ struct CoordinatorChatRoomView: View {
                 }
 
                 if let linkedSosId = vm.linkedSosRequestId {
-                    Text("SOS #\(linkedSosId) đã sẵn sàng. Bấm nút tia sét khi bạn muốn gửi card SOS.")
+                    Text("SOS #\(linkedSosId) đã sẵn sàng. Bấm nút thẻ SOS khi bạn muốn gửi card SOS.")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -232,7 +232,7 @@ struct CoordinatorChatRoomView: View {
                 Button {
                     showQuickDispatchSheet = true
                 } label: {
-                    Image(systemName: "bolt.horizontal.circle.fill")
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(DS.Colors.danger)
                         .frame(width: 40, height: 40)
@@ -1049,11 +1049,11 @@ private struct SosQuickDispatchMessageCard: View {
                 .overlay(DS.Colors.borderSubtle)
 
             HStack(spacing: DS.Spacing.xs) {
-                Image(systemName: "paperplane.circle.fill")
+                Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(DS.Colors.accent)
+                    .foregroundColor(DS.Colors.danger)
 
-                Text("Thẻ SOS chia sẻ nhanh")
+                Text("Thẻ SOS thông tin nhanh")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
                     .lineLimit(1)

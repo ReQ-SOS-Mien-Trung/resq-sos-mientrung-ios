@@ -4,6 +4,7 @@ import CoreLocation
 
 protocol MissionActivityRemoteService {
     func getMyTeamMissions() async throws -> [Mission]
+    func getActivities(missionId: Int) async throws -> [Activity]
     func getMyTeamActivities(missionId: Int) async throws -> [Activity]
     func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws
     func updateMissionStatus(missionId: Int, status: String) async throws
@@ -37,6 +38,8 @@ final class RescuerMissionViewModel: ObservableObject {
     @Published var hasLoadedActivities = false
     @Published var errorMessage: String?
     @Published var successMessage: String?
+    @Published private(set) var currentTeamActivities: [Activity] = []
+    @Published private(set) var currentTeamMissionTeamIds: Set<Int> = []
     @Published private(set) var pendingActivityUpdates: [PendingMissionActivityUpdate] = []
 
     private var loadingCount = 0
@@ -248,8 +251,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 hasLoadedActivities = true
             }
             do {
-                let fetched = try await missionService.getMyTeamActivities(missionId: missionId)
-                activities = sortActivities(fetched)
+                try await refreshActivityScopes(missionId: missionId)
             } catch {
                 errorMessage = "Không thể tải các bước thực hiện: \(error.localizedDescription)"
             }
@@ -309,8 +311,7 @@ final class RescuerMissionViewModel: ObservableObject {
             }
             do {
                 try await missionService.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
-                let refreshed = try await missionService.getMyTeamActivities(missionId: missionId)
-                activities = sortActivities(refreshed)
+                try await refreshActivityScopes(missionId: missionId)
                 successMessage = "Đã cập nhật trạng thái bước thực hiện"
             } catch {
                 errorMessage = "Cập nhật trạng thái bước thực hiện thất bại: \(error.localizedDescription)"
@@ -345,8 +346,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 status: ActivityStatus.succeed.rawValue
             )
 
-            let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
-            activities = sortActivities(refreshed)
+            try await refreshActivityScopes(missionId: missionId)
             successMessage = "Đã xác nhận tiếp nhận vật phẩm"
             return true
         } catch {
@@ -378,8 +378,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 deliveryNote: deliveryNote
             )
 
-            let refreshed = try await MissionService.shared.getMyTeamActivities(missionId: missionId)
-            activities = sortActivities(refreshed)
+            try await refreshActivityScopes(missionId: missionId)
             successMessage = response.message
             return true
         } catch {
@@ -410,6 +409,30 @@ final class RescuerMissionViewModel: ObservableObject {
         let source = baseActivities(fallback: fallback)
         let merged = missionActivitySyncStore.effectiveActivities(base: source, missionId: missionId)
         return sortActivities(merged)
+    }
+
+    func effectiveCurrentTeamActivities(
+        missionId: Int,
+        fallback: [Activity] = [],
+        fallbackMissionTeamId: Int? = nil
+    ) -> [Activity] {
+        let source = baseCurrentTeamActivities(
+            fallback: fallback,
+            fallbackMissionTeamId: fallbackMissionTeamId
+        )
+        let merged = missionActivitySyncStore.effectiveActivities(base: source, missionId: missionId)
+        return sortActivities(merged)
+    }
+
+    func belongsToCurrentTeam(_ activity: Activity, fallbackMissionTeamId: Int? = nil) -> Bool {
+        let missionTeamIds = resolvedCurrentTeamMissionTeamIds(fallbackMissionTeamId: fallbackMissionTeamId)
+        guard missionTeamIds.isEmpty == false else { return false }
+
+        guard let missionTeamId = activity.missionTeamId else {
+            return false
+        }
+
+        return missionTeamIds.contains(missionTeamId)
     }
 
     func pendingSyncState(missionId: Int, activityId: Int) -> MissionActivitySyncState? {
@@ -447,6 +470,43 @@ final class RescuerMissionViewModel: ObservableObject {
 
     private func baseActivities(fallback: [Activity]) -> [Activity] {
         activities.isEmpty ? fallback : activities
+    }
+
+    private func baseCurrentTeamActivities(
+        fallback: [Activity],
+        fallbackMissionTeamId: Int?
+    ) -> [Activity] {
+        if currentTeamActivities.isEmpty == false {
+            return currentTeamActivities
+        }
+
+        guard let fallbackMissionTeamId else { return [] }
+        let source = baseActivities(fallback: fallback)
+        return source.filter { $0.missionTeamId == fallbackMissionTeamId }
+    }
+
+    private func resolvedCurrentTeamMissionTeamIds(fallbackMissionTeamId: Int?) -> Set<Int> {
+        if currentTeamMissionTeamIds.isEmpty == false {
+            return currentTeamMissionTeamIds
+        }
+
+        if let fallbackMissionTeamId {
+            return Set([fallbackMissionTeamId])
+        }
+
+        return []
+    }
+
+    private func refreshActivityScopes(missionId: Int) async throws {
+        async let fullMissionActivitiesRequest = missionService.getActivities(missionId: missionId)
+        async let myTeamActivitiesRequest = missionService.getMyTeamActivities(missionId: missionId)
+
+        let fullMissionActivities = try await fullMissionActivitiesRequest
+        activities = sortActivities(fullMissionActivities)
+
+        let myTeamActivities = (try? await myTeamActivitiesRequest) ?? []
+        currentTeamActivities = sortActivities(myTeamActivities)
+        currentTeamMissionTeamIds = Set(myTeamActivities.compactMap(\.missionTeamId))
     }
 
     private func beginLoading() {

@@ -137,6 +137,11 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
     let userNotificationId: Int?
     let notificationId: Int?
     let conversationId: Int?
+    let missionId: Int?
+    let activityId: Int?
+    let incidentId: Int?
+    let assemblyPointId: Int?
+    let assemblyPointEventId: Int?
     let title: String?
     let type: String?
     let body: String?
@@ -162,8 +167,14 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         userNotificationId != nil
     }
 
+    var normalizedType: String {
+        type?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+    }
+
     var isChatMessage: Bool {
-        type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "chat_message"
+        normalizedType == "chat_message"
     }
 
     var isBroadcastOnly: Bool {
@@ -174,6 +185,11 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         userNotificationId: Int? = nil,
         notificationId: Int? = nil,
         conversationId: Int? = nil,
+        missionId: Int? = nil,
+        activityId: Int? = nil,
+        incidentId: Int? = nil,
+        assemblyPointId: Int? = nil,
+        assemblyPointEventId: Int? = nil,
         title: String? = nil,
         type: String? = nil,
         body: String? = nil,
@@ -187,6 +203,11 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         self.userNotificationId = userNotificationId
         self.notificationId = notificationId
         self.conversationId = conversationId
+        self.missionId = missionId
+        self.activityId = activityId
+        self.incidentId = incidentId
+        self.assemblyPointId = assemblyPointId
+        self.assemblyPointEventId = assemblyPointEventId
         self.title = title
         self.type = type
         self.body = body
@@ -212,6 +233,14 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         let userNotificationId = Self.decodeInt(from: container, keys: ["userNotificationId"])
         let notificationId = Self.decodeInt(from: container, keys: ["notificationId"])
         let conversationId = Self.decodeInt(from: container, keys: ["conversationId", "conversation_id"])
+        let missionId = Self.decodeInt(from: container, keys: ["missionId", "mission_id"])
+        let activityId = Self.decodeInt(from: container, keys: ["activityId", "activity_id"])
+        let incidentId = Self.decodeInt(from: container, keys: ["incidentId", "incident_id"])
+        let assemblyPointId = Self.decodeInt(from: container, keys: ["assemblyPointId", "assembly_point_id"])
+        let assemblyPointEventId = Self.decodeInt(
+            from: container,
+            keys: ["assemblyPointEventId", "assembly_point_event_id", "eventId", "event_id"]
+        )
         let title = Self.decodeString(from: container, keys: ["title"])
         let type = Self.decodeString(from: container, keys: ["type"])
         let bodyValue = Self.decodeBodyValue(from: container, keys: ["body", "content", "message", "description"])
@@ -223,6 +252,11 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
             userNotificationId: userNotificationId,
             notificationId: notificationId,
             conversationId: conversationId,
+            missionId: missionId,
+            activityId: activityId,
+            incidentId: incidentId,
+            assemblyPointId: assemblyPointId,
+            assemblyPointEventId: assemblyPointEventId,
             title: title,
             type: type,
             body: bodyValue.text,
@@ -239,12 +273,22 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         body: String?,
         type: String?,
         conversationId: Int?,
+        missionId: Int? = nil,
+        activityId: Int? = nil,
+        incidentId: Int? = nil,
+        assemblyPointId: Int? = nil,
+        assemblyPointEventId: Int? = nil,
         messageId: String?,
         alertPayload: BroadcastAlertPayload? = nil,
         createdAt: Date = Date()
     ) -> RealtimeNotification {
         RealtimeNotification(
             conversationId: conversationId,
+            missionId: missionId,
+            activityId: activityId,
+            incidentId: incidentId,
+            assemblyPointId: assemblyPointId,
+            assemblyPointEventId: assemblyPointEventId,
             title: title,
             type: type,
             body: body,

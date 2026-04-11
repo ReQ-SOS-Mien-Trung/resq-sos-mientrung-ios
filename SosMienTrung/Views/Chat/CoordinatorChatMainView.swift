@@ -4,6 +4,10 @@ struct CoordinatorChatMainView: View {
     @StateObject private var vm = VictimChatViewModel()
     @Environment(\.dismiss) private var dismiss
 
+    init(preferredConversationId: Int? = nil) {
+        _vm = StateObject(wrappedValue: VictimChatViewModel(preferredConversationId: preferredConversationId))
+    }
+
     var body: some View {
         NavigationStack {
             Group {

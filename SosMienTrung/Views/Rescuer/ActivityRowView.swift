@@ -2,27 +2,36 @@ import SwiftUI
 
 struct ActivityRowView: View {
     let activity: Activity
+    let executionContext: MissionActivityExecutionContext?
+    let assignmentLabel: String?
     let isStatusEditable: Bool
     let pendingSyncState: MissionActivitySyncState?
     let onStatusChange: (String) -> Void
     let onNavigateTap: (() -> Void)?
     let allowsCompletionActions: Bool
+    let isNavigateLoading: Bool
 
     @State private var isExpanded = false
 
     init(
         activity: Activity,
+        executionContext: MissionActivityExecutionContext? = nil,
+        assignmentLabel: String? = nil,
         isStatusEditable: Bool = true,
         pendingSyncState: MissionActivitySyncState? = nil,
         onStatusChange: @escaping (String) -> Void,
         allowsCompletionActions: Bool = true,
+        isNavigateLoading: Bool = false,
         onNavigateTap: (() -> Void)? = nil
     ) {
         self.activity = activity
+        self.executionContext = executionContext
+        self.assignmentLabel = assignmentLabel
         self.isStatusEditable = isStatusEditable
         self.pendingSyncState = pendingSyncState
         self.onStatusChange = onStatusChange
         self.allowsCompletionActions = allowsCompletionActions
+        self.isNavigateLoading = isNavigateLoading
         self.onNavigateTap = onNavigateTap
     }
 
@@ -55,6 +64,10 @@ struct ActivityRowView: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundColor(DS.Colors.textSecondary)
                                         .multilineTextAlignment(.leading)
+                                }
+
+                                if let executionContext {
+                                    executionContextView(executionContext)
                                 }
                             }
 
@@ -103,16 +116,23 @@ struct ActivityRowView: View {
                     onNavigateTap?()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "location.viewfinder")
-                            .font(.system(size: 14, weight: .semibold))
+                        if isNavigateLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "location.viewfinder")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
 
-                        Text("Chỉ đường Goong")
+                        Text(isNavigateLoading ? "Đang tải lộ trình..." : "Xem lộ trình bước này")
                             .font(.system(size: 13, weight: .semibold))
 
                         Spacer()
 
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
+                        if isNavigateLoading == false {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
                     }
                     .foregroundColor(DS.Colors.info)
                     .padding(.horizontal, 12)
@@ -127,6 +147,7 @@ struct ActivityRowView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isNavigateLoading)
             }
 
             if availableActions.isEmpty == false {
@@ -192,13 +213,13 @@ struct ActivityRowView: View {
     }
 
     private var activityStatusBadge: some View {
-        let badgeColor = activityStatusBadgeColor(activity.activityStatus)
+        let badgeColor = activityStatusBadgeColor(activity.status, fallback: activity.activityStatus)
 
         return HStack(spacing: 6) {
-            Image(systemName: activityStatusBadgeSymbol(activity.activityStatus))
+            Image(systemName: activityStatusBadgeSymbol(activity.status, fallback: activity.activityStatus))
                 .font(.system(size: 11, weight: .bold))
 
-            Text(RescuerStatusBadgeText.activity(activity.activityStatus))
+            Text(RescuerStatusBadgeText.activity(activity.status, fallback: activity.activityStatus))
                 .font(.system(size: 13, weight: .bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
@@ -245,19 +266,21 @@ struct ActivityRowView: View {
     private var statusIcon: some View {
         ZStack {
             Circle()
-                .fill(activityStatusColor(activity.activityStatus).opacity(0.12))
+                .fill(activityStatusColor(activity.status, fallback: activity.activityStatus).opacity(0.12))
                 .frame(width: 42, height: 42)
 
-            switch activity.activityStatus {
-            case .succeed:
+            switch normalizedActivityDisplayStatus(activity.status) {
+            case "pendingconfirmation":
+                Image(systemName: "clock.badge.questionmark").foregroundColor(DS.Colors.info)
+            case "succeed", "completed":
                 Image(systemName: "checkmark.circle.fill").foregroundColor(DS.Colors.success)
-            case .onGoing:
+            case "ongoing", "inprogress":
                 Image(systemName: "arrow.triangle.2.circlepath.circle.fill").foregroundColor(DS.Colors.warning)
-            case .failed:
+            case "failed", "fail":
                 Image(systemName: "xmark.circle.fill").foregroundColor(DS.Colors.accent)
-            case .cancelled:
+            case "cancelled", "canceled", "cancel":
                 Image(systemName: "minus.circle.fill").foregroundColor(DS.Colors.textTertiary)
-            case .planned:
+            default:
                 Image(systemName: "clock").foregroundColor(DS.Colors.textSecondary)
             }
         }
@@ -265,12 +288,14 @@ struct ActivityRowView: View {
     }
 
     private var borderColor: Color {
-        switch activity.activityStatus {
-        case .succeed:
+        switch normalizedActivityDisplayStatus(activity.status) {
+        case "pendingconfirmation":
+            return DS.Colors.info.opacity(0.2)
+        case "succeed", "completed":
             return DS.Colors.success.opacity(0.18)
-        case .onGoing:
+        case "ongoing", "inprogress":
             return DS.Colors.warning.opacity(0.22)
-        case .failed:
+        case "failed", "fail":
             return DS.Colors.accent.opacity(0.18)
         default:
             return DS.Colors.borderSubtle
@@ -307,7 +332,8 @@ struct ActivityRowView: View {
 
     private var subtitleText: String? {
         let parts = [
-            localizedPriorityText(activity.priority).map { "Ưu tiên \($0)" }
+            localizedPriorityText(activity.priority).map { "Ưu tiên \($0)" },
+            assignmentLabel
         ].compactMap { $0 }
 
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
@@ -380,6 +406,40 @@ struct ActivityRowView: View {
         )
     }
 
+    private func executionContextView(_ context: MissionActivityExecutionContext) -> some View {
+        let color = executionContextColor(context)
+
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: executionContextSymbol(context))
+                    .font(.system(size: 11, weight: .bold))
+
+                Text(context.badgeText)
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(color.opacity(0.12))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(color.opacity(0.3), lineWidth: 1)
+            )
+
+            if let detailText = context.detailText {
+                Text(detailText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var supplyItems: [MissionSupply] {
         activity.suppliesToCollect ?? []
     }
@@ -412,6 +472,8 @@ struct ActivityRowView: View {
             return "Xác nhận tiếp nhận"
         case "deliversupplies":
             return "Xác nhận phân phát"
+        case "returnsupplies":
+            return "Xác nhận hoàn trả"
         default:
             return "Hoàn thành"
         }
@@ -423,6 +485,8 @@ struct ActivityRowView: View {
             return "shippingbox.fill"
         case "deliversupplies":
             return "arrowshape.turn.up.right.circle.fill"
+        case "returnsupplies":
+            return "arrow.uturn.backward.circle.fill"
         default:
             return "checkmark.circle.fill"
         }
@@ -434,6 +498,8 @@ struct ActivityRowView: View {
             return "Cần tiếp nhận ở bước này"
         case "deliversupplies":
             return "Cần phân phát ở bước này"
+        case "returnsupplies":
+            return "Cần hoàn trả ở bước này"
         case "medicalaid", "medicalsupport", "medical":
             return "Vật phẩm sử dụng ở bước này"
         default:
@@ -447,6 +513,8 @@ struct ActivityRowView: View {
             return "shippingbox.fill"
         case "deliversupplies":
             return "arrowshape.turn.up.right.circle.fill"
+        case "returnsupplies":
+            return "arrow.uturn.backward.circle.fill"
         case "medicalaid", "medicalsupport", "medical":
             return "cross.case.fill"
         default:
@@ -460,6 +528,8 @@ struct ActivityRowView: View {
             return DS.Colors.warning
         case "deliversupplies":
             return DS.Colors.success
+        case "returnsupplies":
+            return DS.Colors.info
         case "medicalaid", "medicalsupport", "medical":
             return DS.Colors.accent
         default:
@@ -471,6 +541,7 @@ struct ActivityRowView: View {
         [
             detailItem("Loại bước thực hiện", activity.localizedActivityType, icon: "tag"),
             detailItem("Công việc", localizedCodeDetailValue, icon: "number"),
+            detailItem("Đội phụ trách", assignmentLabel, icon: "person.3"),
             detailItem("Kho tiếp tế", activity.depotName, icon: "shippingbox"),
             detailItem("Địa chỉ kho", activity.depotAddress, icon: "mappin.and.ellipse"),
             detailItem("Thời gian phân công", formattedDisplayDate(activity.assignedAt), icon: "calendar.badge.clock"),
@@ -521,6 +592,31 @@ struct ActivityRowView: View {
         return localizedCode
     }
 
+    private func executionContextColor(_ context: MissionActivityExecutionContext) -> Color {
+        if context.sosRequestId != nil {
+            return DS.Colors.accent
+        }
+
+        return DS.Colors.info
+    }
+
+    private func executionContextSymbol(_ context: MissionActivityExecutionContext) -> String {
+        if context.sosRequestId != nil {
+            return "dot.radiowaves.left.and.right"
+        }
+
+        return "location.circle.fill"
+    }
+
+    private func activityStatusColor(_ rawStatus: String, fallback status: ActivityStatus) -> Color {
+        switch normalizedActivityDisplayStatus(rawStatus) {
+        case "pendingconfirmation":
+            return DS.Colors.info
+        default:
+            return activityStatusColor(status)
+        }
+    }
+
     private func activityStatusColor(_ status: ActivityStatus) -> Color {
         switch status {
         case .succeed:
@@ -533,6 +629,15 @@ struct ActivityRowView: View {
             return DS.Colors.textTertiary
         case .planned:
             return DS.Colors.textSecondary
+        }
+    }
+
+    private func activityStatusBadgeColor(_ rawStatus: String, fallback status: ActivityStatus) -> Color {
+        switch normalizedActivityDisplayStatus(rawStatus) {
+        case "pendingconfirmation":
+            return DS.Colors.info
+        default:
+            return activityStatusBadgeColor(status)
         }
     }
 
@@ -551,6 +656,15 @@ struct ActivityRowView: View {
         }
     }
 
+    private func activityStatusBadgeSymbol(_ rawStatus: String, fallback status: ActivityStatus) -> String {
+        switch normalizedActivityDisplayStatus(rawStatus) {
+        case "pendingconfirmation":
+            return "clock.badge.questionmark"
+        default:
+            return activityStatusBadgeSymbol(status)
+        }
+    }
+
     private func activityStatusBadgeSymbol(_ status: ActivityStatus) -> String {
         switch status {
         case .planned:
@@ -564,6 +678,10 @@ struct ActivityRowView: View {
         case .cancelled:
             return "slash.circle.fill"
         }
+    }
+
+    private func normalizedActivityDisplayStatus(_ rawStatus: String) -> String {
+        RescuerStatusBadgeText.normalized(rawStatus)
     }
 
     private func pendingSyncBadgeLabel(_ state: MissionActivitySyncState) -> String {

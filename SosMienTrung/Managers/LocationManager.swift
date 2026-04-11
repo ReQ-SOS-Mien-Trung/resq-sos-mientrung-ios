@@ -3,6 +3,8 @@ import CoreLocation
 import Combine
 
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    static let shared = LocationManager()
+
     private let manager = CLLocationManager()
     private var pendingRequestCompletion: ((CLLocation?) -> Void)?
     private var pendingRequestNeedsFreshLocation = false

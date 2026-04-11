@@ -88,12 +88,14 @@ private enum MissionInventoryFilter: String, CaseIterable, Identifiable {
 
 private struct MissionInventoryEntry: Identifiable {
     let id: String
+    let inventoryKey: String
     let itemName: String
     let quantity: Int
     let unit: String?
     let activityId: Int
     let activityTitle: String
     let activityType: String?
+    let activityStatus: String
     let step: Int?
     let depotName: String?
     let stage: MissionInventoryStage
@@ -124,14 +126,18 @@ struct MissionInventoryView: View {
         activities.flatMap { activity in
             let stage = inventoryStage(for: activity)
             return (activity.suppliesToCollect ?? []).map { supply in
-                MissionInventoryEntry(
+                let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm"
+                let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                return MissionInventoryEntry(
                     id: "\(activity.id)-\(supply.id)",
-                    itemName: supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm",
+                    inventoryKey: "\(itemName)|\(unit ?? "")",
+                    itemName: itemName,
                     quantity: supply.quantity,
-                    unit: supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                    unit: unit,
                     activityId: activity.id,
                     activityTitle: activity.title,
                     activityType: activity.localizedActivityType,
+                    activityStatus: activity.status,
                     step: activity.step,
                     depotName: activity.depotName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
                     stage: stage
@@ -140,8 +146,18 @@ struct MissionInventoryView: View {
         }
     }
 
+    private var pickedUpInventoryKeys: Set<String> {
+        Set(
+            inventoryEntries
+                .filter { entry in
+                    entry.stage == .pickedUp
+                }
+                .map(\.inventoryKey)
+        )
+    }
+
     private var filteredEntries: [MissionInventoryEntry] {
-        inventoryEntries.filter { selectedFilter.matches(stage: $0.stage) }
+        inventoryEntries.filter(matchesSelectedFilter)
     }
 
     private var groupedEntries: [MissionInventoryGroup] {
@@ -204,7 +220,7 @@ struct MissionInventoryView: View {
             MissionInventorySummaryMetric(
                 id: "inhand",
                 title: "Đang giữ",
-                value: "\(quantity(for: [.pickedUp, .readyForDelivery, .delivering, .plannedUse, .inUse]))",
+                value: "\(inHandQuantity)",
                 color: DS.Colors.accent
             ),
             MissionInventorySummaryMetric(
@@ -494,6 +510,40 @@ struct MissionInventoryView: View {
             .reduce(0) { $0 + $1.quantity }
     }
 
+    private var inHandQuantity: Int {
+        inventoryEntries
+            .filter(isInHandEntry)
+            .reduce(0) { $0 + $1.quantity }
+    }
+
+    private func matchesSelectedFilter(_ entry: MissionInventoryEntry) -> Bool {
+        switch selectedFilter {
+        case .all:
+            return true
+        case .pickup:
+            return [.plannedPickup, .pickingUp].contains(entry.stage)
+        case .inHand:
+            return isInHandEntry(entry)
+        case .delivered:
+            return [.delivered, .used].contains(entry.stage)
+        case .returnFlow:
+            return [.readyForReturn, .returning, .returned].contains(entry.stage)
+        }
+    }
+
+    private func isInHandEntry(_ entry: MissionInventoryEntry) -> Bool {
+        switch entry.stage {
+        case .pickedUp:
+            return true
+        case .pickingUp:
+            return false
+        case .readyForDelivery, .delivering, .plannedUse, .inUse, .readyForReturn, .returning:
+            return pickedUpInventoryKeys.contains(entry.inventoryKey)
+        case .plannedPickup, .delivered, .returned, .used, .released:
+            return false
+        }
+    }
+
     private func inventoryStage(for activity: Activity) -> MissionInventoryStage {
         let type = normalizedActivityKey(activity.activityType)
         let status = normalizedStatus(activity.status)
@@ -613,7 +663,7 @@ private struct MissionInventoryGroupCard: View {
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(DS.Colors.text)
 
-                            StatusBadge(text: entry.stage.title, color: entry.stage.color)
+                            StatusBadge(text: statusBadgeText(for: entry), color: statusBadgeColor(for: entry))
                         }
                     }
                     .padding(.vertical, 4)
@@ -635,6 +685,58 @@ private struct MissionInventoryGroupCard: View {
             return "Bước \(step) • \(entry.activityTitle)"
         }
         return entry.activityTitle
+    }
+
+    private func statusBadgeText(for entry: MissionInventoryEntry) -> String {
+        switch entry.stage {
+        case .plannedPickup, .pickingUp:
+            return localizedBackendStatus(entry.activityStatus)
+        default:
+            return entry.stage.title
+        }
+    }
+
+    private func statusBadgeColor(for entry: MissionInventoryEntry) -> Color {
+        switch entry.stage {
+        case .plannedPickup, .pickingUp:
+            return backendStatusColor(entry.activityStatus)
+        default:
+            return entry.stage.color
+        }
+    }
+
+    private func localizedBackendStatus(_ rawStatus: String) -> String {
+        switch RescuerStatusBadgeText.normalized(rawStatus) {
+        case "planned", "pending", "scheduled":
+            return "Đã lên kế hoạch"
+        case "ongoing", "inprogress":
+            return "Đang thực hiện"
+        case "pendingconfirmation":
+            return "Chờ xác nhận"
+        case "succeed", "succeeded", "success", "completed", "finished", "done":
+            return "Hoàn thành"
+        case "failed", "fail":
+            return "Thất bại"
+        case "cancelled", "canceled", "cancel":
+            return "Đã hủy"
+        default:
+            return RescuerStatusBadgeText.activity(ActivityStatus(apiValue: rawStatus) ?? .planned)
+        }
+    }
+
+    private func backendStatusColor(_ rawStatus: String) -> Color {
+        switch RescuerStatusBadgeText.normalized(rawStatus) {
+        case "planned", "pending", "scheduled":
+            return DS.Colors.info
+        case "ongoing", "inprogress", "pendingconfirmation":
+            return DS.Colors.warning
+        case "succeed", "succeeded", "success", "completed", "finished", "done":
+            return DS.Colors.success
+        case "failed", "fail", "cancelled", "canceled", "cancel":
+            return DS.Colors.accent
+        default:
+            return DS.Colors.textSecondary
+        }
     }
 }
 

@@ -90,6 +90,16 @@ final class MissionService {
         return try missionDecoder().decode(Mission.self, from: data)
     }
 
+    // MARK: - GET /operations/missions/{missionId}/activities
+    func getMissionActivities(missionId: Int) async throws -> [Activity] {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities") else {
+            throw URLError(.badURL)
+        }
+        print("[MissionService] → GET \(url.absoluteString)")
+        let data = try await send(authorizedRequest(url: url))
+        return try missionDecoder().decode([Activity].self, from: data)
+    }
+
     // MARK: - GET /operations/missions/{missionId}/activities/my-team
     func getMyTeamActivities(missionId: Int) async throws -> [Activity] {
         guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/my-team") else {
@@ -102,7 +112,7 @@ final class MissionService {
 
     // MARK: - Backward-compatible wrapper
     func getActivities(missionId: Int) async throws -> [Activity] {
-        try await getMyTeamActivities(missionId: missionId)
+        try await getMissionActivities(missionId: missionId)
     }
 
     // MARK: - PATCH /operations/missions/{missionId}/activities/{activityId}/status

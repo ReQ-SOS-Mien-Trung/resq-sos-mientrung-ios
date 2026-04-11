@@ -5,8 +5,9 @@ import CoreLocation
 struct MissionAggregateRouteSheetView: View {
     let mission: Mission
     @ObservedObject var vm: RescuerMissionViewModel
+    let preferredMissionTeamId: Int?
 
-    @StateObject private var locationManager = LocationManager()
+    @StateObject private var locationManager = LocationManager.shared
     @State private var selectedVehicle = "bike"
     @State private var teamRoute: MissionTeamRoute?
     @State private var segments: [AggregateRouteSegment] = []
@@ -299,7 +300,11 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private var sourceActivities: [Activity] {
-        vm.effectiveActivities(missionId: mission.id, fallback: mission.activities ?? [])
+        vm.effectiveCurrentTeamActivities(
+            missionId: mission.id,
+            fallback: mission.activities ?? [],
+            fallbackMissionTeamId: preferredMissionTeamId
+        )
     }
 
     private var remainingActivities: [Activity] {
@@ -332,7 +337,9 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private var resolvedMissionTeamId: Int? {
-        sourceActivities.compactMap { $0.missionTeamId }.first ?? mission.missionTeamId
+        preferredMissionTeamId
+            ?? sourceActivities.compactMap { $0.missionTeamId }.first
+            ?? mission.missionTeamId
     }
 
     private var missionTeamCoordinate: CLLocationCoordinate2D? {
