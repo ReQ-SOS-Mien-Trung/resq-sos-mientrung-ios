@@ -538,7 +538,11 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
 
     private(set) var pageNumber = 1
     private(set) var pageSize = 10
-    private let locationManager = LocationManager()
+    private let locationManager: LocationManager
+
+    init(locationManager: LocationManager? = nil) {
+        self.locationManager = locationManager ?? .shared
+    }
 
     func startLocationTracking() {
         locationManager.requestPermission()

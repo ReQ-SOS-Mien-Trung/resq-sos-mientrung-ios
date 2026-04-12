@@ -225,12 +225,17 @@ struct MissionRowView: View {
 
 // MARK: - Rescuer Dashboard
 struct RescuerDashboardView: View {
-    @StateObject private var vm = RescuerMissionViewModel()
-    @StateObject private var assemblyVM = RescuerAssemblyEventsViewModel()
+    @StateObject private var vm: RescuerMissionViewModel
+    @StateObject private var assemblyVM: RescuerAssemblyEventsViewModel
     @ObservedObject private var authSession = AuthSessionStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
     @State private var showAssemblyEventsSheet = false
+
+    init(locationManager: LocationManager = .shared) {
+        _vm = StateObject(wrappedValue: RescuerMissionViewModel(locationManager: locationManager))
+        _assemblyVM = StateObject(wrappedValue: RescuerAssemblyEventsViewModel(locationManager: locationManager))
+    }
 
     private var currentUserId: String? {
         AuthSessionStore.shared.session?.userId
@@ -947,8 +952,12 @@ private struct TeamMemberAvatarView: View {
 }
 
 struct RescuerAssemblyEventsView: View {
-    @StateObject private var vm = RescuerAssemblyEventsViewModel()
+    @StateObject private var vm: RescuerAssemblyEventsViewModel
     @Environment(\.dismiss) private var dismiss
+
+    init(locationManager: LocationManager = .shared) {
+        _vm = StateObject(wrappedValue: RescuerAssemblyEventsViewModel(locationManager: locationManager))
+    }
 
     private var checkedInCount: Int {
         vm.events.filter(\.isCheckedIn).count

@@ -90,6 +90,7 @@ private struct MissionInventoryEntry: Identifiable {
     let id: String
     let inventoryKey: String
     let itemName: String
+    let imageUrl: URL?
     let quantity: Int
     let unit: String?
     let activityId: Int
@@ -104,6 +105,7 @@ private struct MissionInventoryEntry: Identifiable {
 private struct MissionInventoryGroup: Identifiable {
     let id: String
     let itemName: String
+    let imageUrl: URL?
     let unit: String?
     let totalQuantity: Int
     let entries: [MissionInventoryEntry]
@@ -132,6 +134,7 @@ struct MissionInventoryView: View {
                     id: "\(activity.id)-\(supply.id)",
                     inventoryKey: "\(itemName)|\(unit ?? "")",
                     itemName: itemName,
+                    imageUrl: inventoryImageURL(from: supply.imageUrl),
                     quantity: supply.quantity,
                     unit: unit,
                     activityId: activity.id,
@@ -184,6 +187,7 @@ struct MissionInventoryView: View {
             return MissionInventoryGroup(
                 id: key,
                 itemName: first.itemName,
+                imageUrl: sortedEntries.compactMap(\.imageUrl).first,
                 unit: first.unit,
                 totalQuantity: sortedEntries.reduce(0) { $0 + $1.quantity },
                 entries: sortedEntries
@@ -607,6 +611,15 @@ struct MissionInventoryView: View {
     private func normalizedStatus(_ status: String) -> String {
         RescuerStatusBadgeText.normalized(status)
     }
+
+    private func inventoryImageURL(from rawValue: String?) -> URL? {
+        guard let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              trimmed.isEmpty == false,
+              let url = URL(string: trimmed) else {
+            return nil
+        }
+        return url
+    }
 }
 
 private struct MissionInventoryGroupCard: View {
@@ -615,15 +628,7 @@ private struct MissionInventoryGroupCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             HStack(alignment: .top, spacing: DS.Spacing.sm) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(DS.Colors.info.opacity(0.08))
-                        .frame(width: 42, height: 42)
-
-                    Image(systemName: "cross.case.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(DS.Colors.info)
-                }
+                MissionInventoryItemThumbnail(imageURL: group.imageUrl, itemName: group.itemName)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(group.itemName)
@@ -737,6 +742,101 @@ private struct MissionInventoryGroupCard: View {
         default:
             return DS.Colors.textSecondary
         }
+    }
+}
+
+private struct MissionInventoryItemThumbnail: View {
+    let imageURL: URL?
+    let itemName: String
+
+    private let size: CGFloat = 76
+
+    var body: some View {
+        Group {
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        fallbackView
+                    case .empty:
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(DS.Colors.info.opacity(0.08))
+
+                            ProgressView()
+                                .tint(DS.Colors.info)
+                        }
+                    @unknown default:
+                        fallbackView
+                    }
+                }
+            } else {
+                fallbackView
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(DS.Colors.info.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var fallbackView: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    DS.Colors.info.opacity(0.18),
+                    DS.Colors.info.opacity(0.06)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 6) {
+                Image(systemName: fallbackIconName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(DS.Colors.info)
+
+                Text(shortLabel)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(DS.Colors.info.opacity(0.85))
+                    .lineLimit(1)
+            }
+            .padding(8)
+        }
+    }
+
+    private var shortLabel: String {
+        let words = itemName.split(separator: " ").prefix(2)
+        if words.isEmpty {
+            return "ITEM"
+        }
+        return words
+            .compactMap { $0.first.map(String.init) }
+            .joined()
+            .uppercased()
+    }
+
+    private var fallbackIconName: String {
+        let normalized = itemName
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .lowercased()
+
+        if normalized.contains("nuoc") {
+            return "drop.fill"
+        }
+        if normalized.contains("mi") || normalized.contains("gao") || normalized.contains("thuc pham") {
+            return "fork.knife"
+        }
+        if normalized.contains("thuoc") || normalized.contains("y te") {
+            return "cross.case.fill"
+        }
+        return "shippingbox.fill"
     }
 }
 

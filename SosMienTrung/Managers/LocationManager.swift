@@ -23,12 +23,17 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     private var retryTimer: Timer?
     private var retryCount = 0
     private let maxRetries = 3
+    private let continuousDesiredAccuracy = kCLLocationAccuracyNearestTenMeters
+    private let continuousDistanceFilter: CLLocationDistance = 25
+    private let preciseRequestDesiredAccuracy = kCLLocationAccuracyBest
+    private let freshLocationTargetAccuracy: CLLocationAccuracy = 50
     
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 5 // Cập nhật khi di chuyển 5m
+        manager.pausesLocationUpdatesAutomatically = true
+        manager.activityType = .other
+        applyContinuousTrackingConfiguration()
         authorizationStatus = manager.authorizationStatus
     }
     
@@ -51,9 +56,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             pendingRequestStartedAt = forceFresh ? Date() : nil
             isFetchingLocation = true
             if forceFresh {
+                applyPreciseRequestConfiguration()
                 manager.startUpdatingLocation()
                 scheduleFreshLocationTimeout()
             } else {
+                restorePreferredTrackingConfiguration()
                 invalidatePendingRequestTimeout()
             }
             manager.requestLocation()
@@ -62,7 +69,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
     }
     
-    // MARK: - Continuous Location Updates (cho SOS form)
+    // MARK: - Continuous Location Updates
     
     /// Bắt đầu cập nhật vị trí liên tục — gọi khi mở SOS form
     func startContinuousUpdates() {
@@ -79,9 +86,10 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             return
         }
         
+        applyContinuousTrackingConfiguration()
         isFetchingLocation = true
         manager.startUpdatingLocation()
-        print("📍 [Location] Started continuous updates for SOS")
+        print("📍 [Location] Started continuous updates")
     }
     
     /// Dừng cập nhật vị trí liên tục — gọi khi đóng SOS form
@@ -90,6 +98,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard continuousUpdateRefCount == 0 else { return } // Vẫn còn caller khác
         
         manager.stopUpdatingLocation()
+        applyContinuousTrackingConfiguration()
         isFetchingLocation = false
         retryTimer?.invalidate()
         retryTimer = nil
@@ -121,6 +130,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             if pendingRequestCompletion != nil {
                 if pendingRequestNeedsFreshLocation {
                     isFetchingLocation = true
+                    applyPreciseRequestConfiguration()
                     manager.startUpdatingLocation()
                     scheduleFreshLocationTimeout()
                 }
@@ -128,6 +138,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             }
             // Nếu đang chờ continuous updates → bắt đầu ngay
             if self.continuousUpdateRefCount > 0 {
+                self.applyContinuousTrackingConfiguration()
                 self.isFetchingLocation = true
                 manager.startUpdatingLocation()
                 print("📍 [Location] Authorization granted, starting continuous updates")
@@ -149,12 +160,19 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             self.currentLocation = location
             self.locationError = nil
             self.isFetchingLocation = false
+            self.retryTimer?.invalidate()
+            self.retryTimer = nil
+            self.retryCount = 0
             
             if isFirstFix {
                 print("📍 [Location] First fix: \(location.coordinate.latitude), \(location.coordinate.longitude) (±\(Int(location.horizontalAccuracy))m)")
             }
             
             if let completion = self.pendingRequestCompletion {
+                if pendingNeedsFreshLocation,
+                   self.isAccurateEnoughForFreshRequest(location) == false {
+                    return
+                }
                 self.finishPendingRequest(with: location, completion: completion)
                 return
             }
@@ -241,11 +259,30 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         pendingRequestNeedsFreshLocation = false
         pendingRequestStartedAt = nil
         invalidatePendingRequestTimeout()
+        restorePreferredTrackingConfiguration()
 
         if continuousUpdateRefCount == 0 {
             manager.stopUpdatingLocation()
         }
 
         completion(location)
+    }
+
+    private func applyContinuousTrackingConfiguration() {
+        manager.desiredAccuracy = continuousDesiredAccuracy
+        manager.distanceFilter = continuousDistanceFilter
+    }
+
+    private func applyPreciseRequestConfiguration() {
+        manager.desiredAccuracy = preciseRequestDesiredAccuracy
+        manager.distanceFilter = kCLDistanceFilterNone
+    }
+
+    private func restorePreferredTrackingConfiguration() {
+        applyContinuousTrackingConfiguration()
+    }
+
+    private func isAccurateEnoughForFreshRequest(_ location: CLLocation) -> Bool {
+        location.horizontalAccuracy > 0 && location.horizontalAccuracy <= freshLocationTargetAccuracy
     }
 }
