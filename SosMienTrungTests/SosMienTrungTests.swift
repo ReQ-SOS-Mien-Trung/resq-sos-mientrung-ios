@@ -73,6 +73,87 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(notification.displayMessage.contains("Da Nang"))
     }
 
+    func testActivityDescriptionHasRouteInstructionWhenDescriptionContainsMovementDirective() {
+        let activity = Activity(
+            id: 1,
+            step: 6,
+            activityCode: "RESCUE",
+            activityType: "RESCUE",
+            description: "Di chuyển đến 18.351, 105.902. Thực hiện cứu hộ 5 người bị ảnh hưởng bởi sạt lở đất.",
+            imageUrl: nil,
+            priority: "High",
+            estimatedTime: 2,
+            sosRequestId: 3,
+            depotId: nil,
+            depotName: nil,
+            depotAddress: nil,
+            suppliesToCollect: nil,
+            targetLatitude: 18.351,
+            targetLongitude: 105.902,
+            status: ActivityStatus.onGoing.rawValue,
+            missionTeamId: 3,
+            assignedAt: nil,
+            completedAt: nil,
+            completedBy: nil
+        )
+
+        XCTAssertTrue(activityDescriptionHasRouteInstruction(activity))
+    }
+
+    func testActivityDescriptionHasRouteInstructionWhenDescriptionIsOnlyExecutionDirective() {
+        let activity = Activity(
+            id: 2,
+            step: 6,
+            activityCode: "FIRST_AID",
+            activityType: "MEDICAL",
+            description: "Thực hiện sơ cứu tại 18.351, 105.902 cho 2 người bị thương.",
+            imageUrl: nil,
+            priority: "High",
+            estimatedTime: 2,
+            sosRequestId: 3,
+            depotId: nil,
+            depotName: nil,
+            depotAddress: nil,
+            suppliesToCollect: nil,
+            targetLatitude: 18.351,
+            targetLongitude: 105.902,
+            status: ActivityStatus.onGoing.rawValue,
+            missionTeamId: 3,
+            assignedAt: nil,
+            completedAt: nil,
+            completedBy: nil
+        )
+
+        XCTAssertFalse(activityDescriptionHasRouteInstruction(activity))
+    }
+
+    func testLocalizedActivityTypeDisplayForReturnAssemblyPoint() {
+        XCTAssertEqual(
+            localizedActivityTypeDisplay("RETURN_ASSEMBLY_POINT"),
+            L10n.Domain.activityTypeReturnAssemblyPoint
+        )
+    }
+
+    func testActivityDecodesImageURLFromAPIResponse() throws {
+        let json = """
+        {
+          "id": 20,
+          "step": 9,
+          "activityType": "RETURN_ASSEMBLY_POINT",
+          "status": "Planned",
+          "imageUrl": "https://res.cloudinary.com/demo/image/upload/v1/activity-proof.jpg"
+        }
+        """
+
+        let activity = try JSONDecoder().decode(
+            Activity.self,
+            from: XCTUnwrap(json.data(using: .utf8))
+        )
+
+        XCTAssertEqual(activity.imageUrl, "https://res.cloudinary.com/demo/image/upload/v1/activity-proof.jpg")
+        XCTAssertEqual(activity.localizedActivityType, L10n.Domain.activityTypeReturnAssemblyPoint)
+    }
+
     func testNotificationDecodesStructuredJSONStringBody() throws {
         let body = """
         {
@@ -185,7 +266,7 @@ final class SosMienTrungTests: XCTestCase {
         formData.rescueData.injuredPersonIds = ["adult_1"]
         formData.rescueData.medicalInfoByPerson["adult_1"] = PersonMedicalInfo(
             personId: "adult_1",
-            medicalIssues: [.highFever]
+            medicalIssues: [MedicalIssue.highFever.rawValue]
         )
 
         XCTAssertEqual(formData.person(for: "adult_1")?.displayName, "Bé Na")
@@ -333,7 +414,7 @@ final class SosMienTrungTests: XCTestCase {
         formData.resolvedAddress = "Dai Noi Hue, Viet Nam"
         formData.manualLocation = SOSManualLocation(latitude: 16.471, longitude: 107.578, accuracy: nil)
         formData.selectedTypes = [.rescue]
-        formData.rescueData.situation = .trapped
+        formData.rescueData.situation = RescueSituation.trapped.rawValue
 
         let saved = SavedSOS(from: formData, packetId: "packet-1", latitude: 16.471, longitude: 107.578)
         let restored = saved.toFormData()
@@ -407,8 +488,8 @@ final class SosMienTrungTests: XCTestCase {
     func testReliefSupplyCardModelsCreateCompactCardsForSelectedNeeds() {
         var relief = ReliefData()
         relief.supplies = [.water, .food, .medicine, .blanket, .clothes]
-        relief.waterDuration = .from12to24h
-        relief.foodDuration = .from1to2days
+        relief.waterDuration = WaterDuration.from12to24h.rawValue
+        relief.foodDuration = FoodDuration.from1to2days.rawValue
         relief.medicalNeeds = [.commonMedicine]
         relief.areBlanketsEnough = false
         relief.blanketRequestCount = 2
@@ -1078,9 +1159,10 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertEqual(service.updatedActivityCalls.first?.missionId, 7)
         XCTAssertEqual(service.updatedActivityCalls.first?.activityId, 80)
         XCTAssertEqual(service.updatedActivityCalls.first?.status, "Succeed")
+        XCTAssertNil(service.updatedActivityCalls.first?.imageUrl)
         XCTAssertTrue(store.updates.isEmpty)
         XCTAssertEqual(vm.activities.first?.activityStatus, .succeed)
-        XCTAssertEqual(vm.successMessage, "Đã cập nhật: Succeed")
+        XCTAssertEqual(vm.successMessage, L10n.RescuerMission.activityStatusUpdated)
     }
 
     func testPerformanceExample() throws {
@@ -1115,6 +1197,7 @@ final class SosMienTrungTests: XCTestCase {
             activityCode: "ACT-\(id)",
             activityType: "EVACUATE",
             description: "Sample activity \(id)",
+            imageUrl: nil,
             priority: "High",
             estimatedTime: 15,
             sosRequestId: nil,
@@ -1135,7 +1218,7 @@ final class SosMienTrungTests: XCTestCase {
     private final class MockMissionActivityRemoteService: MissionActivityRemoteService {
         var missionsToReturn: [Mission] = []
         var activitiesByMission: [Int: [Activity]] = [:]
-        var updatedActivityCalls: [(missionId: Int, activityId: Int, status: String)] = []
+        var updatedActivityCalls: [(missionId: Int, activityId: Int, status: String, imageUrl: String?)] = []
         var updatedMissionCalls: [(missionId: Int, status: String)] = []
 
         func getMyTeamMissions() async throws -> [Mission] {
@@ -1146,8 +1229,12 @@ final class SosMienTrungTests: XCTestCase {
             activitiesByMission[missionId] ?? []
         }
 
-        func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws {
-            updatedActivityCalls.append((missionId, activityId, status))
+        func getActivities(missionId: Int) async throws -> [Activity] {
+            activitiesByMission[missionId] ?? []
+        }
+
+        func updateActivityStatus(missionId: Int, activityId: Int, status: String, imageUrl: String?) async throws {
+            updatedActivityCalls.append((missionId, activityId, status, imageUrl))
         }
 
         func updateMissionStatus(missionId: Int, status: String) async throws {

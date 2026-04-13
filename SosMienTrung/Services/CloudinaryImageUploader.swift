@@ -3,6 +3,9 @@ import UIKit
 
 private struct CloudinaryUploadResponse: Decodable {
     let secure_url: String
+    let public_id: String?
+    let asset_folder: String?
+    let folder: String?
 }
 
 enum CloudinaryImageUploadError: LocalizedError {
@@ -14,13 +17,13 @@ enum CloudinaryImageUploadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidImageData:
-            return "Không thể xử lý dữ liệu ảnh"
+            return L10n.Media.invalidImageData
         case .invalidResponse:
-            return "Phản hồi upload không hợp lệ"
+            return L10n.Media.invalidUploadResponse
         case .uploadFailed(let statusCode, let message):
-            return message ?? "Upload ảnh lỗi (HTTP \(statusCode))"
+            return message ?? L10n.Media.uploadFailed(String(statusCode))
         case .missingURL:
-            return "Cloudinary không trả về URL ảnh"
+            return L10n.Media.missingUploadedURL
         }
     }
 }
@@ -51,6 +54,9 @@ final class CloudinaryImageUploader {
             throw CloudinaryImageUploadError.invalidImageData
         }
 
+        let trimmedFolder = folder.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveFolder = trimmedFolder.isEmpty ? "resq/misc" : trimmedFolder
+
         let boundary = "Boundary-\(UUID().uuidString)"
         guard let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudName)/image/upload") else {
             throw CloudinaryImageUploadError.invalidResponse
@@ -63,10 +69,12 @@ final class CloudinaryImageUploader {
         request.httpBody = makeBody(
             boundary: boundary,
             uploadPreset: uploadPreset,
-            folder: folder,
+            folder: effectiveFolder,
             fileData: imageData,
             fileName: "\(fileNamePrefix)_\(Int(Date().timeIntervalSince1970)).jpg"
         )
+
+        print("[Cloudinary] Upload target folder=\(effectiveFolder) filePrefix=\(fileNamePrefix)")
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -82,6 +90,8 @@ final class CloudinaryImageUploader {
         guard !decoded.secure_url.isEmpty else {
             throw CloudinaryImageUploadError.missingURL
         }
+        let resolvedFolder = decoded.asset_folder ?? decoded.folder ?? "(unknown)"
+        print("[Cloudinary] Upload success folder=\(resolvedFolder) publicId=\(decoded.public_id ?? "-") url=\(decoded.secure_url)")
         return decoded.secure_url
     }
 
@@ -125,6 +135,11 @@ final class CloudinaryImageUploader {
 
         append("--\(boundary)\(lineBreak)")
         append("Content-Disposition: form-data; name=\"folder\"\(lineBreak)\(lineBreak)")
+        append("\(folder)\(lineBreak)")
+
+        // Support both legacy and dynamic folder modes in Cloudinary.
+        append("--\(boundary)\(lineBreak)")
+        append("Content-Disposition: form-data; name=\"asset_folder\"\(lineBreak)\(lineBreak)")
         append("\(folder)\(lineBreak)")
 
         append("--\(boundary)\(lineBreak)")

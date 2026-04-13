@@ -25,11 +25,11 @@ enum GeocodingError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Apple Maps không trả về dữ liệu vị trí hợp lệ."
+            return L10n.Geocoding.invalidResponse
         case .noResults:
-            return "Không tìm thấy địa chỉ phù hợp trên Apple Maps."
+            return L10n.Geocoding.noResults
         case .noAddress:
-            return "Apple Maps chưa đọc được địa chỉ cho vị trí này."
+            return L10n.Geocoding.noAddress
         }
     }
 }

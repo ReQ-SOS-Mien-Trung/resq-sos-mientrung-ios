@@ -25,17 +25,17 @@ final class IncidentViewModel: ObservableObject {
                 )
                 if request.rescueRequest != nil {
                     if let assistanceId = response.assistanceSosRequestId {
-                        successMessage = "Đã báo sự cố mission và tạo yêu cầu giải cứu #\(assistanceId)"
+                        successMessage = L10n.Incident.reportCreatedWithAssistance(String(assistanceId))
                     } else {
-                        successMessage = "Đã báo sự cố mission và gửi kèm yêu cầu giải cứu team"
+                        successMessage = L10n.Incident.reportCreatedWithTeamRequest
                     }
                 } else if request.handover != nil {
-                    successMessage = "Đã báo sự cố mission và gửi thông tin bàn giao"
+                    successMessage = L10n.Incident.reportCreatedWithHandover
                 } else {
-                    successMessage = "Đã báo sự cố mission cho toàn đội"
+                    successMessage = L10n.Incident.reportCreatedForWholeTeam
                 }
             } catch {
-                errorMessage = "Báo cáo thất bại: \(error.localizedDescription)"
+                errorMessage = L10n.Incident.reportFailed(error.localizedDescription)
             }
             isSubmitting = false
         }
@@ -56,10 +56,10 @@ final class IncidentViewModel: ObservableObject {
                     request: request
                 )
                 successMessage = request.supportRequest != nil
-                    ? "Đã báo sự cố activity và gửi kèm yêu cầu hỗ trợ"
-                    : "Đã báo sự cố activity"
+                    ? L10n.Incident.activityReportCreatedWithSupport
+                    : L10n.Incident.activityReportCreated
             } catch {
-                errorMessage = "Báo cáo thất bại: \(error.localizedDescription)"
+                errorMessage = L10n.Incident.reportFailed(error.localizedDescription)
             }
             isSubmitting = false
         }
@@ -88,9 +88,9 @@ final class IncidentViewModel: ObservableObject {
                     hasInjuredMember: hasInjuredMember
                 )
                 try await IncidentService.shared.updateIncidentStatus(incidentId: incidentId, request: req)
-                successMessage = "Đã cập nhật trạng thái sự cố"
+                successMessage = L10n.Incident.incidentStatusUpdated
             } catch {
-                errorMessage = "Cập nhật sự cố thất bại: \(error.localizedDescription)"
+                errorMessage = L10n.Incident.incidentStatusUpdateFailed(error.localizedDescription)
             }
         }
     }

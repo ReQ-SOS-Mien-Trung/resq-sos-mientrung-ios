@@ -4,15 +4,17 @@ import UIKit
 struct PickupConfirmationSheet: View {
     let activity: Activity
     let isSubmitting: Bool
-    let onSubmit: ([MissionPickupBufferUsageRequest]) async -> Bool
+    let onSubmit: ([MissionPickupBufferUsageRequest], UIImage?) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [PickupBufferDraft]
+    @State private var proofImage: UIImage?
+    @State private var isSubmittingLocal = false
 
     init(
         activity: Activity,
         isSubmitting: Bool,
-        onSubmit: @escaping ([MissionPickupBufferUsageRequest]) async -> Bool
+        onSubmit: @escaping ([MissionPickupBufferUsageRequest], UIImage?) async -> Bool
     ) {
         self.activity = activity
         self.isSubmitting = isSubmitting
@@ -118,6 +120,11 @@ struct PickupConfirmationSheet: View {
                         }
                     }
                 }
+
+                ActivityProofCaptureSection(
+                    proofImage: $proofImage,
+                    subtitle: "Bạn có thể chụp ảnh nhanh tại kho để làm minh chứng tiếp nhận vật phẩm."
+                )
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.top, DS.Spacing.md)
@@ -131,7 +138,7 @@ struct PickupConfirmationSheet: View {
                 Button("Đóng") {
                     dismiss()
                 }
-                .disabled(isSubmitting)
+                .disabled(isSubmissionLocked)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -147,12 +154,17 @@ struct PickupConfirmationSheet: View {
                 IncidentSubmitButton(
                     title: "Xác nhận đã tiếp nhận",
                     isEnabled: canSubmit,
-                    isLoading: isSubmitting
+                    isLoading: isSubmissionLocked
                 ) {
-                    Task {
-                        let didSucceed = await onSubmit(submitPayload)
+                    guard isSubmissionLocked == false else { return }
+                    isSubmittingLocal = true
+
+                    Task { @MainActor in
+                        let didSucceed = await onSubmit(submitPayload, proofImage)
                         if didSucceed {
                             dismiss()
+                        } else {
+                            isSubmittingLocal = false
                         }
                     }
                 }
@@ -170,6 +182,10 @@ struct PickupConfirmationSheet: View {
 
     private var canSubmit: Bool {
         drafts.allSatisfy { pickupValidationMessage(for: $0) == nil }
+    }
+
+    private var isSubmissionLocked: Bool {
+        isSubmitting || isSubmittingLocal
     }
 
     private var submitPayload: [MissionPickupBufferUsageRequest] {
@@ -246,16 +262,18 @@ struct PickupConfirmationSheet: View {
 struct DeliveryConfirmationSheet: View {
     let activity: Activity
     let isSubmitting: Bool
-    let onSubmit: ([MissionActualDeliveredItemRequest], String?) async -> Bool
+    let onSubmit: ([MissionActualDeliveredItemRequest], String?, UIImage?) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [DeliveryDraft]
     @State private var deliveryNote = ""
+    @State private var proofImage: UIImage?
+    @State private var isSubmittingLocal = false
 
     init(
         activity: Activity,
         isSubmitting: Bool,
-        onSubmit: @escaping ([MissionActualDeliveredItemRequest], String?) async -> Bool
+        onSubmit: @escaping ([MissionActualDeliveredItemRequest], String?, UIImage?) async -> Bool
     ) {
         self.activity = activity
         self.isSubmitting = isSubmitting
@@ -351,6 +369,11 @@ struct DeliveryConfirmationSheet: View {
                         axis: .vertical
                     )
                 }
+
+                ActivityProofCaptureSection(
+                    proofImage: $proofImage,
+                    subtitle: "Bạn có thể chụp ảnh hiện trường giao vật phẩm để lưu minh chứng phân phát."
+                )
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.top, DS.Spacing.md)
@@ -364,7 +387,7 @@ struct DeliveryConfirmationSheet: View {
                 Button("Đóng") {
                     dismiss()
                 }
-                .disabled(isSubmitting)
+                .disabled(isSubmissionLocked)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -380,12 +403,17 @@ struct DeliveryConfirmationSheet: View {
                 IncidentSubmitButton(
                     title: "Xác nhận đã phân phát",
                     isEnabled: canSubmit,
-                    isLoading: isSubmitting
+                    isLoading: isSubmissionLocked
                 ) {
-                    Task {
-                        let didSucceed = await onSubmit(submitPayload, deliveryNote)
+                    guard isSubmissionLocked == false else { return }
+                    isSubmittingLocal = true
+
+                    Task { @MainActor in
+                        let didSucceed = await onSubmit(submitPayload, deliveryNote, proofImage)
                         if didSucceed {
                             dismiss()
+                        } else {
+                            isSubmittingLocal = false
                         }
                     }
                 }
@@ -399,6 +427,10 @@ struct DeliveryConfirmationSheet: View {
 
     private var canSubmit: Bool {
         drafts.allSatisfy { deliveryValidationMessage(for: $0) == nil }
+    }
+
+    private var isSubmissionLocked: Bool {
+        isSubmitting || isSubmittingLocal
     }
 
     private var submitPayload: [MissionActualDeliveredItemRequest] {

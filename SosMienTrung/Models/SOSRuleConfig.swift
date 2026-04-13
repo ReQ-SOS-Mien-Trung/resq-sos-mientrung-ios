@@ -722,11 +722,11 @@ enum SOSRuleConfigError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingVariable(let variable):
-            return "Thiếu biến \(variable) trong context tính điểm."
+            return L10n.SOSRuleConfig.missingVariable(variable)
         case .invalidExpression(let message):
             return message
         case .divideByZero:
-            return "Biểu thức chia cho 0."
+            return L10n.SOSRuleConfig.divideByZero
         }
     }
 }

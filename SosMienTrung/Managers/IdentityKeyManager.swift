@@ -27,23 +27,23 @@ enum IdentityKeyError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .keyGenerationFailed:
-            return "Failed to generate cryptographic key pair"
+            return L10n.Auth.identityKeyGenerationFailed
         case .keyNotFound:
-            return "Identity key not found"
+            return L10n.Auth.identityKeyNotFound
         case .keyStorageFailed:
-            return "Failed to store key securely"
+            return L10n.Auth.identityKeyStorageFailed
         case .signatureFailed:
-            return "Failed to sign data"
+            return L10n.Auth.identitySignatureFailed
         case .verificationFailed:
-            return "Signature verification failed"
+            return L10n.Auth.identityVerificationFailed
         case .secureEnclaveNotAvailable:
-            return "Secure Enclave is not available on this device"
+            return L10n.Auth.secureEnclaveUnavailable
         case .keychainError(let status):
-            return "Keychain error: \(status)"
+            return L10n.Auth.keychainError(String(status))
         case .invalidKeyData:
-            return "Invalid key data format"
+            return L10n.Auth.invalidKeyData
         case .keyAlreadyRevoked:
-            return "Identity key has been revoked"
+            return L10n.Auth.keyAlreadyRevoked
         }
     }
 }

@@ -1,12 +1,13 @@
 import Foundation
 import Combine
 import CoreLocation
+import UIKit
 
 protocol MissionActivityRemoteService {
     func getMyTeamMissions() async throws -> [Mission]
     func getActivities(missionId: Int) async throws -> [Activity]
     func getMyTeamActivities(missionId: Int) async throws -> [Activity]
-    func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws
+    func updateActivityStatus(missionId: Int, activityId: Int, status: String, imageUrl: String?) async throws
     func updateMissionStatus(missionId: Int, status: String) async throws
 }
 
@@ -23,7 +24,7 @@ final class RescuerMissionViewModel: ObservableObject {
         case unavailable
 
         var errorDescription: String? {
-            "Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí hoặc chờ GPS cập nhật rồi thử lại."
+            L10n.RescuerMission.currentLocationUnavailable()
         }
     }
 
@@ -41,12 +42,14 @@ final class RescuerMissionViewModel: ObservableObject {
     @Published private(set) var currentTeamActivities: [Activity] = []
     @Published private(set) var currentTeamMissionTeamIds: Set<Int> = []
     @Published private(set) var pendingActivityUpdates: [PendingMissionActivityUpdate] = []
+    @Published private(set) var activeActivitySubmissionIds: Set<Int> = []
 
     private var loadingCount = 0
     private let missionService: any MissionActivityRemoteService
     private let networkStatusProvider: any NetworkStatusProviding
     private let missionActivitySyncStore: MissionActivitySyncStore
     private let locationManager: LocationManager
+    private let activityProofUploader = CloudinaryImageUploader.resQ(folder: "activities")
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -106,7 +109,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 if case .httpError(let status, let message) = serviceError, status == 404 {
                     // 404 from /my means rescuer is not assigned to any team yet.
                     if message.isEmpty {
-                        noTeamMessage = "Bạn chưa được phân vào đội cứu hộ."
+                        noTeamMessage = L10n.RescueTeam.notAssignedYet
                     } else {
                         noTeamMessage = message
                     }
@@ -116,7 +119,7 @@ final class RescuerMissionViewModel: ObservableObject {
                 errorMessage = serviceError.localizedDescription
             } catch {
                 team = nil
-                errorMessage = "Không thể tải thông tin team: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotLoadTeamInfo(error.localizedDescription)
             }
         }
     }
@@ -124,7 +127,7 @@ final class RescuerMissionViewModel: ObservableObject {
     func checkIn() {
         guard let currentTeam = team else { return }
         guard let assemblyPointId = currentTeam.assemblyPointId else {
-            errorMessage = "Không tìm thấy assemblyPointId để xác nhận có mặt. Vui lòng đồng bộ lại dữ liệu đội cứu hộ."
+            errorMessage = L10n.RescuerMission.missingAssemblyPointId
             return
         }
 
@@ -146,11 +149,11 @@ final class RescuerMissionViewModel: ObservableObject {
                     longitude: coordinates.longitude
                 )
                 team = try await RescueTeamService.shared.getMyTeam()
-                successMessage = response.message ?? "Xác nhận có mặt thành công"
+                successMessage = response.message ?? L10n.Common.checkInSucceeded
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
-                errorMessage = "Xác nhận có mặt thất bại: \(serviceError.localizedDescription)"
+                errorMessage = L10n.RescuerMission.checkInFailed(serviceError.localizedDescription)
             } catch {
-                errorMessage = "Xác nhận có mặt thất bại: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.checkInFailed(error.localizedDescription)
             }
         }
     }
@@ -194,11 +197,11 @@ final class RescuerMissionViewModel: ObservableObject {
             do {
                 let message = try await RescueTeamService.shared.setTeamAvailable(teamId: currentTeam.id)
                 team = try await RescueTeamService.shared.getMyTeam()
-                successMessage = message ?? "Đội đã sẵn sàng nhận nhiệm vụ"
+                successMessage = message ?? L10n.RescuerMission.teamAvailable
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
                 errorMessage = serviceError.localizedDescription
             } catch {
-                errorMessage = "Không thể cập nhật trạng thái đội: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotUpdateTeamStatus(error.localizedDescription)
             }
         }
     }
@@ -220,11 +223,11 @@ final class RescuerMissionViewModel: ObservableObject {
             do {
                 let message = try await RescueTeamService.shared.setTeamUnavailable(teamId: currentTeam.id)
                 team = try await RescueTeamService.shared.getMyTeam()
-                successMessage = message ?? "Đội đã chuyển sang trạng thái không sẵn sàng"
+                successMessage = message ?? L10n.RescuerMission.teamUnavailable
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
                 errorMessage = serviceError.localizedDescription
             } catch {
-                errorMessage = "Không thể cập nhật trạng thái đội: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotUpdateTeamStatus(error.localizedDescription)
             }
         }
     }
@@ -236,7 +239,7 @@ final class RescuerMissionViewModel: ObservableObject {
             do {
                 missions = try await missionService.getMyTeamMissions()
             } catch {
-                errorMessage = "Không thể tải danh sách nhiệm vụ: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotLoadMissions(error.localizedDescription)
             }
         }
     }
@@ -253,7 +256,7 @@ final class RescuerMissionViewModel: ObservableObject {
             do {
                 try await refreshActivityScopes(missionId: missionId)
             } catch {
-                errorMessage = "Không thể tải các bước thực hiện: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotLoadActivities(error.localizedDescription)
             }
         }
     }
@@ -267,63 +270,58 @@ final class RescuerMissionViewModel: ObservableObject {
         errorMessage = nil
         successMessage = nil
 
-        guard missionActivitySyncStore.hasPendingUpdate(missionId: missionId, activityId: activityId) == false else {
-            errorMessage = "Hoạt động này đang chờ đồng bộ máy chủ."
-            hasLoadedActivities = true
-            return
-        }
-
-        if networkStatusProvider.isConnected == false {
-            let baseActivities = baseActivities(fallback: knownActivities)
-            guard let baseActivity = baseActivities.first(where: { $0.id == activityId }) else {
-                errorMessage = "Không tìm thấy hoạt động để lưu cục bộ."
-                hasLoadedActivities = true
-                return
-            }
-
-            let queued = missionActivitySyncStore.enqueue(
+        Task {
+            _ = await submitActivityStatus(
                 missionId: missionId,
                 activityId: activityId,
-                targetStatus: status,
-                baseServerStatus: baseActivity.status
+                status: status,
+                knownActivities: knownActivities,
+                imageUrl: nil
             )
-
-            guard queued != nil else {
-                errorMessage = "Không thể lưu thao tác offline cho hoạt động này."
-                hasLoadedActivities = true
-                return
-            }
-
-            if activities.isEmpty, baseActivities.isEmpty == false {
-                activities = sortActivities(baseActivities)
-            }
-
-            hasLoadedActivities = true
-            successMessage = "Đã lưu cục bộ. Hoạt động đang chờ đồng bộ máy chủ."
-            return
         }
+    }
 
-        isLoadingActivities = true
-        Task {
-            defer {
-                isLoadingActivities = false
-                hasLoadedActivities = true
-            }
-            do {
-                try await missionService.updateActivityStatus(missionId: missionId, activityId: activityId, status: status)
-                try await refreshActivityScopes(missionId: missionId)
-                successMessage = "Đã cập nhật trạng thái bước thực hiện"
-            } catch {
-                errorMessage = "Cập nhật trạng thái bước thực hiện thất bại: \(error.localizedDescription)"
-            }
+    func completeActivity(
+        missionId: Int,
+        activityId: Int,
+        knownActivities: [Activity] = [],
+        proofImage: UIImage?
+    ) async -> Bool {
+        guard beginActivitySubmission(activityId) else {
+            return false
+        }
+        defer { endActivitySubmission(activityId) }
+
+        errorMessage = nil
+        successMessage = nil
+
+        do {
+            let proofImageURL = try await uploadProofImageIfNeeded(proofImage)
+            return await submitActivityStatus(
+                missionId: missionId,
+                activityId: activityId,
+                status: ActivityStatus.succeed.rawValue,
+                knownActivities: knownActivities,
+                imageUrl: proofImageURL
+            )
+        } catch {
+            errorMessage = L10n.RescuerMission.activityStatusUpdateFailed(error.localizedDescription)
+            hasLoadedActivities = true
+            return false
         }
     }
 
     func confirmPickup(
         missionId: Int,
         activityId: Int,
-        bufferUsages: [MissionPickupBufferUsageRequest]
+        bufferUsages: [MissionPickupBufferUsageRequest],
+        proofImage: UIImage? = nil
     ) async -> Bool {
+        guard beginActivitySubmission(activityId) else {
+            return false
+        }
+        defer { endActivitySubmission(activityId) }
+
         errorMessage = nil
         successMessage = nil
         isLoadingActivities = true
@@ -334,23 +332,26 @@ final class RescuerMissionViewModel: ObservableObject {
         }
 
         do {
+            let proofImageURL = try await uploadProofImageIfNeeded(proofImage)
+
             _ = try await MissionService.shared.confirmActivityPickup(
                 missionId: missionId,
                 activityId: activityId,
                 bufferUsages: bufferUsages
             )
 
-            try await MissionService.shared.updateActivityStatus(
+            try await missionService.updateActivityStatus(
                 missionId: missionId,
                 activityId: activityId,
-                status: ActivityStatus.succeed.rawValue
+                status: ActivityStatus.succeed.rawValue,
+                imageUrl: proofImageURL
             )
 
             try await refreshActivityScopes(missionId: missionId)
-            successMessage = "Đã xác nhận tiếp nhận vật phẩm"
+            successMessage = L10n.RescuerMission.supplyPickupConfirmed
             return true
         } catch {
-            errorMessage = "Xác nhận tiếp nhận vật phẩm thất bại: \(error.localizedDescription)"
+            errorMessage = L10n.RescuerMission.supplyPickupFailed(error.localizedDescription)
             return false
         }
     }
@@ -359,8 +360,14 @@ final class RescuerMissionViewModel: ObservableObject {
         missionId: Int,
         activityId: Int,
         actualDeliveredItems: [MissionActualDeliveredItemRequest],
-        deliveryNote: String?
+        deliveryNote: String?,
+        proofImage: UIImage? = nil
     ) async -> Bool {
+        guard beginActivitySubmission(activityId) else {
+            return false
+        }
+        defer { endActivitySubmission(activityId) }
+
         errorMessage = nil
         successMessage = nil
         isLoadingActivities = true
@@ -371,6 +378,8 @@ final class RescuerMissionViewModel: ObservableObject {
         }
 
         do {
+            let proofImageURL = try await uploadProofImageIfNeeded(proofImage)
+
             let response = try await MissionService.shared.confirmActivityDelivery(
                 missionId: missionId,
                 activityId: activityId,
@@ -378,11 +387,18 @@ final class RescuerMissionViewModel: ObservableObject {
                 deliveryNote: deliveryNote
             )
 
+            try await missionService.updateActivityStatus(
+                missionId: missionId,
+                activityId: activityId,
+                status: ActivityStatus.succeed.rawValue,
+                imageUrl: proofImageURL
+            )
+
             try await refreshActivityScopes(missionId: missionId)
             successMessage = response.message
             return true
         } catch {
-            errorMessage = "Xác nhận phân phát vật phẩm thất bại: \(error.localizedDescription)"
+            errorMessage = L10n.RescuerMission.supplyDeliveryFailed(error.localizedDescription)
             return false
         }
     }
@@ -397,10 +413,10 @@ final class RescuerMissionViewModel: ObservableObject {
         do {
             try await missionService.updateMissionStatus(missionId: missionId, status: status)
             missions = try await missionService.getMyTeamMissions()
-            successMessage = "Đã cập nhật trạng thái nhiệm vụ"
+            successMessage = L10n.RescuerMission.missionStatusUpdated
             return true
         } catch {
-            errorMessage = "Không thể cập nhật trạng thái nhiệm vụ: \(error.localizedDescription)"
+            errorMessage = L10n.RescuerMission.missionStatusUpdateFailed(error.localizedDescription)
             return false
         }
     }
@@ -449,6 +465,102 @@ final class RescuerMissionViewModel: ObservableObject {
 
     func triggerMissionActivitySync(reason: MissionActivitySyncTriggerReason) {
         missionActivitySyncStore.triggerDeferredSync(reason: reason)
+    }
+
+    private func submitActivityStatus(
+        missionId: Int,
+        activityId: Int,
+        status: String,
+        knownActivities: [Activity],
+        imageUrl: String?
+    ) async -> Bool {
+        guard missionActivitySyncStore.hasPendingUpdate(missionId: missionId, activityId: activityId) == false else {
+            errorMessage = L10n.RescuerMission.activityWaitingServerSync
+            hasLoadedActivities = true
+            return false
+        }
+
+        if networkStatusProvider.isConnected == false {
+            if imageUrl != nil {
+                errorMessage = L10n.RescuerMission.proofImageRequiresConnection
+                hasLoadedActivities = true
+                return false
+            }
+
+            let baseActivities = baseActivities(fallback: knownActivities)
+            guard let baseActivity = baseActivities.first(where: { $0.id == activityId }) else {
+                errorMessage = L10n.RescuerMission.missingLocalActivity
+                hasLoadedActivities = true
+                return false
+            }
+
+            let queued = missionActivitySyncStore.enqueue(
+                missionId: missionId,
+                activityId: activityId,
+                targetStatus: status,
+                baseServerStatus: baseActivity.status
+            )
+
+            guard queued != nil else {
+                errorMessage = L10n.RescuerMission.cannotSaveOfflineAction
+                hasLoadedActivities = true
+                return false
+            }
+
+            if activities.isEmpty, baseActivities.isEmpty == false {
+                activities = sortActivities(baseActivities)
+            }
+
+            hasLoadedActivities = true
+            successMessage = L10n.RescuerMission.offlineSavedWaitingSync
+            return true
+        }
+
+        isLoadingActivities = true
+        defer {
+            isLoadingActivities = false
+            hasLoadedActivities = true
+        }
+
+        do {
+            try await missionService.updateActivityStatus(
+                missionId: missionId,
+                activityId: activityId,
+                status: status,
+                imageUrl: imageUrl
+            )
+            try await refreshActivityScopes(missionId: missionId)
+            successMessage = L10n.RescuerMission.activityStatusUpdated
+            return true
+        } catch {
+            errorMessage = L10n.RescuerMission.activityStatusUpdateFailed(error.localizedDescription)
+            return false
+        }
+    }
+
+    private func uploadProofImageIfNeeded(_ proofImage: UIImage?) async throws -> String? {
+        guard let proofImage else {
+            return nil
+        }
+
+        guard networkStatusProvider.isConnected else {
+            throw URLError(.notConnectedToInternet)
+        }
+
+        return try await activityProofUploader.upload(image: proofImage, fileNamePrefix: "activity")
+    }
+
+    private func beginActivitySubmission(_ activityId: Int) -> Bool {
+        guard activeActivitySubmissionIds.contains(activityId) == false else {
+            return false
+        }
+
+        activeActivitySubmissionIds.insert(activityId)
+        return true
+    }
+
+    private func endActivitySubmission(_ activityId: Int) {
+        activeActivitySubmissionIds.remove(activityId)
     }
 
     private func sortActivities(_ items: [Activity]) -> [Activity] {
@@ -526,7 +638,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
         case unavailable
 
         var errorDescription: String? {
-            "Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí hoặc chờ GPS cập nhật rồi thử lại."
+            L10n.RescuerMission.currentLocationUnavailable()
         }
     }
 
@@ -568,7 +680,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
                 )
                 events = response.items
             } catch {
-                errorMessage = "Không thể tải danh sách sự kiện tập kết: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.cannotLoadAssemblyEvents(error.localizedDescription)
             }
         }
     }
@@ -590,12 +702,12 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
                     latitude: coordinates.latitude,
                     longitude: coordinates.longitude
                 )
-                successMessage = response.message ?? "Xác nhận có mặt thành công"
+                successMessage = response.message ?? L10n.Common.checkInSucceeded
                 refresh(pageNumber: pageNumber, pageSize: pageSize)
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {
-                errorMessage = "Xác nhận có mặt thất bại: \(serviceError.localizedDescription)"
+                errorMessage = L10n.RescuerMission.checkInFailed(serviceError.localizedDescription)
             } catch {
-                errorMessage = "Xác nhận có mặt thất bại: \(error.localizedDescription)"
+                errorMessage = L10n.RescuerMission.checkInFailed(error.localizedDescription)
             }
         }
     }

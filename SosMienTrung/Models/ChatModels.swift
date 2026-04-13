@@ -242,24 +242,24 @@ enum SosDisplayFormatter {
         let key = normalizedKey(raw)
         switch key {
         case "pending", "waiting", "queued", "new":
-            return "Chờ xử lý"
+            return L10n.Domain.sosPending
         case "approved", "accepted":
-            return "Đã tiếp nhận"
+            return L10n.Domain.sosAccepted
         case "assigned":
-            return "Đã phân công"
+            return L10n.Domain.sosAssigned
         case "inprogress", "ongoing", "processing":
-            return "Đang xử lý"
+            return L10n.Domain.sosInProgress
         case "resolved", "closed", "completed", "done":
-            return "Đã xử lý"
+            return L10n.Domain.sosResolved
         case "rejected", "declined":
-            return "Từ chối"
+            return L10n.Domain.sosRejected
         case "cancelled", "canceled", "cancel":
-            return "Đã hủy"
+            return L10n.Domain.sosCancelled
         case "escalated", "escalating":
-            return "Đã nâng mức"
+            return L10n.Domain.sosEscalated
         default:
             let fallback = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return fallback.isEmpty ? "Không rõ" : fallback
+            return fallback.isEmpty ? L10n.Common.notClear : fallback
         }
     }
 
@@ -267,13 +267,13 @@ enum SosDisplayFormatter {
         let key = normalizedKey(raw)
         switch key {
         case "low":
-            return "Thấp"
+            return L10n.Domain.priorityLow
         case "medium", "normal":
-            return "Trung bình"
+            return L10n.Domain.priorityMedium
         case "high":
-            return "Cao"
+            return L10n.Domain.priorityHigh
         case "critical", "urgent":
-            return "Khẩn cấp"
+            return L10n.Domain.priorityCritical
         default:
             let fallback = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return fallback.isEmpty ? nil : fallback
@@ -284,13 +284,13 @@ enum SosDisplayFormatter {
         let key = normalizedKey(raw)
         switch key {
         case "rescue":
-            return "Cứu hộ"
+            return L10n.Domain.sosTypeRescue
         case "relief":
-            return "Cứu trợ"
+            return L10n.Domain.sosTypeRelief
         case "both":
-            return "Cứu hộ + Cứu trợ"
+            return L10n.Domain.sosTypeRescueRelief
         case "medical":
-            return "Y tế"
+            return L10n.Domain.sosTypeMedical
         default:
             let fallback = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return fallback.isEmpty ? nil : fallback

@@ -64,7 +64,7 @@ final class MissionTeamReportViewModel: ObservableObject {
         guard canEdit else { return nil }
 
         if canEvaluateMembers == false && hasPersistedMemberEvaluations {
-            return "Chỉ đội trưởng mới được lưu đánh giá thành viên. Nếu bạn lưu nháp lúc này, hệ thống sẽ xóa phần đánh giá đã có."
+            return L10n.MissionTeamReport.nonLeaderDraftRestriction
         }
 
         return nil
@@ -93,7 +93,7 @@ final class MissionTeamReportViewModel: ObservableObject {
                 )
                 apply(response)
             } catch {
-                errorMessage = "Không thể tải báo cáo đội: \(error.localizedDescription)"
+                errorMessage = L10n.MissionTeamReport.cannotLoad(error.localizedDescription)
             }
         }
     }
@@ -122,9 +122,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     missionTeamId: missionTeamId
                 )
                 apply(response)
-                successMessage = "Đội đã được chuyển sang trạng thái chờ nộp báo cáo."
+                successMessage = L10n.MissionTeamReport.waitingForSubmitStatus
             } catch {
-                errorMessage = "Không thể hoàn tất thực địa: \(error.localizedDescription)"
+                errorMessage = L10n.MissionTeamReport.cannotCompleteFieldWork(error.localizedDescription)
             }
         }
     }
@@ -152,9 +152,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     request: request
                 )
                 apply(response)
-                successMessage = "Đã lưu nháp báo cáo đội."
+                successMessage = L10n.MissionTeamReport.draftSaved
             } catch {
-                errorMessage = "Không thể lưu nháp báo cáo: \(error.localizedDescription)"
+                errorMessage = L10n.MissionTeamReport.cannotSaveDraft(error.localizedDescription)
             }
         }
     }
@@ -177,9 +177,9 @@ final class MissionTeamReportViewModel: ObservableObject {
                     request: request
                 )
                 apply(response)
-                successMessage = "Đã nộp báo cáo cuối cùng."
+                successMessage = L10n.MissionTeamReport.finalSubmitted
             } catch {
-                errorMessage = "Không thể nộp báo cáo: \(error.localizedDescription)"
+                errorMessage = L10n.MissionTeamReport.cannotSubmit(error.localizedDescription)
             }
         }
     }
@@ -311,13 +311,13 @@ private enum MissionTeamReportValidationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidJSON(let field):
-            return "\(field) không phải JSON hợp lệ."
+            return L10n.MissionTeamReport.invalidJSON(field)
         case .partialMemberEvaluation(let memberName):
-            return "Hãy chấm đủ 5 tiêu chí cho \(memberName) hoặc xóa toàn bộ điểm đang nhập dở."
+            return L10n.MissionTeamReport.partialMemberEvaluation(memberName)
         case .missingMemberEvaluation(let memberName):
-            return "Cần đánh giá đầy đủ cho \(memberName) trước khi nộp báo cáo."
+            return L10n.MissionTeamReport.missingMemberEvaluation(memberName)
         case .nonLeaderCannotSaveWithExistingEvaluations:
-            return "Chỉ đội trưởng mới được lưu đánh giá thành viên. Vui lòng nhờ đội trưởng lưu báo cáo để tránh mất dữ liệu."
+            return L10n.MissionTeamReport.nonLeaderCannotSaveEvaluations
         }
     }
 }

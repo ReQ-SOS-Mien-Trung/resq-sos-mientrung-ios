@@ -13,13 +13,13 @@ final class RescueTeamService {
         var errorDescription: String? {
             switch self {
             case .invalidURL:
-                return "URL không hợp lệ"
+                return L10n.Common.invalidURL
             case .notAuthenticated:
-                return "Bạn chưa đăng nhập"
+                return L10n.Common.notAuthenticated
             case .httpError(let status, let message):
-                return message.isEmpty ? "Máy chủ trả về lỗi \(status)" : message
+                return message.isEmpty ? L10n.Common.serverError(String(status)) : message
             case .decodingError:
-                return "Không đọc được dữ liệu phản hồi từ máy chủ"
+                return L10n.Common.serverDataDecodeFailed
             case .network(let error):
                 return error.localizedDescription
             }
@@ -28,6 +28,7 @@ final class RescueTeamService {
 
     private let baseURL: String
     private let session: URLSession
+    private let authExecutor = AuthenticatedRequestExecutor.shared
 
     private init() {
         self.baseURL = AppConfig.baseURLString
@@ -37,14 +38,25 @@ final class RescueTeamService {
         self.session = URLSession(configuration: config)
     }
 
-    private var authHeader: String? {
-        guard let token = AuthSessionStore.shared.session?.accessToken else { return nil }
-        return "Bearer \(token)"
-    }
-
     private struct CheckInRequestBody: Codable {
         let latitude: Double
         let longitude: Double
+    }
+
+    private func authorizedRequest(url: URL, method: String = "GET") -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        return request
+    }
+
+    private func sendAuthorized(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        do {
+            return try await authExecutor.perform(request, using: session)
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
     }
 
     // MARK: - GET /personnel/rescue-teams/my
@@ -53,18 +65,16 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        let request = authorizedRequest(url: url)
         print("[RescueTeamService] → GET \(url.absoluteString)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)
@@ -100,14 +110,12 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        var request = authorizedRequest(url: url, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(
             CheckInRequestBody(latitude: latitude, longitude: longitude)
         )
@@ -115,8 +123,8 @@ final class RescueTeamService {
         print("[RescueTeamService] → POST \(url.absoluteString) lat=\(latitude) lon=\(longitude)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)
@@ -138,19 +146,17 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        let request = authorizedRequest(url: url, method: "POST")
 
         print("[RescueTeamService] → POST \(url.absoluteString)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)
@@ -189,7 +195,7 @@ final class RescueTeamService {
 
         throw RescueTeamServiceError.httpError(
             status: 404,
-            message: "Không tìm thấy sự kiện tập trung hợp lệ cho điểm tập kết này"
+            message: L10n.RescueTeam.noValidAssemblyEvent(String(assemblyPointId))
         )
     }
 
@@ -208,19 +214,17 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        let request = authorizedRequest(url: url)
 
         print("[RescueTeamService] → GET \(url.absoluteString)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)
@@ -272,19 +276,17 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        let request = authorizedRequest(url: url)
 
         print("[RescueTeamService] → GET \(url.absoluteString)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)
@@ -320,19 +322,17 @@ final class RescueTeamService {
             throw RescueTeamServiceError.invalidURL
         }
 
-        guard let auth = authHeader else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RescueTeamServiceError.notAuthenticated
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(auth, forHTTPHeaderField: "Authorization")
+        let request = authorizedRequest(url: url)
 
         print("[RescueTeamService] → GET \(url.absoluteString)")
 
         do {
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
 
             guard (200...299).contains(statusCode) else {
                 let backendMessage = Self.extractBackendErrorMessage(from: data)

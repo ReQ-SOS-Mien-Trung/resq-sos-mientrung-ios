@@ -23,15 +23,15 @@ enum RescuerStatusBadgeText {
     static func mission(_ status: String) -> String {
         switch normalized(status) {
         case "ongoing", "inprogress":
-            return "Đang thực hiện"
+            return L10n.Domain.missionInProgress
         case "planned", "pending", "scheduled":
-            return "Đã lên kế hoạch"
+            return L10n.Domain.missionPlanned
         case "completed", "finished":
-            return "Đã hoàn thành"
+            return L10n.Domain.missionCompleted
         case "incompleted", "incomplete":
-            return "Chưa hoàn thành"
+            return L10n.Domain.missionIncomplete
         case "cancelled":
-            return "Đã hủy"
+            return L10n.Domain.missionCancelled
         default:
             return fallbackLabel(from: status)
         }
@@ -40,21 +40,21 @@ enum RescuerStatusBadgeText {
     static func team(_ status: String) -> String {
         switch normalized(status) {
         case "ready", "available":
-            return "Sẵn sàng"
+            return L10n.Domain.teamReady
         case "gathering":
-            return "Tập kết"
+            return L10n.Domain.teamGathering
         case "assigned":
-            return "Đã phân công"
+            return L10n.Domain.teamAssigned
         case "onmission":
-            return "Đang làm nhiệm vụ"
+            return L10n.Domain.teamOnMission
         case "stuck":
-            return "Gặp sự cố"
+            return L10n.Domain.teamStuck
         case "awaitingacceptance":
-            return "Chờ xác nhận"
+            return L10n.Domain.teamAwaitingAcceptance
         case "unavailable":
-            return "Không sẵn sàng"
+            return L10n.Domain.teamUnavailable
         case "disbanded":
-            return "Đã giải tán"
+            return L10n.Domain.teamDisbanded
         default:
             return fallbackLabel(from: status)
         }
@@ -63,22 +63,22 @@ enum RescuerStatusBadgeText {
     static func activity(_ status: ActivityStatus) -> String {
         switch status {
         case .planned:
-            return "Đã lên kế hoạch"
+            return L10n.Domain.missionPlanned
         case .onGoing:
-            return "Đang thực hiện"
+            return L10n.Domain.missionInProgress
         case .succeed:
-            return "Hoàn thành"
+            return L10n.Domain.activityCompleted
         case .failed:
-            return "Thất bại"
+            return L10n.Domain.activityFailed
         case .cancelled:
-            return "Đã hủy"
+            return L10n.Domain.missionCancelled
         }
     }
 
     static func activity(_ rawStatus: String, fallback: ActivityStatus) -> String {
         switch normalized(rawStatus) {
         case "pendingconfirmation":
-            return "Chờ kho xác nhận"
+            return L10n.Domain.activityPendingWarehouseConfirmation
         default:
             return activity(fallback)
         }
@@ -87,13 +87,13 @@ enum RescuerStatusBadgeText {
     static func assemblyEvent(_ status: String?) -> String {
         switch normalized(status) {
         case "scheduled", "planned":
-            return "Đã lên lịch"
+            return L10n.Domain.assemblyScheduled
         case "gathering", "ongoing":
-            return "Đang tập trung"
+            return L10n.Domain.assemblyGathering
         case "completed", "finished":
-            return "Đã hoàn tất"
+            return L10n.Domain.assemblyCompleted
         case "cancelled":
-            return "Đã hủy"
+            return L10n.Domain.missionCancelled
         default:
             return fallbackLabel(from: status)
         }
@@ -102,11 +102,11 @@ enum RescuerStatusBadgeText {
     static func incident(_ status: String) -> String {
         switch normalized(status) {
         case "reported":
-            return "Đã báo cáo"
+            return L10n.Domain.incidentReported
         case "inprogress":
-            return "Đang xử lý"
+            return L10n.Domain.incidentInProgress
         case "resolved":
-            return "Đã xử lý"
+            return L10n.Domain.incidentResolved
         default:
             return fallbackLabel(from: status)
         }
@@ -126,7 +126,7 @@ enum RescuerStatusBadgeText {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard raw.isEmpty == false else {
-            return "Không xác định"
+            return L10n.Common.unknown
         }
 
         return raw
@@ -317,6 +317,14 @@ struct RescuerDashboardView: View {
         authSession.session?.canManageTeamAvailability ?? false
     }
 
+    private var shouldShowMissionSection: Bool {
+        canViewMissionWorkspace
+    }
+
+    private var shouldShowAssemblySection: Bool {
+        isMissionAccessUnlocked == false || canViewMissionWorkspace == false
+    }
+
     private var assemblyEventsSummary: String {
         if assemblyVM.isLoading && assemblyVM.events.isEmpty {
             return "Đang tải sự kiện tập kết..."
@@ -347,29 +355,34 @@ struct RescuerDashboardView: View {
                     if canAccessRescuerWorkspace == false {
                         restrictedStateView
                             .padding(.top, DS.Spacing.md)
-                    } else if isMissionAccessUnlocked && canViewMissionWorkspace {
-                        teamCard
-                            .padding(.top, DS.Spacing.md)
-
-                        Text("NHIỆM VỤ CỦA TEAM").sectionHeader()
-
-                        if vm.isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, DS.Spacing.lg)
-                        } else if vm.missions.isEmpty {
-                            emptyMissionsView
-                        } else {
-                            missionsList
-                        }
                     } else {
-                        Text("TRIỆU TẬP").sectionHeader()
-                            .padding(.top, DS.Spacing.md)
-
-                        assemblyEventsSection
-
                         if canViewMissionWorkspace {
-                            checkInGateMessage
+                            teamCard
+                                .padding(.top, DS.Spacing.md)
+                        }
+
+                        if shouldShowAssemblySection {
+                            Text("TRIỆU TẬP").sectionHeader()
+                                .padding(.top, canViewMissionWorkspace ? 0 : DS.Spacing.md)
+                            assemblyEventsSection
+
+                            if canViewMissionWorkspace {
+                                checkInGateMessage
+                            }
+                        }
+
+                        if shouldShowMissionSection {
+                            Text("NHIỆM VỤ CỦA TEAM").sectionHeader()
+
+                            if vm.isLoading && vm.missions.isEmpty {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, DS.Spacing.lg)
+                            } else if vm.missions.isEmpty {
+                                emptyMissionsView
+                            } else {
+                                missionsList
+                            }
                         }
                     }
 
@@ -388,9 +401,11 @@ struct RescuerDashboardView: View {
                 if canAccessRescuerWorkspace {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
-                            if isMissionAccessUnlocked && canViewMissionWorkspace {
+                            if canViewMissionWorkspace {
                                 vm.refreshDashboard()
-                            } else {
+                            }
+
+                            if isMissionAccessUnlocked == false || canViewMissionWorkspace == false {
                                 assemblyVM.refresh()
                             }
                         } label: {
@@ -448,7 +463,7 @@ struct RescuerDashboardView: View {
                 assemblyVM.refresh()
             }
 
-            if isMissionAccessUnlocked && canViewMissionWorkspace {
+            if canViewMissionWorkspace {
                 vm.refreshDashboard()
             }
         }

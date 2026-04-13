@@ -135,7 +135,7 @@ struct MissionInventoryView: View {
                     inventoryKey: "\(itemName)|\(unit ?? "")",
                     itemName: itemName,
                     imageUrl: inventoryImageURL(from: supply.imageUrl),
-                    quantity: supply.quantity,
+                    quantity: inventoryQuantity(for: supply, in: activity, stage: stage),
                     unit: unit,
                     activityId: activity.id,
                     activityTitle: activity.title,
@@ -341,12 +341,16 @@ struct MissionInventoryView: View {
         summaryMetrics.filter { ["pickup", "inhand", "delivered"].contains($0.id) }
     }
 
+    private var visibleEntries: [MissionInventoryEntry] {
+        selectedFilter == .all ? inventoryEntries : filteredEntries
+    }
+
     private var itemTypeCount: Int {
-        Set(inventoryEntries.map { "\($0.itemName)|\($0.unit ?? "")" }).count
+        Set(visibleEntries.map { "\($0.itemName)|\($0.unit ?? "")" }).count
     }
 
     private var totalQuantityCount: Int {
-        inventoryEntries.reduce(0) { $0 + $1.quantity }
+        visibleEntries.reduce(0) { $0 + $1.quantity }
     }
 
     private var summarySection: some View {
@@ -512,6 +516,24 @@ struct MissionInventoryView: View {
         inventoryEntries
             .filter { stages.contains($0.stage) }
             .reduce(0) { $0 + $1.quantity }
+    }
+
+    private func inventoryQuantity(
+        for supply: MissionSupply,
+        in activity: Activity,
+        stage: MissionInventoryStage
+    ) -> Int {
+        let plannedQuantity = max(supply.quantity, 0)
+
+        guard activity.isDeliverSuppliesActivity, stage == .delivered else {
+            return plannedQuantity
+        }
+
+        guard let actualDeliveredQuantity = supply.actualDeliveredQuantity else {
+            return plannedQuantity
+        }
+
+        return max(actualDeliveredQuantity, 0)
     }
 
     private var inHandQuantity: Int {

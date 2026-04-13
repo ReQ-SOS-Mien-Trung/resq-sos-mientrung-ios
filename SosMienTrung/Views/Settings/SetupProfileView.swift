@@ -84,7 +84,7 @@ struct SetupProfileView: View {
         var errorDescription: String? {
             switch self {
             case .invalidRole:
-                return "Tài khoản này không thuộc nhóm người cứu hộ."
+                return L10n.PhoneAuth.rescuerAccountInvalidRole
             }
         }
     }

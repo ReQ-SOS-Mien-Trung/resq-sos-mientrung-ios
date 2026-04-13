@@ -73,6 +73,7 @@ struct Activity: Codable, Identifiable {
     let activityCode: String?
     let activityType: String?
     let description: String?
+    let imageUrl: String?
     let priority: String?
     let estimatedTime: Int?
     let sosRequestId: Int?
@@ -112,10 +113,10 @@ struct Activity: Codable, Identifiable {
         }
 
         if let step {
-            return "Bước thực hiện #\(step)"
+            return L10n.Mission.executionStepNumbered(String(step))
         }
 
-        return "Bước thực hiện"
+        return L10n.Mission.executionStepTitle
     }
 
     var latitude: Double? { targetLatitude }
@@ -129,6 +130,7 @@ struct Activity: Codable, Identifiable {
             activityCode: activityCode,
             activityType: activityType,
             description: description,
+            imageUrl: imageUrl,
             priority: priority,
             estimatedTime: estimatedTime,
             sosRequestId: sosRequestId,
@@ -180,28 +182,28 @@ struct MissionActivityExecutionContext {
 
     var badgeText: String {
         if let sosRequestId {
-            return "SOS #\(sosRequestId)"
+            return L10n.Mission.sosBadge(String(sosRequestId))
         }
 
         if sharedActivityCount > 1 {
-            return "Cùng điểm thực hiện"
+            return L10n.Mission.sharedExecutionPoint
         }
 
-        return "Điểm thực hiện"
+        return L10n.Mission.executionPoint
     }
 
     var detailText: String? {
         var parts: [String] = []
 
         if sharedActivityCount > 1 {
-            parts.append("\(sharedActivityCount) bước cùng điểm trong mission")
+            parts.append(L10n.Mission.sharedStepsAtPoint(String(sharedActivityCount)))
         }
 
         if let coordinateLabel {
             if coordinateSource == .description {
-                parts.append("Đọc từ mô tả: \(coordinateLabel)")
+                parts.append(L10n.Mission.coordinateReadFromDescription(coordinateLabel))
             } else {
-                parts.append("Tọa độ: \(coordinateLabel)")
+                parts.append(L10n.Mission.coordinateLabel(coordinateLabel))
             }
         }
 
@@ -259,6 +261,47 @@ func buildMissionActivityExecutionContexts(activities: [Activity]) -> [Int: Miss
     }
 
     return results
+}
+
+func activityDescriptionHasRouteInstruction(_ activity: Activity) -> Bool {
+    guard let description = activity.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+          description.isEmpty == false else {
+        return false
+    }
+
+    return missionActivityDescriptionHasRouteInstruction(description)
+}
+
+func missionActivityDescriptionHasRouteInstruction(_ description: String) -> Bool {
+    let normalizedDescription = description
+        .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "vi_VN"))
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard normalizedDescription.isEmpty == false else {
+        return false
+    }
+
+    let routeInstructionPhrases = [
+        "di chuyen den",
+        "di chuyen toi",
+        "di chuyen ve",
+        "di chuyen sang",
+        "di chuyen qua",
+        "di den",
+        "dua den",
+        "dua toi",
+        "van chuyen den",
+        "van chuyen toi",
+        "move to",
+        "go to",
+        "head to",
+        "proceed to",
+        "travel to",
+        "transport to"
+    ]
+
+    return routeInstructionPhrases.contains { normalizedDescription.contains($0) }
 }
 
 private func missionActivityExecutionSeed(for activity: Activity) -> MissionActivityExecutionSeed {
@@ -475,17 +518,17 @@ struct Mission: Codable, Identifiable {
 
         if let suggestedMissionTitle = firstNonEmptyTrimmed(suggestedMissionTitle) {
             let cleanedTitle = sanitizeMissionTitle(suggestedMissionTitle)
-            return cleanedTitle.isEmpty ? "Nhiệm vụ" : cleanedTitle
+            return cleanedTitle.isEmpty ? L10n.Mission.defaultTitle : cleanedTitle
         }
 
-        return "Nhiệm vụ"
+        return L10n.Mission.defaultTitle
     }
 
     var description: String? {
         var parts: [String] = []
 
         if let clusterId = clusterId {
-            parts.append("Cụm yêu cầu SOS #\(clusterId)")
+            parts.append(L10n.Mission.clusterSos(String(clusterId)))
         }
 
         if let teamName = teams?.first?.teamName,
@@ -495,7 +538,7 @@ struct Mission: Codable, Identifiable {
 
         if let severity = suggestedSeverityLevel,
            severity.isEmpty == false {
-            parts.append("Mức độ \(severity)")
+            parts.append(L10n.Mission.severity(severity))
         }
 
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
@@ -511,17 +554,17 @@ struct Mission: Codable, Identifiable {
 private func missionTypeDisplayName(_ missionType: String) -> String {
     switch normalizedMissionTypeKey(missionType) {
     case "rescue":
-        return "Cứu hộ"
+        return L10n.Mission.missionTypeRescue
     case "evacuation", "evacuate":
-        return "Di tản"
+        return L10n.Mission.missionTypeEvacuation
     case "medical", "medicalaid", "medicalsupport":
-        return "Y tế"
+        return L10n.Mission.missionTypeMedical
     case "supply", "supplies", "logistics", "relief":
-        return "Cứu trợ"
+        return L10n.Mission.missionTypeRelief
     case "mixed", "hybrid", "combined":
-        return "Tổng hợp"
+        return L10n.Mission.missionTypeMixed
     case "rescuer":
-        return "Điều động người cứu hộ"
+        return L10n.Mission.missionTypeRescuerDispatch
     default:
         return humanizedMissionTypeText(missionType)
     }
@@ -578,27 +621,29 @@ func localizedActivityTypeDisplay(_ rawValue: String?) -> String? {
 
     switch normalizedActivityKey(rawValue) {
     case "collectsupplies":
-        return "Tiếp nhận vật phẩm"
+        return L10n.Domain.activityTypeCollectSupplies
     case "deliversupplies":
-        return "Phân phát vật phẩm"
+        return L10n.Domain.activityTypeDeliverSupplies
     case "returnsupplies":
-        return "Hoàn trả vật phẩm"
+        return L10n.Domain.activityTypeReturnSupplies
+    case "returnassemblypoint":
+        return L10n.Domain.activityTypeReturnAssemblyPoint
     case "rescue":
-        return "Cứu hộ"
+        return L10n.Domain.activityTypeRescue
     case "medicalaid":
-        return "Sơ cứu y tế"
+        return L10n.Domain.activityTypeFirstAid
     case "medicalsupport", "medical":
-        return "Hỗ trợ y tế"
+        return L10n.Domain.activityTypeMedicalSupport
     case "evacuate", "evacuation":
-        return "Di tản"
+        return L10n.Domain.activityTypeEvacuate
     case "searchandrescue", "sar":
-        return "Tìm kiếm cứu nạn"
+        return L10n.Domain.activityTypeSearchAndRescue
     case "logistics":
-        return "Hậu cần"
+        return L10n.Domain.activityTypeLogistics
     case "transport", "transportation":
-        return "Vận chuyển"
+        return L10n.Domain.activityTypeTransport
     case "assessment":
-        return "Đánh giá hiện trường"
+        return L10n.Domain.activityTypeAssessment
     default:
         return humanizedActivityText(rawValue)
     }
@@ -626,7 +671,7 @@ func localizedActivityCodeDisplay(_ rawValue: String?) -> String? {
     }
 
     if hasSequence, let suffix = parts.last {
-        return "\(localizedBase) #\(suffix)"
+        return L10n.Mission.numberedLabel(localizedBase, String(suffix))
     }
 
     return localizedBase
@@ -669,6 +714,7 @@ private func humanizedActivityText(_ rawValue: String) -> String? {
 // MARK: - Activity Update Request
 struct ActivityStatusUpdate: Codable {
     let status: String
+    let imageUrl: String?
 }
 
 func missionActivityActionIsUnlocked(_ activity: Activity, within list: [Activity]) -> Bool {
