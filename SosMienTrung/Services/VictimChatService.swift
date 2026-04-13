@@ -33,7 +33,7 @@ final class VictimChatService: ObservableObject {
         isJoiningConversation = false
 
         guard let url = URL(string: "\(baseURL)/hubs/chat?access_token=\(token)") else {
-            errorMessage = "URL hub không hợp lệ"
+            errorMessage = L10n.Common.invalidChatHubURL
             return
         }
 
@@ -154,7 +154,7 @@ final class VictimChatService: ObservableObject {
         connection?.invoke(method: "JoinConversation", conversationId) { [weak self] error in
             if let error {
                 Task { @MainActor [weak self] in
-                    self?.errorMessage = "Không thể join phòng chat: \(error.localizedDescription)"
+                    self?.errorMessage = L10n.VictimChatService.cannotJoinRoom(error.localizedDescription)
                     self?.isJoiningConversation = false
                 }
                 return
@@ -193,7 +193,7 @@ final class VictimChatService: ObservableObject {
         connection?.invoke(method: "SendMessage", conversationId, content) { [weak self] error in
             if let error {
                 Task { @MainActor [weak self] in
-                    self?.errorMessage = "Gửi thất bại: \(error.localizedDescription)"
+                    self?.errorMessage = L10n.VictimChatService.sendFailed(error.localizedDescription)
                 }
             }
         }

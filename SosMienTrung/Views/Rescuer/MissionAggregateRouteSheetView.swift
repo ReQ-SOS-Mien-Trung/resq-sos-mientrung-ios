@@ -23,9 +23,9 @@ struct MissionAggregateRouteSheetView: View {
         var label: String {
             switch self {
             case .team:
-                return "Tọa độ team"
+                return L10n.Route.teamCoordinate
             case .device:
-                return "GPS thiết bị"
+                return L10n.Route.deviceGPS
             }
         }
     }
@@ -357,7 +357,7 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private var originDisplayText: String {
-        guard let originCoordinate else { return "-" }
+        guard let originCoordinate else { return L10n.Route.dash }
         return String(format: "%.6f, %.6f", originCoordinate.latitude, originCoordinate.longitude)
     }
 
@@ -490,7 +490,7 @@ struct MissionAggregateRouteSheetView: View {
             partial + (segment.route.route?.totalDistanceMeters ?? 0)
         }
 
-        guard totalMeters > 0 else { return "-" }
+        guard totalMeters > 0 else { return L10n.Route.dash }
 
         if totalMeters >= 1000 {
             return String(format: "%.2f km", totalMeters / 1000)
@@ -510,27 +510,27 @@ struct MissionAggregateRouteSheetView: View {
             let minutes = totalMinutes % 60
 
             if hours > 0 {
-                return "\(hours) giờ \(minutes) phút"
+                return L10n.Route.hoursMinutes(String(hours), String(minutes))
             }
 
-            return "\(minutes) phút"
+            return L10n.Route.minutesOnly(String(minutes))
         }
 
         let totalSeconds = segments.reduce(0.0) { partial, segment in
             partial + (segment.route.route?.totalDurationSeconds ?? 0)
         }
 
-        guard totalSeconds > 0 else { return "-" }
+        guard totalSeconds > 0 else { return L10n.Route.dash }
 
         let totalMinutes = Int(totalSeconds / 60)
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
 
         if hours > 0 {
-            return "\(hours) giờ \(minutes) phút"
+            return L10n.Route.hoursMinutes(String(hours), String(minutes))
         }
 
-        return "\(minutes) phút"
+        return L10n.Route.minutesOnly(String(minutes))
     }
 
     @MainActor
@@ -552,7 +552,7 @@ struct MissionAggregateRouteSheetView: View {
         }
 
         guard let missionTeamId = resolvedMissionTeamId else {
-            errorMessage = "Không có missionTeamId nên chưa thể lấy lộ trình team."
+            errorMessage = L10n.Route.aggregateMissingMissionTeamId
             teamRoute = nil
             segments = []
             isLoading = false
@@ -573,7 +573,7 @@ struct MissionAggregateRouteSheetView: View {
                apiStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "ok" {
                 errorMessage = fetchedRoute.errorMessage?.isEmpty == false
                     ? fetchedRoute.errorMessage
-                    : "API route team trả về trạng thái không hợp lệ: \(apiStatus)"
+                    : L10n.Route.aggregateInvalidStatus(apiStatus)
                 teamRoute = nil
                 segments = []
                 isLoading = false
@@ -584,7 +584,7 @@ struct MissionAggregateRouteSheetView: View {
             segments = makeSegments(from: fetchedRoute)
 
             if fetchedRoute.route == nil && segments.isEmpty {
-                errorMessage = "API route team chưa trả về dữ liệu lộ trình."
+                errorMessage = L10n.Route.aggregateMissingRouteData
             }
         } catch {
             if isTaskCancellation(error) {
@@ -592,7 +592,7 @@ struct MissionAggregateRouteSheetView: View {
                 return
             }
 
-            errorMessage = "Không thể tải lộ trình tổng hợp: \(error.localizedDescription)"
+            errorMessage = L10n.Route.aggregateLoadFailed(error.localizedDescription)
             teamRoute = nil
             segments = []
         }
@@ -606,7 +606,7 @@ struct MissionAggregateRouteSheetView: View {
         return teamRoute.activityRoutes.map { route in
             let resolvedTitle = activityLookup[route.activityId]?.title
                 ?? localizedActivityTypeDisplay(route.activityType)
-                ?? "Hoạt động #\(route.activityId)"
+                ?? L10n.Route.aggregateActivityFallbackTitle(String(route.activityId))
 
             return AggregateRouteSegment(
                 id: route.activityId,
@@ -810,7 +810,7 @@ private struct AggregateRouteSegment: Identifiable {
             return String(format: "%.0f m", meters)
         }
 
-        return "-"
+        return L10n.Route.dash
     }
 
     var durationText: String {
@@ -819,17 +819,17 @@ private struct AggregateRouteSegment: Identifiable {
         }
 
         let seconds = route.route?.totalDurationSeconds ?? 0
-        guard seconds > 0 else { return "-" }
+        guard seconds > 0 else { return L10n.Route.dash }
 
         let minutes = Int(seconds / 60)
         let hours = minutes / 60
         let remains = minutes % 60
 
         if hours > 0 {
-            return "\(hours) giờ \(remains) phút"
+            return L10n.Route.hoursMinutes(String(hours), String(remains))
         }
 
-        return "\(minutes) phút"
+        return L10n.Route.minutesOnly(String(minutes))
     }
 }
 
@@ -1085,7 +1085,7 @@ private enum MissionAggregateRouteSheetError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .locationUnavailable:
-            return "Chưa lấy được GPS thiết bị và cũng không có tọa độ team để bắt đầu chỉ đường."
+            return L10n.Route.aggregateLocationUnavailable
         }
     }
 }

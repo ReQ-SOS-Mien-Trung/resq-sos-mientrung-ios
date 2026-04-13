@@ -59,7 +59,7 @@ final class PhoneAuthManager: ObservableObject {
     func verifyOTP(_ code: String) async {
         guard let verificationID = verificationID
                 ?? UserDefaults.standard.string(forKey: "authVerificationID") else {
-            errorMessage = "Phiên xác thực hết hạn, vui lòng gửi lại OTP"
+            errorMessage = L10n.PhoneAuth.sessionExpiredResendOTP
             return
         }
 
@@ -140,7 +140,7 @@ final class PhoneAuthManager: ObservableObject {
         let localizedDescription = nsError.localizedDescription.lowercased()
 
         if localizedDescription.contains("no apns token specified") {
-            return "Thiết bị chưa nhận APNs token. Hãy chờ vài giây sau khi mở app rồi gửi lại OTP trên thiết bị thật."
+            return L10n.PhoneAuth.apnsTokenMissing
         }
 
         if let payload = firebaseHTTPErrorPayload(from: nsError),
@@ -151,11 +151,11 @@ final class PhoneAuthManager: ObservableObject {
                 .first(where: { ($0["@type"] as? String)?.contains("ErrorInfo") == true })?["reason"] as? String
 
             if httpCode == 403, reason == "API_KEY_HTTP_REFERRER_BLOCKED" {
-                return "Firebase API key hiện đang bị chặn theo HTTP referrer nên iOS không gọi được Phone Auth. Vào Google Cloud Console > APIs & Services > Credentials > chọn API key của Firebase và bỏ Application restriction kiểu HTTP referrers (hoặc tạo key mới cho iOS/Firebase), sau đó tải lại GoogleService-Info.plist và thay vào app."
+                return L10n.PhoneAuth.apiKeyHTTPReferrerBlocked
             }
 
             if httpCode == 403, message.localizedCaseInsensitiveContains("PERMISSION_DENIED") {
-                return "Firebase từ chối quyền truy cập (403). Hãy kiểm tra API key trong GoogleService-Info.plist và cấu hình restriction của key trên Google Cloud/Firebase Console."
+                return L10n.PhoneAuth.permissionDenied
             }
         }
 
@@ -167,27 +167,27 @@ final class PhoneAuthManager: ObservableObject {
             print("🔴 Firebase 503 inner message: \(innerMessage)")
             // Error code 39 = Backend không thể xử lý yêu cầu (APNs/reCAPTCHA issue, KHÔNG phải quota)
             if innerMessage.contains("39") {
-                return "Lỗi xác thực thiết bị (Error 39). Vui lòng kiểm tra:\n• Chạy trên thiết bị thật (không phải Simulator)\n• APNs đã được cấu hình đúng\n• Thử lại sau vài phút"
+                return L10n.PhoneAuth.deviceVerificationError39
             }
-            return "Dịch vụ SMS tạm thời không khả dụng (503), vui lòng thử lại sau"
+            return L10n.PhoneAuth.smsServiceUnavailable
         }
         switch AuthErrorCode(rawValue: nsError.code) {
         case .invalidVerificationCode:
-            return "Mã OTP không đúng"
+            return L10n.PhoneAuth.invalidVerificationCode
         case .sessionExpired:
-            return "Phiên xác thực hết hạn, vui lòng gửi lại OTP"
+            return L10n.PhoneAuth.sessionExpiredResendOTP
         case .tooManyRequests:
-            return "Bạn đã gửi OTP quá nhiều lần, vui lòng thử lại sau"
+            return L10n.PhoneAuth.tooManyRequests
         case .invalidPhoneNumber:
-            return "Số điện thoại không hợp lệ"
+            return L10n.PhoneAuth.invalidPhoneNumber
         case .missingPhoneNumber:
-            return "Vui lòng nhập số điện thoại"
+            return L10n.PhoneAuth.missingPhoneNumber
         case .quotaExceeded:
-            return "Đã vượt quá giới hạn gửi OTP, vui lòng thử lại sau"
+            return L10n.PhoneAuth.quotaExceeded
         case .webContextCancelled:
-            return "Xác minh bị huỷ, vui lòng thử lại"
+            return L10n.PhoneAuth.webContextCancelled
         default:
-            return "Lỗi xác thực: \(error.localizedDescription)"
+            return L10n.PhoneAuth.genericError(error.localizedDescription)
         }
     }
 

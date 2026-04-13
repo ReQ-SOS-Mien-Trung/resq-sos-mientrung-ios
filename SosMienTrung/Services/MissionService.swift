@@ -7,9 +7,9 @@ enum MissionServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Phan hoi may chu khong hop le"
+            return L10n.MissionService.invalidResponse
         case .httpStatus(let statusCode, let message):
-            return message ?? "May chu tra ve loi (HTTP \(statusCode))"
+            return message ?? L10n.MissionService.httpStatus(String(statusCode))
         }
     }
 }
@@ -19,6 +19,7 @@ final class MissionService {
 
     private let baseURL: String
     private let session: URLSession
+    private let authExecutor = AuthenticatedRequestExecutor.shared
 
     private init() {
         self.baseURL = AppConfig.baseURLString
@@ -26,11 +27,6 @@ final class MissionService {
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: config)
-    }
-
-    private var authHeader: String? {
-        guard let token = AuthSessionStore.shared.session?.accessToken else { return nil }
-        return "Bearer \(token)"
     }
 
     private func missionDecoder() -> JSONDecoder {
@@ -43,15 +39,11 @@ final class MissionService {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let auth = authHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
         return req
     }
 
     private func send(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MissionServiceError.invalidResponse
-        }
+        let (data, http) = try await authExecutor.perform(request, using: session)
 
         guard (200...299).contains(http.statusCode) else {
             let message = APIErrorResponse.decode(from: data)?.message
@@ -69,12 +61,7 @@ final class MissionService {
             throw URLError(.badURL)
         }
         print("[MissionService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: authorizedRequest(url: url))
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else {
-            print("[MissionService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw URLError(.badServerResponse)
-        }
+        let data = try await send(authorizedRequest(url: url))
         return try missionDecoder().decode(MissionListResponse.self, from: data).missions
     }
 
@@ -84,9 +71,7 @@ final class MissionService {
             throw URLError(.badURL)
         }
         print("[MissionService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: authorizedRequest(url: url))
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
+        let data = try await send(authorizedRequest(url: url))
         return try missionDecoder().decode(Mission.self, from: data)
     }
 
@@ -117,15 +102,26 @@ final class MissionService {
 
     // MARK: - PATCH /operations/missions/{missionId}/activities/{activityId}/status
     /// Contract aligned with the web client: Planned, OnGoing, Succeed, PendingConfirmation, Failed, Cancelled.
-    func updateActivityStatus(missionId: Int, activityId: Int, status: String) async throws {
+    func updateActivityStatus(
+        missionId: Int,
+        activityId: Int,
+        status: String,
+        imageUrl: String? = nil
+    ) async throws {
         guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/status") else {
             throw URLError(.badURL)
         }
 
         let normalizedStatus = ActivityStatus(apiValue: status)?.apiUpdateCandidates.first ?? status
         var req = authorizedRequest(url: url, method: "PATCH")
-        req.httpBody = try JSONEncoder().encode(ActivityStatusUpdate(status: normalizedStatus))
-        print("[MissionService] → PATCH \(url.absoluteString) status=\(normalizedStatus)")
+        req.httpBody = try JSONEncoder().encode(
+            ActivityStatusUpdate(
+                status: normalizedStatus,
+                imageUrl: imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            )
+        )
+        let imageAttachmentLabel = imageUrl == nil ? "none" : "attached"
+        print("[MissionService] → PATCH \(url.absoluteString) status=\(normalizedStatus) imageUrl=\(imageAttachmentLabel)")
         _ = try await send(req)
     }
 
@@ -192,9 +188,7 @@ final class MissionService {
         let urlStr = "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/route?originLat=\(originLat)&originLng=\(originLng)&vehicle=\(vehicle)"
         guard let url = URL(string: urlStr) else { throw URLError(.badURL) }
         print("[MissionService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: authorizedRequest(url: url))
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200...299).contains(statusCode) else { throw URLError(.badServerResponse) }
+        let data = try await send(authorizedRequest(url: url))
         return try JSONDecoder().decode(ActivityRoute.self, from: data)
     }
 

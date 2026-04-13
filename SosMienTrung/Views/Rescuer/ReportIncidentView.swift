@@ -39,7 +39,7 @@ struct ReportIncidentView: View {
                             eyebrow: "MISSION",
                             title: "Báo sự cố mission",
                             description: "Dùng khi toàn đội không thể tiếp tục nhiệm vụ hoặc cần giải cứu khẩn.",
-                            outcome: "Phù hợp với tình huống ảnh hưởng toàn mission: mắc kẹt, nhiều người bị thương, mất phương tiện chính hoặc buộc dừng / bàn giao mission.",
+                            outcome: "Phù hợp với tình huống ảnh hưởng toàn nhiệm vụ: mắc kẹt, nhiều người bị thương, mất phương tiện chính hoặc buộc dừng / bàn giao mission.",
                             icon: "shield.lefthalf.filled.trianglebadge.exclamationmark",
                             tone: DS.Colors.danger
                         )

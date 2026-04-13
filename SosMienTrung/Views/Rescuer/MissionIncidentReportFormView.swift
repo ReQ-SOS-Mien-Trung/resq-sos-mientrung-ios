@@ -163,7 +163,7 @@ struct MissionIncidentReportFormView: View {
     private var incidentTypeSection: some View {
         IncidentFormSection(
             title: "Loại sự cố mission",
-            subtitle: "Chỉ dùng cho sự cố ảnh hưởng cấp toàn mission, không phải lỗi cục bộ của một activity."
+            subtitle: "Chỉ dùng cho sự cố ảnh hưởng cấp toàn nhiệm vụ, không phải lỗi cục bộ của một activity."
         ) {
             LazyVGrid(columns: gridColumns, spacing: DS.Spacing.xs) {
                 ForEach(RescuerMissionIncidentType.allCases) { type in

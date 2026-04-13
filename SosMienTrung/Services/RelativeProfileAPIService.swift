@@ -10,15 +10,17 @@ enum RelativeProfileAPIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "URL hồ sơ người thân không hợp lệ"
+            return L10n.RelativeProfile.invalidURL
         case .notAuthenticated:
-            return "Chưa đăng nhập"
+            return L10n.NotificationAPI.notAuthenticated
         case .httpError(let code, let message):
-            return message.isEmpty ? "Máy chủ trả về lỗi \(code)" : "Máy chủ trả về lỗi \(code): \(message)"
+            return message.isEmpty
+                ? L10n.Common.serverError(String(code))
+                : L10n.Common.serverErrorWithMessage(String(code), message)
         case .invalidProfileId(let id):
-            return "ID hồ sơ người thân không hợp lệ: \(id)"
+            return L10n.RelativeProfile.invalidProfileId(id)
         case .decodingError:
-            return "Không thể đọc dữ liệu hồ sơ người thân từ máy chủ"
+            return L10n.RelativeProfile.decodingError
         }
     }
 }
@@ -185,7 +187,7 @@ final class RelativeProfileAPIService {
         method: String = "GET",
         body: Data? = nil
     ) async throws -> Data {
-        guard let token = AuthSessionStore.shared.session?.accessToken, !token.isEmpty else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw RelativeProfileAPIError.notAuthenticated
         }
 
@@ -195,17 +197,16 @@ final class RelativeProfileAPIService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw RelativeProfileAPIError.httpError(-1, "Khong nhan duoc phan hoi hop le")
-        }
+        let (data, httpResponse) = try await AuthenticatedRequestExecutor.shared.perform(
+            request,
+            using: session
+        )
 
         guard (200..<300).contains(httpResponse.statusCode) else {
             let message = APIErrorResponse.decode(from: data)?.message

@@ -83,8 +83,12 @@ struct ActivityRowView: View {
                             Text(desc)
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(DS.Colors.textSecondary)
-                                .lineLimit(isExpanded ? nil : 2)
+                                .lineLimit(isExpanded ? nil : 1)
                                 .multilineTextAlignment(.leading)
+                        }
+
+                        if isExpanded, let activityImageURL {
+                            activityProofThumbnail(activityImageURL)
                         }
                     }
                 }
@@ -431,7 +435,7 @@ struct ActivityRowView: View {
                     .stroke(color.opacity(0.3), lineWidth: 1)
             )
 
-            if let detailText = context.detailText {
+            if isExpanded, let detailText = context.detailText {
                 Text(detailText)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(DS.Colors.textTertiary)
@@ -442,6 +446,58 @@ struct ActivityRowView: View {
 
     private var supplyItems: [MissionSupply] {
         activity.suppliesToCollect ?? []
+    }
+
+    private var activityImageURL: URL? {
+        guard let rawValue = activity.imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              rawValue.isEmpty == false,
+              let url = URL(string: rawValue) else {
+            return nil
+        }
+
+        return url
+    }
+
+    private func activityProofThumbnail(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Ảnh báo cáo")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DS.Colors.background)
+
+                        Image(systemName: "photo")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(DS.Colors.textTertiary)
+                    }
+                case .empty:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DS.Colors.background)
+
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .frame(width: 120, height: 82)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+            )
+        }
     }
 
     private var supplyOverviewRows: [String] {

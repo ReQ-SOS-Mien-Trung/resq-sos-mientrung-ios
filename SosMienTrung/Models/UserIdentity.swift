@@ -29,10 +29,10 @@ struct UserIdentity: Codable, Identifiable, Equatable {
         
         var displayName: String {
             switch self {
-            case .civilian: return "Người dân"
-            case .rescuer: return "Cứu hộ viên"
-            case .coordinator: return "Điều phối viên"
-            case .admin: return "Quản trị viên"
+            case .civilian: return L10n.Domain.userRoleCivilian
+            case .rescuer: return L10n.Domain.userRoleRescuer
+            case .coordinator: return L10n.Domain.userRoleCoordinator
+            case .admin: return L10n.Domain.userRoleAdmin
             }
         }
         
@@ -342,31 +342,31 @@ enum HandoverError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noIdentityToTransfer:
-            return "Không có tài khoản để chuyển"
+            return L10n.Handover.noIdentityToTransfer
         case .identityAlreadyTransferred:
-            return "Tài khoản đã được chuyển sang thiết bị khác"
+            return L10n.Handover.identityAlreadyTransferred
         case .tokenExpired:
-            return "Mã xác nhận đã hết hạn"
+            return L10n.Handover.tokenExpired
         case .tokenInvalid:
-            return "Mã xác nhận không hợp lệ"
+            return L10n.Handover.tokenInvalid
         case .signatureInvalid:
-            return "Chữ ký số không hợp lệ"
+            return L10n.Handover.signatureInvalid
         case .replayAttack:
-            return "Phát hiện tấn công replay - mã đã được sử dụng"
+            return L10n.Handover.replayAttack
         case .peerNotConnected:
-            return "Chưa kết nối với thiết bị"
+            return L10n.Handover.peerNotConnected
         case .transferInProgress:
-            return "Đang trong quá trình chuyển tài khoản"
+            return L10n.Handover.transferInProgress
         case .userRejected:
-            return "Yêu cầu đã bị từ chối"
+            return L10n.Handover.userRejected
         case .invalidQRCode:
-            return "Mã QR không hợp lệ"
+            return L10n.Handover.invalidQRCode
         case .concurrentTakeoverAttempt:
-            return "Phát hiện yêu cầu chuyển tài khoản đồng thời"
+            return L10n.Handover.concurrentTakeoverAttempt
         case .oldDeviceOffline:
-            return "Thiết bị cũ không còn kết nối"
+            return L10n.Handover.oldDeviceOffline
         case .networkError(let message):
-            return "Lỗi kết nối: \(message)"
+            return L10n.Handover.networkError(message)
         }
     }
 }

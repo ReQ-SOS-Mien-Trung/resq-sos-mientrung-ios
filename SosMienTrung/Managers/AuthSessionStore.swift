@@ -86,12 +86,24 @@ final class AuthSessionStore: ObservableObject {
     @Published private(set) var session: AuthSession?
     @Published private(set) var isRefreshingCurrentUser = false
     private let sessionKey = "authSession"
+    private let refreshSkew: TimeInterval = 60
+    private let refreshTaskLock = NSLock()
+    private var refreshTask: Task<AuthSession, Error>?
 
     private init() {
         load()
     }
 
     var isValid: Bool {
+        hasAuthenticatedSession
+    }
+
+    var hasAuthenticatedSession: Bool {
+        guard let session = session else { return false }
+        return session.accessToken.isEmpty == false && session.refreshToken.isEmpty == false
+    }
+
+    var hasFreshAccessToken: Bool {
         guard let session = session else { return false }
         return session.expiresAt > Date()
     }
@@ -231,6 +243,28 @@ final class AuthSessionStore: ObservableObject {
     func clear() {
         session = nil
         UserDefaults.standard.removeObject(forKey: sessionKey)
+        KeychainHelper.delete(key: "accessToken")
+        KeychainHelper.delete(key: "refreshToken")
+    }
+
+    func validAccessToken(forceRefresh: Bool = false) async throws -> String {
+        guard let snapshot = session,
+              snapshot.accessToken.isEmpty == false,
+              snapshot.refreshToken.isEmpty == false else {
+            throw AuthService.AuthServiceError.missingData
+        }
+
+        if forceRefresh == false,
+           snapshot.expiresAt > Date().addingTimeInterval(refreshSkew) {
+            return snapshot.accessToken
+        }
+
+        let refreshedSession = try await refreshSession(forceRefresh: forceRefresh)
+        return refreshedSession.accessToken
+    }
+
+    func refreshSessionIfNeeded(force: Bool = false) async throws -> AuthSession {
+        try await refreshSession(forceRefresh: force)
     }
 
     private func load() {
@@ -246,6 +280,102 @@ final class AuthSessionStore: ObservableObject {
         if let data = try? JSONEncoder().encode(session) {
             UserDefaults.standard.set(data, forKey: sessionKey)
         }
+    }
+
+    private func refreshSession(forceRefresh: Bool) async throws -> AuthSession {
+        guard let snapshot = session,
+              snapshot.accessToken.isEmpty == false,
+              snapshot.refreshToken.isEmpty == false else {
+            throw AuthService.AuthServiceError.missingData
+        }
+
+        if forceRefresh == false,
+           snapshot.expiresAt > Date().addingTimeInterval(refreshSkew) {
+            return snapshot
+        }
+
+        if let inFlightTask = currentRefreshTask() {
+            return try await inFlightTask.value
+        }
+
+        let task = Task<AuthSession, Error> { [weak self] in
+            guard let self else {
+                throw AuthService.AuthServiceError.missingData
+            }
+
+            return try await self.performRefresh(using: snapshot)
+        }
+
+        setRefreshTask(task)
+        defer { clearRefreshTask(task) }
+        return try await task.value
+    }
+
+    private func performRefresh(using existingSession: AuthSession) async throws -> AuthSession {
+        do {
+            let response = try await AuthService.shared.refreshToken(
+                accessToken: existingSession.accessToken,
+                refreshToken: existingSession.refreshToken
+            )
+
+            let refreshedSession = AuthSession(
+                accessToken: response.accessToken,
+                refreshToken: response.refreshToken,
+                tokenType: response.tokenType,
+                expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn)),
+                userId: existingSession.userId,
+                username: existingSession.username,
+                email: existingSession.email,
+                fullName: existingSession.fullName,
+                roleId: existingSession.roleId,
+                permissions: response.permissions ?? existingSession.permissions,
+                permissionsLoaded: response.permissions != nil || existingSession.permissionsLoaded,
+                isOnboarded: existingSession.isOnboarded,
+                isEligibleRescuer: existingSession.isEligibleRescuer
+            )
+
+            persist(refreshedSession)
+            KeychainHelper.save(key: "accessToken", value: refreshedSession.accessToken)
+            KeychainHelper.save(key: "refreshToken", value: refreshedSession.refreshToken)
+            return refreshedSession
+        } catch {
+            if shouldInvalidateSession(for: error) {
+                clear()
+                UserProfile.shared.clearUser()
+            }
+            throw error
+        }
+    }
+
+    private func shouldInvalidateSession(for error: Error) -> Bool {
+        guard let authError = error as? AuthService.AuthServiceError else {
+            return false
+        }
+
+        switch authError {
+        case .httpStatus(let statusCode, _):
+            return statusCode == 401 || statusCode == 403
+        default:
+            return false
+        }
+    }
+
+    private func currentRefreshTask() -> Task<AuthSession, Error>? {
+        refreshTaskLock.lock()
+        defer { refreshTaskLock.unlock() }
+        return refreshTask
+    }
+
+    private func setRefreshTask(_ task: Task<AuthSession, Error>) {
+        refreshTaskLock.lock()
+        refreshTask = task
+        refreshTaskLock.unlock()
+    }
+
+    private func clearRefreshTask(_ task: Task<AuthSession, Error>) {
+        refreshTaskLock.lock()
+        refreshTask = nil
+        refreshTaskLock.unlock()
     }
 }
 

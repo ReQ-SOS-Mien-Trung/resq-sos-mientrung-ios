@@ -9,13 +9,15 @@ enum NotificationAPIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "URL thông báo không hợp lệ"
+            return L10n.Common.invalidNotificationURL
         case .notAuthenticated:
-            return "Chưa đăng nhập"
+            return L10n.NotificationAPI.notAuthenticated
         case .httpError(let code, let message):
-            return message.isEmpty ? "Máy chủ trả về lỗi \(code)" : "Máy chủ trả về lỗi \(code): \(message)"
+            return message.isEmpty
+                ? L10n.Common.serverError(String(code))
+                : L10n.Common.serverErrorWithMessage(String(code), message)
         case .decodingError:
-            return "Không thể đọc dữ liệu thông báo từ máy chủ"
+            return L10n.NotificationAPI.decodeFailed
         }
     }
 }
@@ -37,6 +39,7 @@ final class NotificationAPIService {
 
     private let baseURL: String
     private let session: URLSession
+    private let authExecutor = AuthenticatedRequestExecutor.shared
 
     private init(session: URLSession = .shared) {
         self.baseURL = AppConfig.baseURLString
@@ -112,10 +115,12 @@ final class NotificationAPIService {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NotificationAPIError.httpError(-1, "Khong nhan duoc phan hoi hop le")
-        }
+        let (data, httpResponse) = try await authExecutor.perform(
+            request,
+            using: session,
+            accessTokenOverride: accessToken,
+            retryOnUnauthorized: accessToken == nil
+        )
 
         guard (200..<300).contains(httpResponse.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? ""

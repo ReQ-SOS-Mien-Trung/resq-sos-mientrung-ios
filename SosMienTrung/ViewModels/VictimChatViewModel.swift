@@ -56,7 +56,7 @@ final class VictimChatViewModel: ObservableObject {
 
     func initialize(forceNewConversation: Bool = false) async {
         guard !token.isEmpty else {
-            errorMessage = "Chưa đăng nhập, vui lòng đăng nhập lại"
+            errorMessage = L10n.VictimChat.notLoggedIn
             return
         }
         isLoading = true
@@ -108,7 +108,7 @@ final class VictimChatViewModel: ObservableObject {
                 await loadHistory()
             }
         } catch {
-            errorMessage = "Không thể mở chat: \(error.localizedDescription)"
+            errorMessage = L10n.VictimChat.cannotOpenChat(error.localizedDescription)
             phase = .selectingTopic
         }
     }
@@ -189,7 +189,7 @@ final class VictimChatViewModel: ObservableObject {
             let markdownImage = "![Anh chat](\(imageURL))"
             sendMessageContent(markdownImage, conversationId: convId)
         } catch {
-            errorMessage = "Upload ảnh thất bại: \(error.localizedDescription)"
+            errorMessage = L10n.VictimChat.uploadImageFailed(error.localizedDescription)
         }
     }
 
@@ -316,7 +316,7 @@ final class VictimChatViewModel: ObservableObject {
             chatService.messages = history + pendingStillNotEchoed
         } catch {
             if showError {
-                errorMessage = "Không thể tải lịch sử: \(error.localizedDescription)"
+                errorMessage = L10n.VictimChat.cannotLoadHistory(error.localizedDescription)
             }
         }
     }

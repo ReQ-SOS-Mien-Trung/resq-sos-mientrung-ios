@@ -77,48 +77,8 @@ final class NotificationHubService: ObservableObject {
     }
 
     func connectIfNeeded() {
-        guard let session = AuthSessionStore.shared.session, session.expiresAt > Date() else {
-            log("Skip connect: auth session missing or expired")
-            disconnect()
-            return
-        }
-
-        let token = session.accessToken
-        if connection != nil, activeAccessToken == token {
-            if isConnected == false {
-                log("Restart existing hub connection")
-                connection?.start()
-            }
-
-            Task {
-                await registerDevicePushTokenIfNeeded()
-            }
-            return
-        }
-
-        disconnect(clearNotifications: false)
-
-        guard let url = makeHubURL(accessToken: token) else {
-            errorMessage = "URL NotificationHub khong hop le"
-            log("Invalid NotificationHub URL")
-            return
-        }
-
-        activeAccessToken = token
-        log("Connect NotificationHub -> \(url.absoluteString)")
-
-        let connection = HubConnectionBuilder(url: url)
-            .withLogging(minLogLevel: .debug)
-            .withHubConnectionDelegate(delegate: makeConnectionDelegate())
-            .withAutoReconnect()
-            .build()
-
-        self.connection = connection
-        registerHandlers(for: connection)
-        connection.start()
-
-        Task {
-            await registerDevicePushTokenIfNeeded()
+        Task { @MainActor [weak self] in
+            await self?.connectIfNeededAsync()
         }
     }
 
@@ -139,13 +99,13 @@ final class NotificationHubService: ObservableObject {
     }
 
     func applicationDidBecomeActive() async {
-        connectIfNeeded()
+        await connectIfNeededAsync()
         await syncNotifications()
         await registerDevicePushTokenIfNeeded()
     }
 
     func syncNotifications(page: Int = 1, pageSize: Int = 20) async {
-        guard AuthSessionStore.shared.isValid else { return }
+        guard AuthSessionStore.shared.hasAuthenticatedSession else { return }
 
         isSyncing = true
         defer { isSyncing = false }
@@ -280,7 +240,7 @@ final class NotificationHubService: ObservableObject {
     }
 
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) async -> RemoteNotificationHandling {
-        guard AuthSessionStore.shared.isValid else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             return .ignored
         }
 
@@ -304,7 +264,7 @@ final class NotificationHubService: ObservableObject {
                     self.log("Received notification: \(notification.displayTitle)")
                     self.handle(notification: notification)
                 } catch {
-                    self.errorMessage = "Khong the decode ReceiveNotification: \(error.localizedDescription)"
+                    self.errorMessage = L10n.NotificationHub.cannotDecodeReceiveNotification(error.localizedDescription)
                     self.log("ReceiveNotification decode failed: \(error.localizedDescription)")
                 }
             }
@@ -381,7 +341,7 @@ final class NotificationHubService: ObservableObject {
 
     private func registerDevicePushTokenIfNeeded(force: Bool = false, session: AuthSession? = nil) async {
         let resolvedSession = session ?? AuthSessionStore.shared.session
-        guard let resolvedSession, resolvedSession.expiresAt > Date() else {
+        guard let resolvedSession else {
             return
         }
 
@@ -395,7 +355,8 @@ final class NotificationHubService: ObservableObject {
         }
 
         do {
-            try await apiService.registerFCMToken(token, accessToken: resolvedSession.accessToken)
+            let accessToken = try await accessTokenForNotificationRegistration(session: session)
+            try await apiService.registerFCMToken(token, accessToken: accessToken)
             registeredPushTokenKey = registrationKey
             UserDefaults.standard.set(registrationKey, forKey: registeredPushTokenDefaultsKey)
             errorMessage = nil
@@ -420,6 +381,65 @@ final class NotificationHubService: ObservableObject {
         } catch {
             log("Failed to unregister FCM token for user \(session.userId) (\(reason)): \(error.localizedDescription)")
         }
+    }
+
+    private func connectIfNeededAsync() async {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
+            log("Skip connect: auth session missing")
+            disconnect()
+            return
+        }
+
+        do {
+            let token = try await AuthSessionStore.shared.validAccessToken()
+            if connection != nil, activeAccessToken == token {
+                if isConnected == false {
+                    log("Restart existing hub connection")
+                    connection?.start()
+                }
+
+                await registerDevicePushTokenIfNeeded()
+                return
+            }
+
+            disconnect(clearNotifications: false)
+
+            guard let url = makeHubURL(accessToken: token) else {
+                errorMessage = L10n.Common.invalidNotificationHubURL
+                log("Invalid NotificationHub URL")
+                return
+            }
+
+            activeAccessToken = token
+            log("Connect NotificationHub -> \(url.absoluteString)")
+
+            let connection = HubConnectionBuilder(url: url)
+                .withLogging(minLogLevel: .debug)
+                .withHubConnectionDelegate(delegate: makeConnectionDelegate())
+                .withAutoReconnect()
+                .build()
+
+            self.connection = connection
+            registerHandlers(for: connection)
+            connection.start()
+
+            await registerDevicePushTokenIfNeeded()
+        } catch {
+            log("Skip connect: failed to obtain valid access token (\(error.localizedDescription))")
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func accessTokenForNotificationRegistration(session: AuthSession?) async throws -> String {
+        guard let session else {
+            return try await AuthSessionStore.shared.validAccessToken()
+        }
+
+        if AuthSessionStore.shared.session?.userId == session.userId {
+            return try await AuthSessionStore.shared.validAccessToken()
+        }
+
+        return session.accessToken
     }
 
     private func makeHubURL(accessToken: String) -> URL? {

@@ -10,9 +10,9 @@ struct ActivityRouteSheetView: View {
         var label: String {
             switch self {
             case .device:
-                return "GPS thiết bị"
+                return L10n.Route.deviceGPS
             case .team:
-                return "Vị trí team"
+                return L10n.Route.teamLocation
             }
         }
     }
@@ -364,7 +364,7 @@ struct ActivityRouteSheetView: View {
         }
 
         if let step = activity.step {
-            return "Điểm đến bước \(step)"
+            return L10n.Route.destinationStep(String(step))
         }
 
         return activity.title
@@ -392,7 +392,7 @@ struct ActivityRouteSheetView: View {
 
             route = fetchedRoute
             if fetchedRoute.route == nil, encodedPolylines(route: fetchedRoute).isEmpty {
-                errorMessage = "Hệ thống chưa trả về dữ liệu lộ trình cho bước này."
+                errorMessage = L10n.Route.activityMissingRouteData
             }
         } catch {
             if isTaskCancellation(error) {
@@ -400,7 +400,7 @@ struct ActivityRouteSheetView: View {
                 return
             }
 
-            errorMessage = "Không thể tải lộ trình: \(error.localizedDescription)"
+            errorMessage = L10n.Route.activityLoadFailed(error.localizedDescription)
             route = nil
         }
 
@@ -456,7 +456,7 @@ struct ActivityRouteSheetView: View {
 
     private var originDisplayText: String {
         guard let originCoordinate else {
-            return "Chưa xác định được điểm xuất phát"
+            return L10n.Route.unknownOrigin
         }
 
         return String(format: "%.6f, %.6f", originCoordinate.latitude, originCoordinate.longitude)
@@ -517,17 +517,17 @@ struct ActivityRouteSheetView: View {
         }
 
         let seconds = route.route?.totalDurationSeconds ?? route.duration ?? 0
-        guard seconds > 0 else { return "-" }
+        guard seconds > 0 else { return L10n.Route.dash }
 
         let minutes = Int(seconds / 60)
         let hours = minutes / 60
         let remains = minutes % 60
 
         if hours > 0 {
-            return "\(hours) giờ \(remains) phút"
+            return L10n.Route.hoursMinutes(String(hours), String(remains))
         }
 
-        return "\(minutes) phút"
+        return L10n.Route.minutesOnly(String(minutes))
     }
 
     private func pointSummaryBlock(
@@ -588,7 +588,7 @@ private enum ActivityRouteSheetError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .locationUnavailable:
-            return "Chưa lấy được GPS của thiết bị và cũng không có vị trí team để tính lộ trình. Nếu đang dùng iPhone Simulator, hãy chọn Features > Location để cấp vị trí mô phỏng."
+            return L10n.Route.activityLocationUnavailable
         }
     }
 }

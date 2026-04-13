@@ -20,19 +20,19 @@ enum GoogleSignInManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingIOSClientID:
-            return "Thieu iOS OAuth client ID. Hay them GIDClientID hoac CLIENT_ID tu GoogleService-Info.plist."
+            return L10n.Auth.missingIOSClientID
         case .missingServerClientID:
-            return "Thieu GIDServerClientID de BE xac minh Google ID token."
+            return L10n.Auth.missingServerClientID
         case .missingURLScheme(let scheme):
-            return "Thieu URL scheme iOS cho Google Sign-In: \(scheme)"
+            return L10n.Auth.missingURLScheme(scheme)
         case .missingPresentingViewController:
-            return "Khong tim thay man hinh de mo Google Sign-In."
+            return L10n.Auth.missingPresentingViewController
         case .missingIDToken:
-            return "Google khong tra ve ID token hop le."
+            return L10n.Auth.missingIDToken
         case .missingAccessToken:
-            return "Google khong tra ve access token hop le."
+            return L10n.Auth.missingAccessToken
         case .missingFirebaseIDToken:
-            return "Firebase khong tra ve ID token hop le sau khi dang nhap Google."
+            return L10n.Auth.missingFirebaseIDToken
         }
     }
 }

@@ -69,6 +69,19 @@ struct GoogleLoginRequest: Codable {
     let firebaseIdToken: String?
 }
 
+struct RefreshTokenRequest: Codable {
+    let accessToken: String
+    let refreshToken: String
+}
+
+struct RefreshTokenResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresIn: Int
+    let tokenType: String
+    let permissions: [String]?
+}
+
 struct LoginResponse: Codable {
     let accessToken: String
     let refreshToken: String
@@ -370,17 +383,17 @@ final class AuthService {
         var errorDescription: String? {
             switch self {
             case .invalidURL:
-                return "URL không hợp lệ"
+                return L10n.Common.invalidURL
             case .timeout:
-                return "Hết thời gian chờ – kiểm tra lại IP máy chủ và kết nối mạng"
+                return L10n.Common.timeoutCheckConnection()
             case .requestFailed(let error):
                 return error.localizedDescription
             case .httpStatus(let code, let message):
-                return message ?? "Máy chủ trả về lỗi (HTTP \(code))"
+                return message ?? L10n.Auth.httpStatus(String(code))
             case .missingData:
-                return "Không nhận được dữ liệu từ máy chủ"
+                return L10n.Common.noServerData
             case .decodingFailed(let error):
-                return "Không thể đọc dữ liệu: \(error.localizedDescription)"
+                return L10n.Common.cannotDecodeData(error.localizedDescription)
             }
         }
     }
@@ -411,6 +424,11 @@ final class AuthService {
     func googleLogin(idToken: String, firebaseIdToken: String? = nil) async throws -> GoogleLoginResponse {
         let payload = GoogleLoginRequest(idToken: idToken, firebaseIdToken: firebaseIdToken)
         return try await request(path: "/identity/auth/google-login", body: payload)
+    }
+
+    func refreshToken(accessToken: String, refreshToken: String) async throws -> RefreshTokenResponse {
+        let payload = RefreshTokenRequest(accessToken: accessToken, refreshToken: refreshToken)
+        return try await request(path: "/identity/auth/refresh-token", body: payload)
     }
 
     /// Lấy hồ sơ người dùng hiện tại để đọc các cờ quyền như isEligibleRescuer
@@ -564,7 +582,8 @@ final class AuthService {
         method: String = "GET",
         body: Data? = nil
     ) async throws -> Data {
-        guard let token = AuthSessionStore.shared.session?.accessToken, !token.isEmpty else {
+        let token = try await AuthSessionStore.shared.validAccessToken()
+        guard !token.isEmpty else {
             throw AuthServiceError.missingData
         }
 

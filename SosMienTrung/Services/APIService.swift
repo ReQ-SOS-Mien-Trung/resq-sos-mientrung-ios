@@ -9,6 +9,7 @@ final class APIService {
 
     private let baseURL: String
     private let session: URLSession
+    private let authExecutor = AuthenticatedRequestExecutor.shared
 
     private init() {
         self.baseURL = AppConfig.baseURLString
@@ -22,15 +23,9 @@ final class APIService {
         url: URL,
         method: String,
         includeJSONContentType: Bool = false
-    ) -> URLRequest? {
-        guard let token = AuthSessionStore.shared.session?.accessToken else {
-            print("[API] ⚠️ No access token – skip \(method) \(url.absoluteString)")
-            return nil
-        }
-
+    ) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if includeJSONContentType {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
@@ -57,12 +52,9 @@ final class APIService {
 
         // Debug token
         let token = AuthSessionStore.shared.session?.accessToken
-        let sessionValid = AuthSessionStore.shared.isValid
+        let sessionValid = AuthSessionStore.shared.hasFreshAccessToken
         print("[API] 🔑 session=\(AuthSessionStore.shared.session != nil ? "exists" : "NIL"), valid=\(sessionValid), token=\(token != nil ? "✅ present" : "❌ NIL")")
-
-        if let token = token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        } else {
+        if token == nil {
             print("[API] ⚠️ No access token – request will be rejected with 401")
         }
 
@@ -80,8 +72,8 @@ final class APIService {
             print("[API] ➜ POST \(url.absoluteString)")
             print("[API] 📤 Request JSON:\n\(jsonString)")
 
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await authExecutor.perform(request, using: session)
+            let statusCode = response.statusCode
 
             if (200...299).contains(statusCode) {
                 print("[API] ✅ SOS uploaded (HTTP \(statusCode))")
@@ -116,14 +108,12 @@ final class APIService {
             print("[API] ✗ Invalid URL for fetchMySOS")
             return nil
         }
-        guard let request = authorizedRequest(url: url, method: "GET") else {
-            return nil
-        }
+        let request = authorizedRequest(url: url, method: "GET")
         
         do {
             print("[API] ➜ GET \(url.absoluteString)")
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await authExecutor.perform(request, using: session)
+            let statusCode = response.statusCode
             guard (200...299).contains(statusCode) else {
                 print("[API] ✗ fetchMySOS HTTP \(statusCode)")
                 return nil
@@ -145,14 +135,12 @@ final class APIService {
             print("[API] ✗ Invalid URL for getSosRequestDetail")
             return nil
         }
-        guard let request = authorizedRequest(url: url, method: "GET") else {
-            return nil
-        }
+        let request = authorizedRequest(url: url, method: "GET")
 
         do {
             print("[API] ➜ GET \(url.absoluteString)")
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await authExecutor.perform(request, using: session)
+            let statusCode = response.statusCode
             guard (200...299).contains(statusCode) else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 print("[API] ✗ getSosRequestDetail HTTP \(statusCode): \(body)")
@@ -176,13 +164,11 @@ final class APIService {
             print("[API] ✗ Invalid URL for updateVictimSosRequest")
             return nil
         }
-        guard var request = authorizedRequest(
+        var request = authorizedRequest(
             url: url,
             method: "PATCH",
             includeJSONContentType: true
-        ) else {
-            return nil
-        }
+        )
 
         do {
             let jsonData = try makeEncoder().encode(packet)
@@ -191,8 +177,8 @@ final class APIService {
             print("[API] ➜ PATCH \(url.absoluteString)")
             print("[API] 📤 Victim update JSON:\n\(jsonString)")
 
-            let (data, response) = try await session.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let (data, response) = try await authExecutor.perform(request, using: session)
+            let statusCode = response.statusCode
             guard (200...299).contains(statusCode) else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 print("[API] ✗ victim-update HTTP \(statusCode): \(body)")

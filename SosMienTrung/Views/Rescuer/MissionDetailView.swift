@@ -13,7 +13,7 @@ struct MissionDetailView: View {
             case .myTeam:
                 return "Đội của bạn"
             case .all:
-                return "Toàn mission"
+                return "Toàn nhiệm vụ"
             }
         }
     }
@@ -28,6 +28,7 @@ struct MissionDetailView: View {
     @State private var showMissionInventory = false
     @State private var pickupConfirmationActivity: Activity?
     @State private var deliveryConfirmationActivity: Activity?
+    @State private var completionProofActivity: Activity?
     @State private var routePreviewActivity: Activity?
     @State private var missionStatus: String
     @State private var missionDetail: Mission?
@@ -115,18 +116,18 @@ struct MissionDetailView: View {
             if canViewMissionWorkspace {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        Button {
+                            refreshMissionWorkspace(triggerSync: true)
+                        } label: {
+                            Label("Làm mới", systemImage: "arrow.clockwise")
+                        }
+
                         if inventoryEntryCount > 0 {
                             Button {
                                 showMissionInventory = true
                             } label: {
                                 Label("Túi đồ vật phẩm", systemImage: "shippingbox")
                             }
-                        }
-
-                        Button {
-                            refreshMissionWorkspace(triggerSync: true)
-                        } label: {
-                            Label("Làm mới", systemImage: "arrow.clockwise")
                         }
 
                         if canReportMissionIncidents {
@@ -197,11 +198,12 @@ struct MissionDetailView: View {
                 PickupConfirmationSheet(
                     activity: activity,
                     isSubmitting: vm.isLoadingActivities
-                ) { bufferUsages in
+                ) { bufferUsages, proofImage in
                     await vm.confirmPickup(
                         missionId: activeMission.id,
                         activityId: activity.id,
-                        bufferUsages: bufferUsages
+                        bufferUsages: bufferUsages,
+                        proofImage: proofImage
                     )
                 }
             }
@@ -212,12 +214,29 @@ struct MissionDetailView: View {
                 DeliveryConfirmationSheet(
                     activity: activity,
                     isSubmitting: vm.isLoadingActivities
-                ) { actualDeliveredItems, deliveryNote in
+                ) { actualDeliveredItems, deliveryNote, proofImage in
                     await vm.confirmDelivery(
                         missionId: activeMission.id,
                         activityId: activity.id,
                         actualDeliveredItems: actualDeliveredItems,
-                        deliveryNote: deliveryNote
+                        deliveryNote: deliveryNote,
+                        proofImage: proofImage
+                    )
+                }
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $completionProofActivity) { activity in
+            NavigationStack {
+                ActivityCompletionProofSheet(
+                    activity: activity,
+                    isSubmitting: vm.isLoadingActivities
+                ) { proofImage in
+                    await vm.completeActivity(
+                        missionId: activeMission.id,
+                        activityId: activity.id,
+                        knownActivities: currentTeamActivities.isEmpty ? displayedActivities : currentTeamActivities,
+                        proofImage: proofImage
                     )
                 }
             }
@@ -480,13 +499,6 @@ struct MissionDetailView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            if let sharedExecutionHelperText {
-                Text(sharedExecutionHelperText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(DS.Colors.info)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -833,6 +845,9 @@ struct MissionDetailView: View {
                 deliveryConfirmationActivity = activity
                 return
             }
+
+            completionProofActivity = activity
+            return
         }
 
         vm.updateActivity(
@@ -886,37 +901,10 @@ struct MissionDetailView: View {
     private func isActivityRouteAvailable(_ activity: Activity) -> Bool {
         switch activity.activityStatus {
         case .planned, .onGoing:
-            return hasRouteHint(activity)
+            return activityDescriptionHasRouteInstruction(activity)
         case .succeed, .failed, .cancelled:
             return false
         }
-    }
-
-    private func hasRouteHint(_ activity: Activity) -> Bool {
-        if let latitude = activity.targetLatitude,
-           let longitude = activity.targetLongitude,
-           CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)),
-           !(abs(latitude) < 0.000_001 && abs(longitude) < 0.000_001) {
-            return true
-        }
-
-        if let depotName = activity.depotName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           depotName.isEmpty == false {
-            return true
-        }
-
-        if let depotAddress = activity.depotAddress?.trimmingCharacters(in: .whitespacesAndNewlines),
-           depotAddress.isEmpty == false {
-            return true
-        }
-
-        guard let description = activity.description?.trimmingCharacters(in: .whitespacesAndNewlines),
-              description.isEmpty == false else {
-            return false
-        }
-
-        let pattern = #"(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})"#
-        return description.range(of: pattern, options: .regularExpression) != nil
     }
 
     private func assignmentLabel(for activity: Activity) -> String? {
@@ -984,18 +972,6 @@ struct MissionDetailView: View {
 
     private var activityExecutionContextById: [Int: MissionActivityExecutionContext] {
         buildMissionActivityExecutionContexts(activities: allMissionActivities)
-    }
-
-    private var sharedExecutionHelperText: String? {
-        let visibleContexts = displayedActivities.compactMap { activityExecutionContextById[$0.id] }
-        guard visibleContexts.isEmpty == false else { return nil }
-
-        let sharedGroupCount = Set(visibleContexts.map(\.groupKey)).count
-        if sharedGroupCount == 1 {
-            return "Nhãn SOS/điểm thực hiện đang gom bước theo sosRequestId, tọa độ mục tiêu hoặc tọa độ đọc từ mô tả activity."
-        }
-
-        return "Đang nhận diện \(sharedGroupCount) cụm SOS/điểm thực hiện dựa trên sosRequestId, kinh độ/vĩ độ và mô tả activity."
     }
 
     private var currentTeamActivities: [Activity] {

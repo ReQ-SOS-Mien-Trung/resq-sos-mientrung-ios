@@ -18,13 +18,13 @@ enum SOSRuleConfigServiceError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAccessToken:
-            return "Chưa có access token để tải SOS rule config."
+            return L10n.SOSRuleConfig.missingAccessToken
         case .invalidURL:
-            return "URL SOS rule config không hợp lệ."
+            return L10n.SOSRuleConfig.invalidURL
         case .invalidResponse(let statusCode, let message):
-            return message ?? "Tải SOS rule config thất bại (HTTP \(statusCode))."
+            return message ?? L10n.SOSRuleConfig.invalidResponse(String(statusCode))
         case .decodingFailed(let error):
-            return "Không đọc được SOS rule config: \(error.localizedDescription)"
+            return L10n.SOSRuleConfig.decodingFailed(error.localizedDescription)
         }
     }
 }
@@ -46,7 +46,7 @@ final class SOSRuleConfigService {
     }
 
     func fetchActiveConfig() async throws -> SOSRuleConfig {
-        guard let accessToken = trimmedNonEmpty(AuthSessionStore.shared.session?.accessToken) else {
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
             throw SOSRuleConfigServiceError.missingAccessToken
         }
 
@@ -56,10 +56,12 @@ final class SOSRuleConfigService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, response) = try await AuthenticatedRequestExecutor.shared.perform(
+            request,
+            using: session
+        )
+        let statusCode = response.statusCode
 
         guard (200...299).contains(statusCode) else {
             let rawBody = String(data: data, encoding: .utf8)
@@ -107,7 +109,7 @@ final class SOSRuleConfigStore: ObservableObject {
             refreshTask?.cancel()
 
             guard trimmedNonEmpty(session?.accessToken) != nil,
-                  AuthSessionStore.shared.isValid else {
+                  AuthSessionStore.shared.hasAuthenticatedSession else {
                 return
             }
 
@@ -118,7 +120,7 @@ final class SOSRuleConfigStore: ObservableObject {
     }
 
     func refreshIfPossible(force: Bool = false) async {
-        guard AuthSessionStore.shared.isValid else { return }
+        guard AuthSessionStore.shared.hasAuthenticatedSession else { return }
         if isRefreshing { return }
         if force == false, activeConfig.id != nil, lastRefreshError == nil {
             return

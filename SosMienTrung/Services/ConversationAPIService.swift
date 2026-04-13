@@ -8,10 +8,10 @@ enum ConversationAPIError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL:        return "URL không hợp lệ"
-        case .notAuthenticated:  return "Chưa đăng nhập"
-        case .httpError(let code, let msg): return "Lỗi server \(code): \(msg)"
-        case .decodingError:     return "Không đọc được dữ liệu từ server"
+        case .invalidURL:        return L10n.Common.invalidURL
+        case .notAuthenticated:  return L10n.NotificationAPI.notAuthenticated
+        case .httpError(let code, let msg): return L10n.ConversationAPI.httpError(String(code), msg)
+        case .decodingError:     return L10n.ConversationAPI.decodingError
         }
     }
 }
@@ -71,15 +71,22 @@ final class ConversationAPIService {
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw ConversationAPIError.invalidURL
         }
+        guard AuthSessionStore.shared.hasAuthenticatedSession || token.isEmpty == false else {
+            throw ConversationAPIError.notAuthenticated
+        }
         var req = URLRequest(url: url)
         req.httpMethod = method
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let body {
             req.httpBody = body
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+        let (data, http) = try await AuthenticatedRequestExecutor.shared.perform(
+            req,
+            using: URLSession.shared,
+            accessTokenOverride: AuthSessionStore.shared.hasAuthenticatedSession ? nil : token,
+            retryOnUnauthorized: AuthSessionStore.shared.hasAuthenticatedSession
+        )
+        if !(200..<300).contains(http.statusCode) {
             let msg = String(data: data, encoding: .utf8) ?? ""
             throw ConversationAPIError.httpError(http.statusCode, msg)
         }

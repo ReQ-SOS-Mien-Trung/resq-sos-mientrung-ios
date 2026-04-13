@@ -28,7 +28,7 @@ struct ContentView: View {
     
     /// Cho vào app khi có user profile VÀ có session hợp lệ
     private var isFullyAuthenticated: Bool {
-        userProfile.isSetupComplete && authSession.isValid
+        userProfile.isSetupComplete && authSession.hasAuthenticatedSession
     }
 
     private var currentDiscoveryRole: MultipeerSession.DiscoveryRole? {

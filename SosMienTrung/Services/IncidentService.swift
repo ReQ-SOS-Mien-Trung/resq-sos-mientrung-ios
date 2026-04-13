@@ -5,6 +5,7 @@ final class IncidentService {
 
     private let baseURL: String
     private let session: URLSession
+    private let authExecutor = AuthenticatedRequestExecutor.shared
 
     private init() {
         self.baseURL = AppConfig.baseURLString
@@ -14,16 +15,10 @@ final class IncidentService {
         self.session = URLSession(configuration: config)
     }
 
-    private var authHeader: String? {
-        guard let token = AuthSessionStore.shared.session?.accessToken else { return nil }
-        return "Bearer \(token)"
-    }
-
     private func authorizedRequest(url: URL, method: String = "GET") -> URLRequest {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let auth = authHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
         return req
     }
 
@@ -31,8 +26,8 @@ final class IncidentService {
         var req = authorizedRequest(url: url, method: "POST")
         req.httpBody = try JSONEncoder().encode(payload)
         print("[IncidentService] → POST \(url.absoluteString)")
-        let (data, response) = try await session.data(for: req)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, response) = try await authExecutor.perform(req, using: session)
+        let statusCode = response.statusCode
         guard (200...299).contains(statusCode) else {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw backendError(statusCode: statusCode, data: data)
@@ -72,8 +67,8 @@ final class IncidentService {
             throw URLError(.badURL)
         }
         print("[IncidentService] → GET \(url.absoluteString)")
-        let (data, response) = try await session.data(for: authorizedRequest(url: url))
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, response) = try await authExecutor.perform(authorizedRequest(url: url), using: session)
+        let statusCode = response.statusCode
         guard (200...299).contains(statusCode) else {
             throw backendError(statusCode: statusCode, data: data)
         }
@@ -89,8 +84,8 @@ final class IncidentService {
         var req = authorizedRequest(url: url, method: "PATCH")
         req.httpBody = try JSONEncoder().encode(request)
         print("[IncidentService] → PATCH \(url.absoluteString)")
-        let (data, response) = try await session.data(for: req)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, response) = try await authExecutor.perform(req, using: session)
+        let statusCode = response.statusCode
         guard (200...299).contains(statusCode) else {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw backendError(statusCode: statusCode, data: data)
