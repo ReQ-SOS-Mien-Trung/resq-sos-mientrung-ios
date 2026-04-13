@@ -47,24 +47,59 @@ enum AppConfig {
         return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
     }
 
+    private static func releaseSafeBundleURLString(_ raw: String?) -> String? {
+        guard let normalized = normalizedURLString(raw) else { return nil }
+
+        #if DEBUG
+        return normalized
+        #else
+        guard
+            let components = URLComponents(string: normalized),
+            components.scheme?.lowercased() == "https",
+            let host = components.host?.lowercased(),
+            isLocalDevelopmentHost(host) == false
+        else {
+            return nil
+        }
+
+        return normalized
+        #endif
+    }
+
+    private static func isLocalDevelopmentHost(_ host: String) -> Bool {
+        if host == "localhost" || host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
+            return true
+        }
+
+        let octets = host.split(separator: ".")
+        if octets.count == 4,
+           octets[0] == "172",
+           let secondOctet = Int(octets[1]),
+           (16...31).contains(secondOctet) {
+            return true
+        }
+
+        return false
+    }
+
     static var baseURLString: String {
         if let env = normalizedURLString(ProcessInfo.processInfo.environment["BACKEND_BASE_URL"]) {
             return env
         }
 
         #if targetEnvironment(simulator)
-        if let simulator = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_SIMULATOR") as? String) {
+        if let simulator = releaseSafeBundleURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_SIMULATOR") as? String) {
             return simulator
         }
-        if let shared = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
+        if let shared = releaseSafeBundleURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
             return shared
         }
         return fallbackBaseURLSimulator
         #else
-        if let device = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_DEVICE") as? String) {
+        if let device = releaseSafeBundleURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL_DEVICE") as? String) {
             return device
         }
-        if let shared = normalizedURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
+        if let shared = releaseSafeBundleURLString(Bundle.main.object(forInfoDictionaryKey: "BASE_URL") as? String) {
             return shared
         }
         return fallbackBaseURLDevice

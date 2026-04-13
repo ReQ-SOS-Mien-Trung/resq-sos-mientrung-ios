@@ -1133,53 +1133,67 @@ private struct MissionReportMemberEvaluationCard: View {
                     Spacer()
 
                     if let averageScore = evaluation.averageScore {
-                        StatusBadge(text: "Điểm \(scoreLabel(averageScore))", color: scoreColor(averageScore))
+                        StatusBadge(text: "Điểm \(scoreLabel(averageScore))", color: missionReportScoreColor(averageScore))
                     }
                 }
 
-                VStack(spacing: DS.Spacing.sm) {
-                    ScoreMenuField(
-                        title: "Tốc độ phản ứng",
-                        score: $evaluation.responseTimeScore,
-                        isEditable: isEditable
-                    )
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
 
-                    ScoreMenuField(
-                        title: "Hiệu quả cứu hộ",
-                        score: $evaluation.rescueEffectivenessScore,
-                        isEditable: isEditable
-                    )
+                        ScoreWheelField(
+                            title: "Phản ứng",
+                            score: $evaluation.responseTimeScore,
+                            isEditable: isEditable
+                        )
+                        .frame(width: missionReportCompactScoreFieldWidth)
 
-                    ScoreMenuField(
-                        title: "Xử lý quyết định",
-                        score: $evaluation.decisionHandlingScore,
-                        isEditable: isEditable
-                    )
+                        Spacer(minLength: 0)
 
-                    ScoreMenuField(
-                        title: "An toàn và y tế",
-                        score: $evaluation.safetyMedicalSkillScore,
-                        isEditable: isEditable
-                    )
+                        ScoreWheelField(
+                            title: "Cứu hộ",
+                            score: $evaluation.rescueEffectivenessScore,
+                            isEditable: isEditable
+                        )
+                        .frame(width: missionReportCompactScoreFieldWidth)
 
-                    ScoreMenuField(
-                        title: "Phối hợp và giao tiếp",
-                        score: $evaluation.teamworkCommunicationScore,
-                        isEditable: isEditable
-                    )
+                        Spacer(minLength: 0)
+
+                        ScoreWheelField(
+                            title: "Quyết định",
+                            score: $evaluation.decisionHandlingScore,
+                            isEditable: isEditable
+                        )
+                        .frame(width: missionReportCompactScoreFieldWidth)
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+
+                        ScoreWheelField(
+                            title: "An toàn",
+                            score: $evaluation.safetyMedicalSkillScore,
+                            isEditable: isEditable
+                        )
+                        .frame(width: missionReportCompactScoreFieldWidth)
+
+                        Spacer(minLength: 0)
+
+                        ScoreWheelField(
+                            title: "Giao tiếp",
+                            score: $evaluation.teamworkCommunicationScore,
+                            isEditable: isEditable
+                        )
+                        .frame(width: missionReportCompactScoreFieldWidth)
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
-        }
-    }
-
-    private func scoreColor(_ value: Double) -> Color {
-        switch value {
-        case 8...10:
-            return DS.Colors.success
-        case 5..<8:
-            return DS.Colors.warning
-        default:
-            return DS.Colors.accent
         }
     }
 }
@@ -1260,81 +1274,89 @@ private struct ExecutionStatusMenuField: View {
     }
 }
 
-private struct ScoreMenuField: View {
+private struct ScoreWheelField: View {
     let title: String
     @Binding var score: Double?
     let isEditable: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            HStack {
-                Text(title)
-                    .font(DS.Typography.caption)
-                    .foregroundColor(DS.Colors.textSecondary)
-
-                Spacer()
-
-                if let score {
-                    Text("Điểm \(scoreLabel(score))")
-                        .font(DS.Typography.caption)
-                        .foregroundColor(DS.Colors.textTertiary)
-                }
-            }
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(DS.Colors.textSecondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 24, alignment: .topLeading)
 
             if isEditable {
-                Menu {
-                    Button("Chưa chấm") {
-                        score = nil
+                Picker(title, selection: selectionIndex) {
+                    ForEach(Array(missionReportScoreOptions.enumerated()), id: \.offset) { index, value in
+                        Text(scorePickerLabel(for: value))
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .tag(index)
                     }
-
-                    ForEach(missionReportScoreOptions, id: \.self) { value in
-                        Button(scoreLabel(value)) {
-                            score = value
-                        }
-                    }
-                } label: {
-                    HStack(spacing: DS.Spacing.sm) {
-                        Text(score.map(scoreLabel) ?? "Chưa chấm")
-                            .font(DS.Typography.body.monospacedDigit())
-                            .foregroundColor(DS.Colors.text)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(DS.Colors.textTertiary)
-                    }
-                    .padding(.horizontal, DS.Spacing.sm)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(DS.Colors.background)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(DS.Colors.borderSubtle, lineWidth: 1)
-                    )
                 }
+                .labelsHidden()
+                .pickerStyle(.wheel)
+                .frame(maxWidth: .infinity)
+                .frame(height: 82)
+                .clipped()
             } else {
-                HStack(spacing: DS.Spacing.sm) {
-                    Text(score.map(scoreLabel) ?? "Chưa chấm")
-                        .font(DS.Typography.body.monospacedDigit())
-                        .foregroundColor(DS.Colors.textSecondary)
-
-                    Spacer()
-                }
-                .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, DS.Spacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(DS.Colors.background)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(DS.Colors.borderSubtle, lineWidth: 1)
-                )
+                Text(scoreDisplayText)
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundColor(displayedScore.map(missionReportScoreColor) ?? DS.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 82, alignment: .center)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.horizontal, DS.Spacing.xxxs)
+        .padding(.vertical, DS.Spacing.xs)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(DS.Colors.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(score.map(missionReportScoreColor) ?? DS.Colors.borderSubtle, lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(scoreDisplayText)
+        .onAppear {
+            if isEditable && score == nil {
+                score = missionReportDefaultScore
+            }
+        }
+    }
+
+    private var selectionIndex: Binding<Int> {
+        Binding(
+            get: {
+                let effectiveScore = score ?? missionReportDefaultScore
+                return missionReportScoreOptions.firstIndex(where: { abs($0 - effectiveScore) < 0.001 }) ?? missionReportDefaultScoreIndex
+            },
+            set: { newValue in
+                guard missionReportScoreOptions.indices.contains(newValue) else { return }
+                score = missionReportScoreOptions[newValue]
+            }
+        )
+    }
+
+    private var displayedScore: Double? {
+        if let score {
+            return score
+        }
+
+        return isEditable ? missionReportDefaultScore : nil
+    }
+
+    private var scoreDisplayText: String {
+        displayedScore.map { "\(scoreLabel($0))/10" } ?? "Chưa chấm"
+    }
+
+    private func scorePickerLabel(for value: Double) -> String {
+        return scoreLabel(value)
     }
 }
 
@@ -1558,6 +1580,9 @@ private enum MissionTeamReportDateParser {
 }
 
 private let missionReportScoreOptions = Array(stride(from: 0.0, through: 10.0, by: 0.5))
+private let missionReportDefaultScore = 5.0
+private let missionReportDefaultScoreIndex = missionReportScoreOptions.firstIndex(where: { abs($0 - missionReportDefaultScore) < 0.001 }) ?? 10
+private let missionReportCompactScoreFieldWidth: CGFloat = 92
 
 private func scoreLabel(_ value: Double) -> String {
     if value.rounded() == value {
@@ -1565,6 +1590,17 @@ private func scoreLabel(_ value: Double) -> String {
     }
 
     return String(format: "%.1f", value)
+}
+
+private func missionReportScoreColor(_ value: Double) -> Color {
+    switch value {
+    case 8...10:
+        return DS.Colors.success
+    case 5..<8:
+        return DS.Colors.warning
+    default:
+        return DS.Colors.accent
+    }
 }
 
 private extension String {

@@ -136,14 +136,6 @@ struct MissionDetailView: View {
                                 Label("Báo cáo sự cố", systemImage: "exclamationmark.triangle")
                             }
                         }
-
-                        if shouldShowMissionReportMenuItem {
-                            Button {
-                                showMissionReport = true
-                            } label: {
-                                Label("Báo cáo nhiệm vụ", systemImage: "doc.text")
-                            }
-                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -316,6 +308,10 @@ struct MissionDetailView: View {
 
             missionMetaGrid
             progressSummary
+
+            if shouldShowMissionReportButton {
+                missionReportButton
+            }
         }
         .padding(20)
         .sharpCard(
@@ -696,15 +692,10 @@ struct MissionDetailView: View {
         }
     }
 
-    private var shouldShowMissionReportMenuItem: Bool {
+    private var shouldShowMissionReportButton: Bool {
         guard canOpenMissionReports, viewerMissionTeamId != nil else { return false }
-
-        switch normalizedStatus(missionStatus) {
-        case "completed", "finished":
-            return true
-        default:
-            return false
-        }
+        guard currentTeamActivities.isEmpty == false else { return false }
+        return currentTeamActivities.allSatisfy(isActivityCompletedForReport)
     }
 
     private var startMissionButton: some View {
@@ -744,6 +735,50 @@ struct MissionDetailView: View {
         .buttonStyle(.plain)
         .disabled(vm.isLoading)
         .opacity(vm.isLoading ? 0.8 : 1)
+    }
+
+    private var missionReportButton: some View {
+        Button {
+            showMissionReport = true
+        } label: {
+            HStack(spacing: DS.Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(DS.Colors.info.opacity(0.14))
+                        .frame(width: 34, height: 34)
+
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Báo cáo tổng kết nhiệm vụ")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
+
+                    Text("Tất cả activity của đội hiện tại đã hoàn thành. Mở để tổng kết và nộp báo cáo.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+            .padding(DS.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DS.Colors.info.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(DS.Colors.info.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func missionTypeColor(_ missionTypeKey: String?) -> Color {
@@ -910,6 +945,15 @@ struct MissionDetailView: View {
 
     private func normalizedStatus(_ status: String) -> String {
         RescuerStatusBadgeText.normalized(status)
+    }
+
+    private func isActivityCompletedForReport(_ activity: Activity) -> Bool {
+        switch normalizedStatus(activity.status) {
+        case "succeed", "completed", "reported":
+            return true
+        default:
+            return false
+        }
     }
 
     private var activityCount: Int {

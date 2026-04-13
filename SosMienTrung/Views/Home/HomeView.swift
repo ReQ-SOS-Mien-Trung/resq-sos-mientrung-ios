@@ -312,14 +312,6 @@ struct HomeView: View {
             GridItem(.flexible(), spacing: DS.Spacing.sm)
         ], spacing: DS.Spacing.sm) {
             ResQGridButton(
-                icon: "newspaper.fill",
-                title: "Tin tức",
-                accentColor: DS.Colors.warning
-            ) {
-                // Action tin tức
-            }
-
-            ResQGridButton(
                 icon: "speaker.wave.3.fill",
                 title: "Đẩy nước\nkhỏi loa",
                 accentColor: DS.Colors.info

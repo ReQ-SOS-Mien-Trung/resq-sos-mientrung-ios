@@ -192,7 +192,19 @@ final class MissionTeamReportViewModel: ObservableObject {
         resultJson = response.resultJson ?? ""
         evidenceJson = response.evidenceJson ?? ""
         activities = response.activities.map(MissionTeamReportActivityForm.init(activity:))
-        memberEvaluations = response.memberEvaluations.map(MissionTeamMemberEvaluationForm.init(evaluation:))
+        memberEvaluations = response.memberEvaluations.map { evaluation in
+            var form = MissionTeamMemberEvaluationForm(evaluation: evaluation)
+
+            if response.canEvaluateMembers {
+                form.responseTimeScore = form.responseTimeScore ?? 5
+                form.rescueEffectivenessScore = form.rescueEffectivenessScore ?? 5
+                form.decisionHandlingScore = form.decisionHandlingScore ?? 5
+                form.safetyMedicalSkillScore = form.safetyMedicalSkillScore ?? 5
+                form.teamworkCommunicationScore = form.teamworkCommunicationScore ?? 5
+            }
+
+            return form
+        }
     }
 
     private func makeDraftRequest() throws -> SaveMissionTeamReportDraftRequest {
