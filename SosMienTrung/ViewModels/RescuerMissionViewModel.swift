@@ -339,15 +339,22 @@ final class RescuerMissionViewModel: ObservableObject {
                 activityId: activityId,
                 bufferUsages: bufferUsages
             )
-
-            try await missionService.updateActivityStatus(
-                missionId: missionId,
-                activityId: activityId,
-                status: ActivityStatus.succeed.rawValue,
-                imageUrl: proofImageURL
-            )
-
             try await refreshActivityScopes(missionId: missionId)
+
+            let shouldPatchStatus = proofImageURL != nil
+                || latestActivityStatus(activityId: activityId) != .succeed
+
+            if shouldPatchStatus {
+                try await updateActivityStatusAllowingDuplicateCompletion(
+                    missionId: missionId,
+                    activityId: activityId,
+                    status: ActivityStatus.succeed.rawValue,
+                    imageUrl: proofImageURL
+                )
+
+                try await refreshActivityScopes(missionId: missionId)
+            }
+
             successMessage = L10n.RescuerMission.supplyPickupConfirmed
             return true
         } catch {
@@ -386,15 +393,22 @@ final class RescuerMissionViewModel: ObservableObject {
                 actualDeliveredItems: actualDeliveredItems,
                 deliveryNote: deliveryNote
             )
-
-            try await missionService.updateActivityStatus(
-                missionId: missionId,
-                activityId: activityId,
-                status: ActivityStatus.succeed.rawValue,
-                imageUrl: proofImageURL
-            )
-
             try await refreshActivityScopes(missionId: missionId)
+
+            let deliveryStatusKey = normalizedActivityStatusKey(response.status)
+            let shouldPatchStatus = proofImageURL != nil || deliveryStatusKey != "succeed"
+
+            if shouldPatchStatus {
+                try await updateActivityStatusAllowingDuplicateCompletion(
+                    missionId: missionId,
+                    activityId: activityId,
+                    status: ActivityStatus.succeed.rawValue,
+                    imageUrl: proofImageURL
+                )
+
+                try await refreshActivityScopes(missionId: missionId)
+            }
+
             successMessage = response.message
             return true
         } catch {
@@ -538,6 +552,62 @@ final class RescuerMissionViewModel: ObservableObject {
         }
     }
 
+    private func latestActivityStatus(activityId: Int) -> ActivityStatus? {
+        if let status = currentTeamActivities.first(where: { $0.id == activityId })?.activityStatus {
+            return status
+        }
+
+        return activities.first(where: { $0.id == activityId })?.activityStatus
+    }
+
+    private func updateActivityStatusAllowingDuplicateCompletion(
+        missionId: Int,
+        activityId: Int,
+        status: String,
+        imageUrl: String?
+    ) async throws {
+        do {
+            try await missionService.updateActivityStatus(
+                missionId: missionId,
+                activityId: activityId,
+                status: status,
+                imageUrl: imageUrl
+            )
+        } catch {
+            guard status.caseInsensitiveCompare(ActivityStatus.succeed.rawValue) == .orderedSame,
+                  isDuplicateStatusTransitionError(error, status: status) else {
+                throw error
+            }
+
+            // Confirmation endpoints may already complete the activity server-side.
+        }
+    }
+
+    private func isDuplicateStatusTransitionError(_ error: Error, status: String) -> Bool {
+        let target = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard target.isEmpty == false else { return false }
+
+        let rawMessage: String
+        if let serviceError = error as? MissionServiceError {
+            switch serviceError {
+            case .httpStatus(_, let message):
+                rawMessage = message ?? serviceError.localizedDescription
+            case .invalidResponse:
+                rawMessage = serviceError.localizedDescription
+            }
+        } else {
+            rawMessage = error.localizedDescription
+        }
+
+        let normalizedMessage = rawMessage.lowercased()
+        let singleQuoteMatch = "'\(target)'"
+        let doubleQuoteMatch = "\"\(target)\""
+        let singleQuoteCount = normalizedMessage.components(separatedBy: singleQuoteMatch).count - 1
+        let doubleQuoteCount = normalizedMessage.components(separatedBy: doubleQuoteMatch).count - 1
+
+        return singleQuoteCount >= 2 || doubleQuoteCount >= 2
+    }
+
     private func uploadProofImageIfNeeded(_ proofImage: UIImage?) async throws -> String? {
         guard let proofImage else {
             return nil
@@ -634,6 +704,11 @@ final class RescuerMissionViewModel: ObservableObject {
 
 @MainActor
 final class RescuerAssemblyEventsViewModel: ObservableObject {
+    enum AssemblyEventAction {
+        case checkIn
+        case checkOut
+    }
+
     private enum CheckInLocationError: LocalizedError {
         case unavailable
 
@@ -645,12 +720,18 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
     @Published var events: [AssemblyPointEvent] = []
     @Published var isLoading = false
     @Published var loadingEventId: Int?
+    @Published var loadingAction: AssemblyEventAction?
+    @Published private(set) var teamStatus: String?
     @Published var errorMessage: String?
     @Published var successMessage: String?
 
     private(set) var pageNumber = 1
     private(set) var pageSize = 10
     private let locationManager: LocationManager
+
+    var isTeamAssignedOrOnMission: Bool {
+        ["assigned", "onmission"].contains(normalizedTeamStatus(teamStatus))
+    }
 
     init(locationManager: LocationManager? = nil) {
         self.locationManager = locationManager ?? .shared
@@ -673,6 +754,14 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
 
         Task {
             defer { isLoading = false }
+
+            do {
+                let team = try await RescueTeamService.shared.getMyTeam()
+                teamStatus = team.status
+            } catch {
+                teamStatus = nil
+            }
+
             do {
                 let response = try await RescueTeamService.shared.getMyAssemblyPointEvents(
                     pageNumber: pageNumber,
@@ -692,9 +781,13 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
         errorMessage = nil
         successMessage = nil
         loadingEventId = event.eventId
+        loadingAction = .checkIn
 
         Task {
-            defer { loadingEventId = nil }
+            defer {
+                loadingEventId = nil
+                loadingAction = nil
+            }
             do {
                 let coordinates = try await resolveCheckInCoordinates()
                 let response = try await RescueTeamService.shared.checkIn(
@@ -708,6 +801,37 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
                 errorMessage = L10n.RescuerMission.checkInFailed(serviceError.localizedDescription)
             } catch {
                 errorMessage = L10n.RescuerMission.checkInFailed(error.localizedDescription)
+            }
+        }
+    }
+
+    func checkOut(event: AssemblyPointEvent) {
+        guard loadingEventId == nil else { return }
+        guard event.isCheckedIn else { return }
+
+        errorMessage = nil
+        successMessage = nil
+        loadingEventId = event.eventId
+        loadingAction = .checkOut
+
+        Task {
+            defer {
+                loadingEventId = nil
+                loadingAction = nil
+            }
+            do {
+                let coordinates = try await resolveCheckInCoordinates()
+                let response = try await RescueTeamService.shared.checkOut(
+                    eventId: event.eventId,
+                    latitude: coordinates.latitude,
+                    longitude: coordinates.longitude
+                )
+                successMessage = response.message ?? L10n.Common.checkOutSucceeded
+                refresh(pageNumber: pageNumber, pageSize: pageSize)
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                errorMessage = L10n.RescuerMission.checkOutFailed(serviceError.localizedDescription)
+            } catch {
+                errorMessage = L10n.RescuerMission.checkOutFailed(error.localizedDescription)
             }
         }
     }
@@ -732,5 +856,14 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
         )
 
         return (resolvedLocation.coordinate.latitude, resolvedLocation.coordinate.longitude)
+    }
+
+    private func normalizedTeamStatus(_ status: String?) -> String {
+        (status ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
     }
 }

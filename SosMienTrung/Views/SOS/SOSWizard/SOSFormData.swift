@@ -120,6 +120,13 @@ enum SOSType: String, Codable, CaseIterable {
         case .relief: return "🎒"
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .rescue: return "cross.case.fill"
+        case .relief: return "shippingbox.fill"
+        }
+    }
     
     var color: String {
         switch self {
@@ -159,6 +166,17 @@ enum SupplyNeed: String, Codable, CaseIterable, Identifiable {
         case .blanket: return "🛏️"
         case .medicine: return "💊"
         case .other: return "📦"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .water: return "drop.fill"
+        case .food: return "fork.knife"
+        case .clothes: return "tshirt.fill"
+        case .blanket: return "bed.double.fill"
+        case .medicine: return "cross.case.fill"
+        case .other: return "shippingbox.fill"
         }
     }
 }
@@ -366,6 +384,17 @@ enum RescueSituation: String, Codable, CaseIterable, Identifiable {
         case .other: return "❓"
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .trapped: return "exclamationmark.triangle.fill"
+        case .collapsed: return "house.fill"
+        case .dangerZone: return "exclamationmark.octagon.fill"
+        case .cannotMove: return "figure.roll"
+        case .flooding: return "drop.fill"
+        case .other: return "questionmark.circle.fill"
+        }
+    }
     
     /// Hệ số nhân tình huống (dùng cho priority)
     var situationMultiplier: Double {
@@ -485,6 +514,29 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .confusion:           return "🧠"
         case .needsMedicalDevice:  return "🩺"
         case .other:               return "🏥"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .bleeding:            return "drop.fill"
+        case .severelyBleeding:    return "drop.triangle.fill"
+        case .fracture:            return "figure.fall"
+        case .headInjury:          return "brain.head.profile"
+        case .burns:               return "flame.fill"
+        case .unconscious:         return "bed.double.fill"
+        case .breathingDifficulty: return "lungs.fill"
+        case .chestPainStroke:     return "heart.fill"
+        case .cannotMove:          return "figure.roll"
+        case .drowning:            return "water.waves"
+        case .highFever:           return "thermometer.high"
+        case .dehydration:         return "drop.fill"
+        case .infantNeedsMilk:     return "figure.child"
+        case .lostParent:          return "person.2.slash.fill"
+        case .chronicDisease:      return "pills.fill"
+        case .confusion:           return "brain.head.profile"
+        case .needsMedicalDevice:  return "stethoscope"
+        case .other:               return "cross.case.fill"
         }
     }
     
@@ -643,6 +695,14 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
             case .adult: return "🧑"
             case .child: return "👶"
             case .elderly: return "👴"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .adult: return "person.fill"
+            case .child: return "figure.child"
+            case .elderly: return "figure.seated.side"
             }
         }
         
@@ -1318,12 +1378,20 @@ final class SOSFormData: ObservableObject {
         MedicalIssue.icon(for: issueKey)
     }
 
+    func medicalIssueSymbol(for issueKey: String) -> String {
+        MedicalIssue.symbol(for: issueKey)
+    }
+
     func situationTitle(for situationKey: String) -> String {
         RescueSituation.title(for: situationKey)
     }
 
     func situationIcon(for situationKey: String) -> String {
         RescueSituation.icon(for: situationKey)
+    }
+
+    func situationSymbol(for situationKey: String) -> String {
+        RescueSituation.symbol(for: situationKey)
     }
 
     func waterDurationTitle(for optionKey: String) -> String {
@@ -2129,6 +2197,16 @@ enum QuickPreset: String, CaseIterable {
         case .trapped: return "🚧"
         case .flooding: return "🌊"
         case .collapsed: return "🏚️"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .needWaterFood: return "fork.knife"
+        case .hasInjured: return "bandage.fill"
+        case .trapped: return "exclamationmark.triangle.fill"
+        case .flooding: return "drop.fill"
+        case .collapsed: return "house.fill"
         }
     }
     

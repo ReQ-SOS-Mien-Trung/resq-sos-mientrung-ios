@@ -80,14 +80,14 @@ struct SOSWizardView: View {
                         .foregroundColor(DS.Colors.textSecondary)
                 }
             }
-            .alert(sentToServer ? "✅ Đã gửi lên Server" : "📡 Đang chờ gửi lên Server", isPresented: $showSuccess) {
+            .alert(sentToServer ? "Đã gửi lên Server" : "Đang chờ gửi lên Server", isPresented: $showSuccess) {
                 Button("OK") {
                     dismiss()
                 }
             } message: {
                 Text(successMessage)
             }
-            .alert("⚠️ Chưa có vị trí", isPresented: $showLocationRequiredAlert) {
+            .alert("Chưa có vị trí", isPresented: $showLocationRequiredAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Chưa có toạ độ hợp lệ. Vui lòng đợi GPS hoặc nhập địa chỉ để tra cứu vị trí.")
@@ -149,7 +149,7 @@ struct SOSWizardView: View {
                                 Text("GỬI SOS").font(DS.Typography.headline).tracking(2)
                             }
                         }
-                        .foregroundColor(DS.Colors.text)
+                        .foregroundColor(.white)
                         .padding(.horizontal, DS.Spacing.xl)
                         .padding(.vertical, DS.Spacing.sm)
                         .background(DS.Colors.danger)
@@ -165,7 +165,7 @@ struct SOSWizardView: View {
                             Image(systemName: "chevron.right")
                         }
                         .font(DS.Typography.headline)
-                        .foregroundColor(DS.Colors.text)
+                        .foregroundColor(formData.canProceedToNextStep ? .white : DS.Colors.text)
                         .padding(.horizontal, DS.Spacing.lg)
                         .padding(.vertical, DS.Spacing.sm)
                         .background(formData.canProceedToNextStep ? DS.Colors.accent : DS.Colors.textTertiary)
@@ -222,9 +222,9 @@ struct SOSWizardView: View {
     
     private var successMessage: String {
         if sentToServer {
-            return "✅ Tín hiệu SOS đã được gửi trực tiếp lên server thành công."
+            return "Tín hiệu SOS đã được gửi trực tiếp lên server thành công."
         } else {
-            return "📡 Chưa có kết nối mạng. SOS đang ở trạng thái \"Đang gửi\" – hệ thống sẽ tự gửi lên server khi có mạng, hoặc nhờ thiết bị lân cận relay qua Mesh Network."
+            return "Chưa có kết nối mạng. SOS đang ở trạng thái \"Đang gửi\" – hệ thống sẽ tự gửi lên server khi có mạng, hoặc nhờ thiết bị lân cận relay qua Mesh Network."
         }
     }
     

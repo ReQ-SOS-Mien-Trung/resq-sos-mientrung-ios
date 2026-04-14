@@ -6,6 +6,7 @@ struct MissionTeamReportView: View {
 
     @StateObject private var vm: MissionTeamReportViewModel
     @State private var completionNote = ""
+    @State private var expandedActivityId: Int?
 
     init(missionId: Int, missionTeamId: Int, missionTitle: String) {
         self.missionTitle = missionTitle
@@ -37,8 +38,8 @@ struct MissionTeamReportView: View {
 
                 overviewSection
 
-                if shouldShowJsonSection {
-                    jsonSection
+                if shouldShowStructuredPayloadSection {
+                    structuredPayloadSection
                 }
 
                 activitiesSection
@@ -259,7 +260,7 @@ struct MissionTeamReportView: View {
 
     private var completeExecutionSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            sectionHeader(title: "Hoàn tất thực địa", subtitle: "Khóa giai đoạn triển khai và chuyển sang bước nộp báo cáo")
+            sectionHeader(title: "Hoàn tất nhiệm vụ", subtitle: "Khóa giai đoạn triển khai và chuyển sang bước nộp báo cáo")
 
             SharpCardView(borderColor: DS.Colors.success.opacity(0.25), backgroundColor: DS.Colors.surface) {
                 VStack(alignment: .leading, spacing: DS.Spacing.md) {
@@ -283,7 +284,7 @@ struct MissionTeamReportView: View {
                         title: "Ghi chú hoàn tất",
                         text: $completionNote,
                         placeholder: "Ví dụ: Đường vào bị ngập, đã đưa nạn nhân đến khu an toàn và bàn giao vật phẩm hỗ trợ.",
-                        caption: "Ghi chú này sẽ đi kèm mốc hoàn tất thực địa của đội.",
+                        caption: "Ghi chú này sẽ đi kèm mốc hoàn tất nhiệm vụ của đội.",
                         isEditable: true,
                         minHeight: 104
                     )
@@ -292,7 +293,7 @@ struct MissionTeamReportView: View {
                         vm.completeExecution(note: completionNote)
                     } label: {
                         actionLabel(
-                            title: "Hoàn tất thực địa",
+                            title: "Hoàn tất nhiệm vụ",
                             icon: "checkmark.seal.fill",
                             showsProgress: vm.isCompletingExecution
                         )
@@ -332,49 +333,21 @@ struct MissionTeamReportView: View {
     }
 
     @ViewBuilder
-    private var jsonSection: some View {
+    private var structuredPayloadSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            sectionHeader(title: "Dữ liệu cấu trúc", subtitle: "Thông tin JSON dành cho dữ liệu kỹ thuật hoặc bằng chứng mở rộng")
+            sectionHeader(
+                title: "Thông tin hiện trường",
+                subtitle: "Điền trực tiếp theo biểu mẫu, ứng dụng sẽ tự chuyển thành dữ liệu gửi backend"
+            )
 
-            SharpCardView(borderColor: DS.Colors.borderSubtle, backgroundColor: DS.Colors.surface) {
-                VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                    if vm.canEdit || hasTextPayload(vm.issuesJson) {
-                        MissionReportTextEditor(
-                            title: "Sự cố (JSON)",
-                            text: $vm.issuesJson,
-                            placeholder: "{\"blockedRoad\":true}",
-                            caption: vm.canEdit ? "Để trống, ứng dụng sẽ gửi `{}`." : nil,
-                            isEditable: vm.canEdit,
-                            minHeight: 96,
-                            monospaced: true
-                        )
-                    }
-
-                    if vm.canEdit || hasTextPayload(vm.resultJson) {
-                        MissionReportTextEditor(
-                            title: "Kết quả (JSON)",
-                            text: $vm.resultJson,
-                            placeholder: "{\"rescuedVictims\":3}",
-                            caption: vm.canEdit ? "Để trống, ứng dụng sẽ gửi `{}`." : nil,
-                            isEditable: vm.canEdit,
-                            minHeight: 96,
-                            monospaced: true
-                        )
-                    }
-
-                    if vm.canEdit || hasTextPayload(vm.evidenceJson) {
-                        MissionReportTextEditor(
-                            title: "Bằng chứng (JSON)",
-                            text: $vm.evidenceJson,
-                            placeholder: "[{\"type\":\"image\",\"url\":\"https://...\"}]",
-                            caption: vm.canEdit ? "Để trống, ứng dụng sẽ gửi `[]`." : nil,
-                            isEditable: vm.canEdit,
-                            minHeight: 112,
-                            monospaced: true
-                        )
-                    }
-                }
-            }
+            MissionReportPayloadFormSection(
+                payload: $vm.teamStructuredPayload,
+                isEditable: vm.canEdit,
+                title: "Báo cáo tổng hợp của đội",
+                subtitle: vm.canEdit
+                    ? "Nhập sự cố, kết quả và bằng chứng theo mẫu trực quan"
+                    : "Dữ liệu tổng hợp đã được ghi nhận"
+            )
         }
     }
 
@@ -383,8 +356,8 @@ struct MissionTeamReportView: View {
             sectionHeader(
                 title: "Chi tiết hoạt động",
                 subtitle: vm.canEdit
-                    ? "Cập nhật tiến độ và kết quả cho từng đầu việc"
-                    : "Theo dõi tiến độ và kết quả đã ghi nhận cho từng đầu việc"
+                    ? "Bấm mở từng bước để nhập báo cáo, xong có thể ẩn lại cho gọn"
+                    : "Mở từng bước để xem chi tiết đã ghi nhận"
             )
 
             if vm.activities.isEmpty {
@@ -394,8 +367,18 @@ struct MissionTeamReportView: View {
                 )
             } else {
                 VStack(spacing: DS.Spacing.sm) {
-                    ForEach($vm.activities) { $activity in
-                        MissionReportActivityCard(activity: $activity, isEditable: vm.canEdit)
+                    ForEach(vm.activities.indices, id: \.self) { index in
+                        MissionReportActivityCard(
+                            activity: $vm.activities[index],
+                            isEditable: vm.canEdit,
+                            stepNumber: index + 1,
+                            isUnlocked: isReportStepUnlocked(at: index),
+                            isCurrentStep: reportCurrentStepIndex == index,
+                            isExpanded: expandedActivityId == vm.activities[index].id,
+                            onToggleExpand: {
+                                toggleActivityExpansion(id: vm.activities[index].id, at: index)
+                            }
+                        )
                     }
                 }
             }
@@ -430,7 +413,7 @@ struct MissionTeamReportView: View {
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.warning)
                 } else if vm.reportStatus.normalizedStatusKey != "submitted", vm.canSubmit == false {
-                    Text("Chỉ trưởng đội, sau khi hoàn tất thực địa, mới có thể nộp báo cáo cuối.")
+                    Text("Chỉ trưởng đội, sau khi hoàn tất nhiệm vụ, mới có thể nộp báo cáo cuối.")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                 }
@@ -539,12 +522,49 @@ struct MissionTeamReportView: View {
         return vm.canEdit || isSubmitted == false
     }
 
-    private var shouldShowJsonSection: Bool {
-        vm.canEdit || hasAnyTopLevelJSONPayload
+    private var shouldShowStructuredPayloadSection: Bool {
+        vm.canEdit || hasAnyTopLevelStructuredPayload
     }
 
-    private var hasAnyTopLevelJSONPayload: Bool {
-        hasTextPayload(vm.issuesJson) || hasTextPayload(vm.resultJson) || hasTextPayload(vm.evidenceJson)
+    private var hasAnyTopLevelStructuredPayload: Bool {
+        vm.teamStructuredPayload.hasAnyContent
+    }
+
+    private var reportCurrentStepIndex: Int? {
+        if let onGoingIndex = vm.activities.firstIndex(where: { activity in
+            let key = normalizedReportStepStatus(for: activity)
+            return ["ongoing", "inprogress"].contains(key)
+        }) {
+            return onGoingIndex
+        }
+
+        return vm.activities.firstIndex(where: { activity in
+            let key = normalizedReportStepStatus(for: activity)
+            return ["planned", "pending", "assigned", "notstarted", ""].contains(key)
+        })
+    }
+
+    private var reportUnlockedStepIndex: Int {
+        guard vm.activities.isEmpty == false else { return -1 }
+        return reportCurrentStepIndex ?? (vm.activities.count - 1)
+    }
+
+    private func isReportStepUnlocked(at index: Int) -> Bool {
+        index <= reportUnlockedStepIndex
+    }
+
+    private func toggleActivityExpansion(id: Int, at index: Int) {
+        guard isReportStepUnlocked(at: index) else {
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            expandedActivityId = expandedActivityId == id ? nil : id
+        }
+    }
+
+    private func normalizedReportStepStatus(for activity: MissionTeamReportActivityForm) -> String {
+        (activity.executionStatus.nilIfBlank ?? activity.activityStatus ?? "").normalizedStatusKey
     }
 
     private var completedActivityCount: Int {
@@ -606,31 +626,46 @@ struct MissionTeamReportView: View {
     }
 
     private var resultHighlights: [MissionReportHighlightMetric] {
-        parseResultHighlights(from: vm.resultJson)
+        parseResultHighlights(from: vm.teamStructuredPayload)
     }
 
-    private func hasTextPayload(_ value: String) -> Bool {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-    }
+    private func parseResultHighlights(from payload: MissionReportStructuredPayloadForm) -> [MissionReportHighlightMetric] {
+        let keyOrder = ["rescued", "treated", "referred", "missing", "fatalities"]
+        var entries: [(String, String)] = []
 
-    private func parseResultHighlights(from rawValue: String) -> [MissionReportHighlightMetric] {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false,
-              let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
+        let metricMappings: [(String, String)] = [
+            ("rescued", payload.resultMetrics.rescued),
+            ("treated", payload.resultMetrics.treated),
+            ("referred", payload.resultMetrics.referred),
+            ("missing", payload.resultMetrics.missing),
+            ("fatalities", payload.resultMetrics.fatalities)
+        ]
+
+        for (key, value) in metricMappings {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty == false {
+                entries.append((key, trimmed))
+            }
+        }
+
+        for entry in payload.resultExtras {
+            let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if key.isEmpty || value.isEmpty {
+                continue
+            }
+            entries.append((key, value))
+        }
+
+        guard entries.isEmpty == false else {
             return []
         }
 
-        let keyOrder = ["rescued", "treated", "referred", "missing", "fatalities"]
-        let entries = object.compactMap { key, value -> (String, String)? in
-            guard let valueLabel = metricValueLabel(value) else { return nil }
-            return (key, valueLabel)
-        }
-
         let sorted = entries.sorted { lhs, rhs in
-            let lhsIndex = keyOrder.firstIndex(of: lhs.0.lowercased()) ?? Int.max
-            let rhsIndex = keyOrder.firstIndex(of: rhs.0.lowercased()) ?? Int.max
+            let lhsKey = lhs.0.normalizedStatusKey
+            let rhsKey = rhs.0.normalizedStatusKey
+            let lhsIndex = keyOrder.firstIndex(of: lhsKey) ?? Int.max
+            let rhsIndex = keyOrder.firstIndex(of: rhsKey) ?? Int.max
 
             if lhsIndex == rhsIndex {
                 return lhs.0.localizedCaseInsensitiveCompare(rhs.0) == .orderedAscending
@@ -650,32 +685,6 @@ struct MissionTeamReportView: View {
                 tint: metric.tint
             )
         }
-    }
-
-    private func metricValueLabel(_ value: Any) -> String? {
-        if let bool = value as? Bool {
-            return bool ? "Có" : "Không"
-        }
-
-        if let number = value as? NSNumber {
-            let doubleValue = number.doubleValue
-            if doubleValue.rounded() == doubleValue {
-                return String(Int(doubleValue))
-            }
-
-            return String(format: "%.1f", doubleValue)
-        }
-
-        if let string = value as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-
-        if let array = value as? [Any] {
-            return String(array.count)
-        }
-
-        return nil
     }
 
     private func metricPresentation(for key: String) -> (title: String, detail: String, icon: String, tint: Color) {
@@ -929,12 +938,33 @@ struct MissionTeamReportView: View {
 private struct MissionReportActivityCard: View {
     @Binding var activity: MissionTeamReportActivityForm
     let isEditable: Bool
+    let stepNumber: Int
+    let isUnlocked: Bool
+    let isCurrentStep: Bool
+    let isExpanded: Bool
+    let onToggleExpand: () -> Void
 
     var body: some View {
         SharpCardView(borderColor: DS.Colors.borderSubtle, backgroundColor: DS.Colors.surface) {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 HStack(alignment: .top, spacing: DS.Spacing.sm) {
                     VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        HStack(spacing: 8) {
+                            Text("BƯỚC \(stepNumber)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(isUnlocked ? DS.Colors.info : DS.Colors.textSecondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background((isUnlocked ? DS.Colors.info : DS.Colors.textSecondary).opacity(0.12))
+                                .clipShape(Capsule())
+
+                            if isCurrentStep && isUnlocked {
+                                Text("Bước cần điền")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(DS.Colors.warning)
+                            }
+                        }
+
                         Text(localizedActivityTitle)
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(DS.Colors.text)
@@ -948,65 +978,120 @@ private struct MissionReportActivityCard: View {
 
                     Spacer()
 
-                    if let status = displayStatus {
-                        StatusBadge(text: activityStatusText(status), color: activityStatusColor(status))
+                    VStack(alignment: .trailing, spacing: DS.Spacing.xs) {
+                        if let status = displayStatus {
+                            StatusBadge(text: activityStatusText(status), color: activityStatusColor(status))
+                        }
+
+                        Button(action: onToggleExpand) {
+                            HStack(spacing: 6) {
+                                Image(systemName: expandButtonIcon)
+                                    .font(.system(size: 11, weight: .bold))
+
+                                Text(expandButtonTitle)
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundColor(expandButtonColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(expandButtonColor.opacity(0.12))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUnlocked == false)
                     }
                 }
 
-                if let activityType = activity.activityType, activityType.isEmpty == false {
-                    Text("Loại hoạt động: \(localizedActivityTypeLabel)")
-                        .font(DS.Typography.caption)
+                if isUnlocked == false {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(DS.Colors.textSecondary)
+
+                        Text("Chưa tới bước này. Hoàn thành các bước trước để mở form điền thông tin.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DS.Colors.background)
+                    )
+                } else if isExpanded {
+                    if let activityType = activity.activityType, activityType.isEmpty == false {
+                        Text("Loại hoạt động: \(localizedActivityTypeLabel)")
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+
+                    ExecutionStatusMenuField(
+                        title: "Trạng thái thực hiện",
+                        value: $activity.executionStatus,
+                        isEditable: isEditable
+                    )
+
+                    MissionReportTextEditor(
+                        title: "Tóm tắt kết quả",
+                        text: $activity.summary,
+                        placeholder: "Mô tả ngắn kết quả thực hiện của hoạt động này.",
+                        caption: isEditable ? "Trạng thái đầu việc sẽ thay đổi theo lựa chọn ở mục trạng thái thực hiện." : nil,
+                        isEditable: isEditable,
+                        minHeight: 88
+                    )
+
+                    if isEditable || hasStructuredPayload {
+                        MissionReportPayloadFormSection(
+                            payload: $activity.structuredPayload,
+                            isEditable: isEditable,
+                            title: "Dữ liệu hoạt động",
+                            subtitle: isEditable
+                                ? "Điền theo biểu mẫu thay vì nhập dữ liệu kỹ thuật"
+                                : "Chi tiết sự cố, kết quả và bằng chứng"
+                        )
+                    }
+                } else {
+                    Text("Nhấn \"Mở form\" để nhập báo cáo bước này, xong có thể ẩn lại.")
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
-                }
-
-                ExecutionStatusMenuField(
-                    title: "Trạng thái thực hiện",
-                    value: $activity.executionStatus,
-                    isEditable: isEditable
-                )
-
-                MissionReportTextEditor(
-                    title: "Tóm tắt kết quả",
-                    text: $activity.summary,
-                    placeholder: "Mô tả ngắn kết quả thực hiện của hoạt động này.",
-                    caption: isEditable ? "Trạng thái đầu việc sẽ thay đổi theo lựa chọn ở mục trạng thái thực hiện." : nil,
-                    isEditable: isEditable,
-                    minHeight: 88
-                )
-
-                if isEditable || hasTechnicalPayload {
-                    MissionReportTextEditor(
-                        title: "Sự cố (JSON)",
-                        text: $activity.issuesJson,
-                        placeholder: "{}",
-                        caption: isEditable ? "Để trống, ứng dụng sẽ gửi `{}`." : nil,
-                        isEditable: isEditable,
-                        minHeight: 88,
-                        monospaced: true
-                    )
-
-                    MissionReportTextEditor(
-                        title: "Kết quả (JSON)",
-                        text: $activity.resultJson,
-                        placeholder: "{\"count\":3}",
-                        caption: isEditable ? "Để trống, ứng dụng sẽ gửi `{}`." : nil,
-                        isEditable: isEditable,
-                        minHeight: 88,
-                        monospaced: true
-                    )
-
-                    MissionReportTextEditor(
-                        title: "Bằng chứng (JSON)",
-                        text: $activity.evidenceJson,
-                        placeholder: "[]",
-                        caption: isEditable ? "Để trống, ứng dụng sẽ gửi `[]`." : nil,
-                        isEditable: isEditable,
-                        minHeight: 96,
-                        monospaced: true
-                    )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DS.Spacing.sm)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(DS.Colors.background)
+                        )
                 }
             }
         }
+    }
+
+    private var expandButtonTitle: String {
+        if isUnlocked == false {
+            return "Đang khóa"
+        }
+
+        return isExpanded ? "Ẩn form" : "Mở form"
+    }
+
+    private var expandButtonIcon: String {
+        if isUnlocked == false {
+            return "lock.fill"
+        }
+
+        return isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill"
+    }
+
+    private var expandButtonColor: Color {
+        if isUnlocked == false {
+            return DS.Colors.textSecondary
+        }
+
+        return isExpanded ? DS.Colors.warning : DS.Colors.info
     }
 
     private var displayStatus: String? {
@@ -1038,11 +1123,8 @@ private struct MissionReportActivityCard: View {
         return localizedCode
     }
 
-    private var hasTechnicalPayload: Bool {
-        [activity.issuesJson, activity.resultJson, activity.evidenceJson]
-            .contains { value in
-                value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            }
+    private var hasStructuredPayload: Bool {
+        activity.structuredPayload.hasAnyContent
     }
 
     private func localizedActivityLabel(from rawValue: String?) -> String? {
@@ -1105,6 +1187,497 @@ private struct MissionReportActivityCard: View {
     }
 }
 
+private struct MissionReportPayloadFormSection: View {
+    @Binding var payload: MissionReportStructuredPayloadForm
+    let isEditable: Bool
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(DS.Colors.text)
+
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            issuePresetSection
+            resultMetricSection
+
+            MissionReportKeyValueEditor(
+                title: "Thông tin sự cố bổ sung",
+                keyPlaceholder: "Tên trường",
+                valuePlaceholder: "Giá trị",
+                emptyMessage: "Chưa có dữ liệu sự cố bổ sung.",
+                entries: $payload.issueExtras,
+                isEditable: isEditable
+            )
+
+            MissionReportKeyValueEditor(
+                title: "Kết quả bổ sung",
+                keyPlaceholder: "Tên chỉ số",
+                valuePlaceholder: "Giá trị",
+                emptyMessage: "Chưa có chỉ số bổ sung.",
+                entries: $payload.resultExtras,
+                isEditable: isEditable
+            )
+
+            MissionReportEvidenceEditor(
+                entries: $payload.evidenceEntries,
+                isEditable: isEditable
+            )
+        }
+        .padding(DS.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(DS.Colors.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private var issuePresetSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            Text("Sự cố thường gặp")
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: DS.Spacing.xs),
+                    GridItem(.flexible(), spacing: DS.Spacing.xs)
+                ],
+                alignment: .leading,
+                spacing: DS.Spacing.xs
+            ) {
+                issueToggleChip(
+                    title: "Đường bị chặn",
+                    icon: "road.lanes",
+                    isOn: $payload.issueFlags.blockedRoad
+                )
+                issueToggleChip(
+                    title: "Ngập lụt",
+                    icon: "drop.triangle",
+                    isOn: $payload.issueFlags.flooding
+                )
+                issueToggleChip(
+                    title: "Sạt lở",
+                    icon: "mountain.2",
+                    isOn: $payload.issueFlags.landslide
+                )
+                issueToggleChip(
+                    title: "Mất điện",
+                    icon: "bolt.slash.fill",
+                    isOn: $payload.issueFlags.powerOutage
+                )
+                issueToggleChip(
+                    title: "Mất liên lạc",
+                    icon: "wifi.slash",
+                    isOn: $payload.issueFlags.communicationLoss
+                )
+                issueToggleChip(
+                    title: "Khu vực nguy hiểm",
+                    icon: "exclamationmark.triangle.fill",
+                    isOn: $payload.issueFlags.unsafeArea
+                )
+                issueToggleChip(
+                    title: "Quá tải y tế",
+                    icon: "cross.case.fill",
+                    isOn: $payload.issueFlags.medicalOverload
+                )
+            }
+
+            if isEditable == false, payload.issueFlags.hasAnyTrue == false {
+                Text("Không có sự cố được đánh dấu.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+            }
+        }
+    }
+
+    private var resultMetricSection: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            Text("Kết quả chính")
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: DS.Spacing.xs),
+                    GridItem(.flexible(), spacing: DS.Spacing.xs)
+                ],
+                alignment: .leading,
+                spacing: DS.Spacing.xs
+            ) {
+                resultMetricField(title: "Đã di tản", text: $payload.resultMetrics.rescued)
+                resultMetricField(title: "Đã sơ cứu", text: $payload.resultMetrics.treated)
+                resultMetricField(title: "Chuyển tuyến", text: $payload.resultMetrics.referred)
+                resultMetricField(title: "Mất liên lạc", text: $payload.resultMetrics.missing)
+                resultMetricField(title: "Tử vong", text: $payload.resultMetrics.fatalities)
+            }
+        }
+    }
+
+    private func issueToggleChip(title: String, icon: String, isOn: Binding<Bool>) -> some View {
+        let isSelected = isOn.wrappedValue
+
+        return Button {
+            guard isEditable else { return }
+            isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 0)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                }
+            }
+            .foregroundColor(isSelected ? DS.Colors.info : DS.Colors.textSecondary)
+            .padding(.horizontal, DS.Spacing.sm)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? DS.Colors.info.opacity(0.12) : DS.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? DS.Colors.info.opacity(0.35) : DS.Colors.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isEditable == false)
+        .opacity(isEditable || isSelected ? 1 : 0.65)
+    }
+
+    private func resultMetricField(title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(DS.Colors.textSecondary)
+
+            if isEditable {
+                TextField("0", text: sanitizedNumberBinding(text))
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(DS.Colors.text)
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(DS.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                    )
+            } else {
+                Text(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "-" : text.wrappedValue)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(DS.Colors.text)
+                    .padding(.horizontal, DS.Spacing.sm)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(DS.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                    )
+            }
+        }
+    }
+
+    private func sanitizedNumberBinding(_ source: Binding<String>) -> Binding<String> {
+        Binding(
+            get: { source.wrappedValue },
+            set: { source.wrappedValue = $0.filter(\.isNumber) }
+        )
+    }
+}
+
+private struct MissionReportKeyValueEditor: View {
+    let title: String
+    let keyPlaceholder: String
+    let valuePlaceholder: String
+    let emptyMessage: String
+    @Binding var entries: [MissionReportKeyValueEntry]
+    let isEditable: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack {
+                Text(title)
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                if isEditable {
+                    Button {
+                        entries.append(MissionReportKeyValueEntry())
+                    } label: {
+                        Label("Thêm", systemImage: "plus.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(DS.Colors.info)
+                }
+            }
+
+            let visibleEntries = isEditable
+                ? entries
+                : entries.filter {
+                    $0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    || $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                }
+
+            if visibleEntries.isEmpty {
+                Text(emptyMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+            } else {
+                ForEach($entries) { $entry in
+                    let hasContent = entry.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        || entry.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+
+                    if isEditable || hasContent {
+                        HStack(spacing: DS.Spacing.xs) {
+                            if isEditable {
+                                TextField(keyPlaceholder, text: $entry.key)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .font(.system(size: 13, weight: .medium))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(DS.Colors.surface)
+                                    )
+
+                                TextField(valuePlaceholder, text: $entry.value)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(DS.Colors.surface)
+                                    )
+
+                                Button {
+                                    removeEntry(withId: entry.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(DS.Colors.accent)
+                                        .frame(width: 28, height: 28)
+                                        .background(DS.Colors.accent.opacity(0.1))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.key)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(DS.Colors.textSecondary)
+
+                                    Text(entry.value)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(DS.Colors.text)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(DS.Colors.surface)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func removeEntry(withId id: UUID) {
+        entries.removeAll { $0.id == id }
+    }
+}
+
+private struct MissionReportEvidenceEditor: View {
+    @Binding var entries: [MissionReportEvidenceEntry]
+    let isEditable: Bool
+
+    private let typeOptions: [(value: String, label: String)] = [
+        ("image", "Ảnh"),
+        ("video", "Video"),
+        ("document", "Tài liệu"),
+        ("link", "Liên kết"),
+        ("note", "Ghi chú")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack {
+                Text("Bằng chứng")
+                    .font(DS.Typography.caption)
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                if isEditable {
+                    Button {
+                        entries.append(MissionReportEvidenceEntry())
+                    } label: {
+                        Label("Thêm", systemImage: "plus.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(DS.Colors.info)
+                }
+            }
+
+            let visibleEntries = isEditable
+                ? entries
+                : entries.filter { $0.hasContent }
+
+            if visibleEntries.isEmpty {
+                Text("Chưa có bằng chứng được ghi nhận.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textTertiary)
+            } else {
+                ForEach($entries) { $entry in
+                    if isEditable || entry.hasContent {
+                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                            if isEditable {
+                                HStack(spacing: DS.Spacing.xs) {
+                                    Menu {
+                                        ForEach(typeOptions, id: \.value) { option in
+                                            Button(option.label) {
+                                                entry.type = option.value
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(labelForType(entry.type))
+                                                .font(.system(size: 12, weight: .semibold))
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 10, weight: .semibold))
+                                        }
+                                        .foregroundColor(DS.Colors.text)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .fill(DS.Colors.surface)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                                        )
+                                    }
+
+                                    Spacer()
+
+                                    Button {
+                                        removeEntry(withId: entry.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(DS.Colors.accent)
+                                            .frame(width: 28, height: 28)
+                                            .background(DS.Colors.accent.opacity(0.1))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                TextField("Link bằng chứng (tuỳ chọn)", text: $entry.url)
+                                    .textInputAutocapitalization(.never)
+                                    .keyboardType(.URL)
+                                    .autocorrectionDisabled()
+                                    .font(.system(size: 13, weight: .medium))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(DS.Colors.surface)
+                                    )
+
+                                TextField("Ghi chú bằng chứng", text: $entry.note, axis: .vertical)
+                                    .lineLimit(2...4)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(DS.Colors.surface)
+                                    )
+                            } else {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(labelForType(entry.type))
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(DS.Colors.textSecondary)
+
+                                    if entry.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                                        Text(entry.url)
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(DS.Colors.info)
+                                            .textSelection(.enabled)
+                                    }
+
+                                    if entry.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                                        Text(entry.note)
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(DS.Colors.text)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, DS.Spacing.sm)
+                        .padding(.vertical, DS.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(DS.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func removeEntry(withId id: UUID) {
+        entries.removeAll { $0.id == id }
+    }
+
+    private func labelForType(_ value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return typeOptions.first(where: { $0.value == normalized })?.label ?? "Bằng chứng"
+    }
+}
+
 private struct MissionReportMemberEvaluationCard: View {
     @Binding var evaluation: MissionTeamMemberEvaluationForm
     let isEditable: Bool
@@ -1137,62 +1710,43 @@ private struct MissionReportMemberEvaluationCard: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
+                HStack(alignment: .top, spacing: 6) {
+                    ScoreWheelField(
+                        title: "Phản ứng",
+                        score: $evaluation.responseTimeScore,
+                        tint: DS.Colors.success,
+                        isEditable: isEditable
+                    )
 
-                        ScoreWheelField(
-                            title: "Phản ứng",
-                            score: $evaluation.responseTimeScore,
-                            isEditable: isEditable
-                        )
-                        .frame(width: missionReportCompactScoreFieldWidth)
+                    ScoreWheelField(
+                        title: "Cứu hộ",
+                        score: $evaluation.rescueEffectivenessScore,
+                        tint: DS.Colors.info,
+                        isEditable: isEditable
+                    )
 
-                        Spacer(minLength: 0)
+                    ScoreWheelField(
+                        title: "Quyết định",
+                        score: $evaluation.decisionHandlingScore,
+                        tint: DS.Colors.warning,
+                        isEditable: isEditable
+                    )
 
-                        ScoreWheelField(
-                            title: "Cứu hộ",
-                            score: $evaluation.rescueEffectivenessScore,
-                            isEditable: isEditable
-                        )
-                        .frame(width: missionReportCompactScoreFieldWidth)
+                    ScoreWheelField(
+                        title: "An toàn",
+                        score: $evaluation.safetyMedicalSkillScore,
+                        tint: DS.Colors.accent,
+                        isEditable: isEditable
+                    )
 
-                        Spacer(minLength: 0)
-
-                        ScoreWheelField(
-                            title: "Quyết định",
-                            score: $evaluation.decisionHandlingScore,
-                            isEditable: isEditable
-                        )
-                        .frame(width: missionReportCompactScoreFieldWidth)
-
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-
-                        ScoreWheelField(
-                            title: "An toàn",
-                            score: $evaluation.safetyMedicalSkillScore,
-                            isEditable: isEditable
-                        )
-                        .frame(width: missionReportCompactScoreFieldWidth)
-
-                        Spacer(minLength: 0)
-
-                        ScoreWheelField(
-                            title: "Giao tiếp",
-                            score: $evaluation.teamworkCommunicationScore,
-                            isEditable: isEditable
-                        )
-                        .frame(width: missionReportCompactScoreFieldWidth)
-
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity)
+                    ScoreWheelField(
+                        title: "Giao tiếp",
+                        score: $evaluation.teamworkCommunicationScore,
+                        tint: DS.Colors.danger,
+                        isEditable: isEditable
+                    )
                 }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -1277,48 +1831,54 @@ private struct ExecutionStatusMenuField: View {
 private struct ScoreWheelField: View {
     let title: String
     @Binding var score: Double?
+    let tint: Color
     let isEditable: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+        VStack(alignment: .center, spacing: 6) {
             Text(title)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundColor(DS.Colors.textSecondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: 24, alignment: .topLeading)
+                .foregroundColor(tint)
+                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(height: 14)
 
             if isEditable {
                 Picker(title, selection: selectionIndex) {
                     ForEach(Array(missionReportScoreOptions.enumerated()), id: \.offset) { index, value in
                         Text(scorePickerLabel(for: value))
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .tag(index)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.wheel)
                 .frame(maxWidth: .infinity)
-                .frame(height: 82)
+                .frame(height: 54)
                 .clipped()
             } else {
                 Text(scoreDisplayText)
-                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                    .foregroundColor(displayedScore.map(missionReportScoreColor) ?? DS.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, minHeight: 82, alignment: .center)
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .foregroundColor(displayedScore != nil ? tint : DS.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .center)
+                    .background(
+                        Capsule()
+                            .fill(tint.opacity(0.12))
+                    )
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.horizontal, DS.Spacing.xxxs)
-        .padding(.vertical, DS.Spacing.xs)
+        .frame(maxWidth: .infinity, minHeight: missionReportCompactScoreFieldHeight, alignment: .top)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(DS.Colors.background)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(score.map(missionReportScoreColor) ?? DS.Colors.borderSubtle, lineWidth: 1)
+                .stroke(tint.opacity(0.65), lineWidth: 1.1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
@@ -1352,7 +1912,7 @@ private struct ScoreWheelField: View {
     }
 
     private var scoreDisplayText: String {
-        displayedScore.map { "\(scoreLabel($0))/10" } ?? "Chưa chấm"
+        displayedScore.map(scoreLabel) ?? "-"
     }
 
     private func scorePickerLabel(for value: Double) -> String {
@@ -1582,7 +2142,7 @@ private enum MissionTeamReportDateParser {
 private let missionReportScoreOptions = Array(stride(from: 0.0, through: 10.0, by: 0.5))
 private let missionReportDefaultScore = 5.0
 private let missionReportDefaultScoreIndex = missionReportScoreOptions.firstIndex(where: { abs($0 - missionReportDefaultScore) < 0.001 }) ?? 10
-private let missionReportCompactScoreFieldWidth: CGFloat = 92
+private let missionReportCompactScoreFieldHeight: CGFloat = 96
 
 private func scoreLabel(_ value: Double) -> String {
     if value.rounded() == value {
@@ -1600,6 +2160,49 @@ private func missionReportScoreColor(_ value: Double) -> Color {
         return DS.Colors.warning
     default:
         return DS.Colors.accent
+    }
+}
+
+private extension MissionReportIssueFlagsForm {
+    var hasAnyTrue: Bool {
+        blockedRoad
+            || flooding
+            || landslide
+            || powerOutage
+            || communicationLoss
+            || unsafeArea
+            || medicalOverload
+    }
+}
+
+private extension MissionReportResultMetricsForm {
+    var hasAnyValue: Bool {
+        [rescued, treated, referred, missing, fatalities]
+            .contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+    }
+}
+
+private extension MissionReportEvidenceEntry {
+    var hasContent: Bool {
+        type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
+private extension MissionReportStructuredPayloadForm {
+    var hasAnyContent: Bool {
+        issueFlags.hasAnyTrue
+            || issueExtras.contains(where: {
+                $0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    || $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            })
+            || resultMetrics.hasAnyValue
+            || resultExtras.contains(where: {
+                $0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    || $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            })
+            || evidenceEntries.contains(where: \.hasContent)
     }
 }
 

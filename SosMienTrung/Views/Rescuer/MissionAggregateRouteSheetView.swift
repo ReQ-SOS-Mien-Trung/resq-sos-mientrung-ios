@@ -421,6 +421,24 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private var mapPolylines: [String] {
+        let preferredSegmentOverviews = segments.compactMap { segment in
+            segment.route.route?.overviewPolyline?.isEmpty == false ? segment.route.route?.overviewPolyline : nil
+        }
+
+        if preferredSegmentOverviews.isEmpty == false {
+            return preferredSegmentOverviews
+        }
+
+        let preferredSegmentSteps = segments.flatMap { segment in
+            segment.route.route?.steps?.compactMap { step in
+                step.polyline?.isEmpty == false ? step.polyline : nil
+            } ?? []
+        }
+
+        if preferredSegmentSteps.isEmpty == false {
+            return preferredSegmentSteps
+        }
+
         if let overview = teamRoute?.route?.overviewPolyline,
            overview.isEmpty == false {
             return [overview]
@@ -432,19 +450,7 @@ struct MissionAggregateRouteSheetView: View {
             return summaryStepPolylines
         }
 
-        let preferred = segments.compactMap { segment in
-            segment.route.route?.overviewPolyline?.isEmpty == false ? segment.route.route?.overviewPolyline : nil
-        }
-
-        if preferred.isEmpty == false {
-            return preferred
-        }
-
-        return segments.flatMap { segment in
-            segment.route.route?.steps?.compactMap { step in
-                step.polyline?.isEmpty == false ? step.polyline : nil
-            } ?? []
-        }
+        return []
     }
 
     private var waypointCoordinates: [CLLocationCoordinate2D] {
@@ -899,6 +905,16 @@ private struct GoongAggregateRouteMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         private var lastRenderKey: String?
+        private static let segmentColors: [UIColor] = [
+            .systemOrange,
+            .systemBlue,
+            .systemGreen,
+            .systemPink,
+            .systemTeal,
+            .systemIndigo,
+            .systemRed,
+            .systemMint
+        ]
 
         func render(
             on mapView: MKMapView,
@@ -919,21 +935,12 @@ private struct GoongAggregateRouteMapView: UIViewRepresentable {
             let nonUserAnnotations = mapView.annotations.filter { !($0 is MKUserLocation) }
             mapView.removeAnnotations(nonUserAnnotations)
 
-            var overlays: [MKPolyline] = encodedPolylines.compactMap { encoded in
-                let coordinates = AggregateRoutePolylineDecoder.decode(encoded)
-                guard coordinates.count > 1 else { return nil }
-                var mutableCoordinates = coordinates
-                let polyline = MKPolyline(coordinates: &mutableCoordinates, count: mutableCoordinates.count)
-                polyline.title = "route"
-                return polyline
-            }
-
-            if overlays.isEmpty {
-                var points = [origin, destination]
-                let fallback = MKPolyline(coordinates: &points, count: points.count)
-                fallback.title = "fallback"
-                overlays = [fallback]
-            }
+            let overlays = buildOverlays(
+                encodedPolylines: encodedPolylines,
+                origin: origin,
+                destination: destination,
+                waypointCoordinates: waypointCoordinates
+            )
 
             mapView.addOverlays(overlays)
 
@@ -987,11 +994,154 @@ private struct GoongAggregateRouteMapView: UIViewRepresentable {
                 renderer.lineWidth = 4
                 renderer.lineDashPattern = [5, 3]
             } else {
-                renderer.strokeColor = .systemOrange
+                let groupIndex = routeGroupIndex(for: routeLine)
+                renderer.strokeColor = Self.segmentColors[groupIndex % Self.segmentColors.count]
                 renderer.lineWidth = 5
             }
 
             return renderer
+        }
+
+        private func buildOverlays(
+            encodedPolylines: [String],
+            origin: CLLocationCoordinate2D,
+            destination: CLLocationCoordinate2D,
+            waypointCoordinates: [CLLocationCoordinate2D]
+        ) -> [MKPolyline] {
+            if encodedPolylines.count == 1,
+               let segmented = segmentedOverlaysIfPossible(
+                encoded: encodedPolylines[0],
+                destination: destination,
+                waypointCoordinates: waypointCoordinates
+               ),
+               segmented.isEmpty == false {
+                return segmented
+            }
+
+            let shouldMultiColor = encodedPolylines.count > 1 && waypointCoordinates.isEmpty == false
+            let overlays = encodedPolylines.enumerated().compactMap { index, encoded in
+                makePolyline(from: encoded, routeGroup: shouldMultiColor ? index : 0)
+            }
+
+            if overlays.isEmpty {
+                var points = [origin, destination]
+                let fallback = MKPolyline(coordinates: &points, count: points.count)
+                fallback.title = "fallback"
+                return [fallback]
+            }
+
+            return overlays
+        }
+
+        private func makePolyline(from encoded: String, routeGroup: Int) -> MKPolyline? {
+            let coordinates = AggregateRoutePolylineDecoder.decode(encoded)
+            guard coordinates.count > 1 else { return nil }
+
+            var mutableCoordinates = coordinates
+            let polyline = MKPolyline(coordinates: &mutableCoordinates, count: mutableCoordinates.count)
+            polyline.title = "route-\(max(routeGroup, 0))"
+            return polyline
+        }
+
+        private func segmentedOverlaysIfPossible(
+            encoded: String,
+            destination: CLLocationCoordinate2D,
+            waypointCoordinates: [CLLocationCoordinate2D]
+        ) -> [MKPolyline]? {
+            let coordinates = AggregateRoutePolylineDecoder.decode(encoded)
+            guard coordinates.count > 2,
+                  waypointCoordinates.isEmpty == false else {
+                return nil
+            }
+
+            var targets = waypointCoordinates
+            if let lastTarget = targets.last {
+                let lastDistance = CLLocation(latitude: lastTarget.latitude, longitude: lastTarget.longitude)
+                    .distance(from: CLLocation(latitude: destination.latitude, longitude: destination.longitude))
+                if lastDistance > 12 {
+                    targets.append(destination)
+                }
+            } else {
+                targets = [destination]
+            }
+
+            var overlays: [MKPolyline] = []
+            var startIndex = 0
+            var segmentIndex = 0
+
+            for target in targets {
+                guard let endIndex = nearestIndex(
+                    to: target,
+                    in: coordinates,
+                    from: startIndex
+                ) else {
+                    continue
+                }
+
+                guard endIndex > startIndex else { continue }
+
+                let segmentCoordinates = Array(coordinates[startIndex...endIndex])
+                guard segmentCoordinates.count > 1 else { continue }
+
+                var mutableSegmentCoordinates = segmentCoordinates
+                let polyline = MKPolyline(coordinates: &mutableSegmentCoordinates, count: mutableSegmentCoordinates.count)
+                polyline.title = "route-\(segmentIndex)"
+                overlays.append(polyline)
+
+                segmentIndex += 1
+                startIndex = endIndex
+            }
+
+            if startIndex < coordinates.count - 1 {
+                let tailCoordinates = Array(coordinates[startIndex...(coordinates.count - 1)])
+                if tailCoordinates.count > 1 {
+                    var mutableTailCoordinates = tailCoordinates
+                    let tailPolyline = MKPolyline(coordinates: &mutableTailCoordinates, count: mutableTailCoordinates.count)
+                    tailPolyline.title = "route-\(segmentIndex)"
+                    overlays.append(tailPolyline)
+                }
+            }
+
+            return overlays.isEmpty ? nil : overlays
+        }
+
+        private func nearestIndex(
+            to target: CLLocationCoordinate2D,
+            in coordinates: [CLLocationCoordinate2D],
+            from startIndex: Int
+        ) -> Int? {
+            guard startIndex < coordinates.count else { return nil }
+
+            let targetLocation = CLLocation(latitude: target.latitude, longitude: target.longitude)
+            var bestIndex = startIndex
+            var bestDistance = CLLocation(
+                latitude: coordinates[startIndex].latitude,
+                longitude: coordinates[startIndex].longitude
+            ).distance(from: targetLocation)
+
+            if startIndex < coordinates.count - 1 {
+                for index in (startIndex + 1)..<coordinates.count {
+                    let candidate = coordinates[index]
+                    let distance = CLLocation(latitude: candidate.latitude, longitude: candidate.longitude)
+                        .distance(from: targetLocation)
+                    if distance < bestDistance {
+                        bestDistance = distance
+                        bestIndex = index
+                    }
+                }
+            }
+
+            return bestIndex
+        }
+
+        private func routeGroupIndex(for routeLine: MKPolyline) -> Int {
+            guard let rawTitle = routeLine.title,
+                  rawTitle.hasPrefix("route-"),
+                  let parsed = Int(rawTitle.replacingOccurrences(of: "route-", with: "")) else {
+                return 0
+            }
+
+            return max(parsed, 0)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {

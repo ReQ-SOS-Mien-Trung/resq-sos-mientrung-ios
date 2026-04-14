@@ -173,6 +173,58 @@ enum ReportExecutionStatusOption: String, CaseIterable, Identifiable {
     }
 }
 
+struct MissionReportIssueFlagsForm: Equatable {
+    var blockedRoad = false
+    var flooding = false
+    var landslide = false
+    var powerOutage = false
+    var communicationLoss = false
+    var unsafeArea = false
+    var medicalOverload = false
+}
+
+struct MissionReportResultMetricsForm: Equatable {
+    var rescued = ""
+    var treated = ""
+    var referred = ""
+    var missing = ""
+    var fatalities = ""
+}
+
+struct MissionReportKeyValueEntry: Identifiable, Equatable {
+    let id: UUID
+    var key: String
+    var value: String
+
+    init(id: UUID = UUID(), key: String = "", value: String = "") {
+        self.id = id
+        self.key = key
+        self.value = value
+    }
+}
+
+struct MissionReportEvidenceEntry: Identifiable, Equatable {
+    let id: UUID
+    var type: String
+    var url: String
+    var note: String
+
+    init(id: UUID = UUID(), type: String = "image", url: String = "", note: String = "") {
+        self.id = id
+        self.type = type
+        self.url = url
+        self.note = note
+    }
+}
+
+struct MissionReportStructuredPayloadForm: Equatable {
+    var issueFlags = MissionReportIssueFlagsForm()
+    var issueExtras: [MissionReportKeyValueEntry] = []
+    var resultMetrics = MissionReportResultMetricsForm()
+    var resultExtras: [MissionReportKeyValueEntry] = []
+    var evidenceEntries: [MissionReportEvidenceEntry] = []
+}
+
 struct MissionTeamReportActivityForm: Identifiable, Equatable {
     let missionActivityId: Int
     let activityCode: String?
@@ -183,6 +235,7 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
     var issuesJson: String
     var resultJson: String
     var evidenceJson: String
+    var structuredPayload = MissionReportStructuredPayloadForm()
 
     var id: Int { missionActivityId }
 

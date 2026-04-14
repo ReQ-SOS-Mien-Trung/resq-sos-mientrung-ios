@@ -322,7 +322,8 @@ struct RescuerDashboardView: View {
     }
 
     private var shouldShowAssemblySection: Bool {
-        isMissionAccessUnlocked == false || canViewMissionWorkspace == false
+        guard assemblyVM.events.isEmpty == false else { return false }
+        return isMissionAccessUnlocked == false || canViewMissionWorkspace == false
     }
 
     private var assemblyEventsSummary: String {
@@ -514,8 +515,6 @@ struct RescuerDashboardView: View {
                     memberDropdown(members: members)
                 }
 
-                assemblyEventsTriggerButton
-
                 if isCurrentUserLeader && canManageTeamAvailability {
                     teamAvailabilityButton
                         .padding(.top, DS.Spacing.xs)
@@ -565,6 +564,8 @@ struct RescuerDashboardView: View {
                     }
                 }
             }
+
+            assemblyEventsTriggerButton
         }
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
@@ -745,8 +746,11 @@ struct RescuerDashboardView: View {
                 ForEach(assemblyVM.events) { event in
                     AssemblyEventRowView(
                         event: event,
-                        isCheckingIn: assemblyVM.loadingEventId == event.eventId,
-                        onCheckIn: { assemblyVM.checkIn(event: event) }
+                        isCheckingIn: assemblyVM.loadingEventId == event.eventId && assemblyVM.loadingAction == .checkIn,
+                        isCheckingOut: assemblyVM.loadingEventId == event.eventId && assemblyVM.loadingAction == .checkOut,
+                        allowsCheckOut: assemblyVM.isTeamAssignedOrOnMission == false,
+                        onCheckIn: { assemblyVM.checkIn(event: event) },
+                        onCheckOut: { assemblyVM.checkOut(event: event) }
                     )
                 }
             }
@@ -1136,8 +1140,11 @@ struct RescuerAssemblyEventsView: View {
                 ForEach(vm.events) { event in
                     AssemblyEventRowView(
                         event: event,
-                        isCheckingIn: vm.loadingEventId == event.eventId,
-                        onCheckIn: { vm.checkIn(event: event) }
+                        isCheckingIn: vm.loadingEventId == event.eventId && vm.loadingAction == .checkIn,
+                        isCheckingOut: vm.loadingEventId == event.eventId && vm.loadingAction == .checkOut,
+                        allowsCheckOut: vm.isTeamAssignedOrOnMission == false,
+                        onCheckIn: { vm.checkIn(event: event) },
+                        onCheckOut: { vm.checkOut(event: event) }
                     )
                 }
             }
@@ -1148,7 +1155,10 @@ struct RescuerAssemblyEventsView: View {
 private struct AssemblyEventRowView: View {
     let event: AssemblyPointEvent
     let isCheckingIn: Bool
+    let isCheckingOut: Bool
+    let allowsCheckOut: Bool
     let onCheckIn: () -> Void
+    let onCheckOut: () -> Void
 
     private struct AssemblyPointAnnotation: Identifiable {
         let id = UUID()
@@ -1161,6 +1171,10 @@ private struct AssemblyEventRowView: View {
 
     private var canCheckIn: Bool {
         event.isCheckedIn == false && ["gathering", "ongoing", "planned", "scheduled"].contains(normalizedStatus)
+    }
+
+    private var canCheckOut: Bool {
+        allowsCheckOut && event.isCheckedIn && ["gathering", "ongoing"].contains(normalizedStatus)
     }
 
     private var normalizedStatus: String {
@@ -1219,27 +1233,54 @@ private struct AssemblyEventRowView: View {
                 .foregroundColor(DS.Colors.success)
             }
 
-            Button(action: onCheckIn) {
-                HStack(spacing: DS.Spacing.xs) {
-                    if isCheckingIn {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.white)
-                    } else {
-                        Image(systemName: event.isCheckedIn ? "checkmark.circle.fill" : "location.fill")
-                    }
+            if event.isCheckedIn {
+                if allowsCheckOut {
+                    Button(action: onCheckOut) {
+                        HStack(spacing: DS.Spacing.xs) {
+                            if isCheckingOut {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                            }
 
-                    Text(event.isCheckedIn ? "ĐÃ XÁC NHẬN CÓ MẶT" : "Xác nhận có mặt")
-                        .font(DS.Typography.caption)
-                        .tracking(1)
+                            Text(canCheckOut ? "Xác nhận rời đi" : "Không thể xác nhận rời đi")
+                                .font(DS.Typography.caption)
+                                .tracking(1)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(canCheckOut ? DS.Colors.warning : DS.Colors.textTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+                    }
+                    .disabled(isCheckingOut || canCheckOut == false)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DS.Spacing.sm)
-                .background(event.isCheckedIn ? DS.Colors.textTertiary : DS.Colors.success)
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+            } else {
+                Button(action: onCheckIn) {
+                    HStack(spacing: DS.Spacing.xs) {
+                        if isCheckingIn {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "location.fill")
+                        }
+
+                        Text("Xác nhận có mặt")
+                            .font(DS.Typography.caption)
+                            .tracking(1)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(DS.Colors.success)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+                }
+                .disabled(isCheckingIn || canCheckIn == false)
             }
-            .disabled(isCheckingIn || canCheckIn == false)
+
         }
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)

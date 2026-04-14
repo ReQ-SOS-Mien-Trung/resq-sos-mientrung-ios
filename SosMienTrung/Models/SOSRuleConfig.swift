@@ -943,7 +943,7 @@ extension SOSRuleConfig {
             SOSSituationDescriptor(
                 key: $0,
                 title: RescueSituation.title(for: $0),
-                icon: RescueSituation.icon(for: $0)
+                icon: RescueSituation.symbol(for: $0)
             )
         }
     }
@@ -966,7 +966,7 @@ extension SOSRuleConfig {
             SOSMedicalIssueDescriptor(
                 key: $0,
                 title: MedicalIssue.title(for: $0),
-                icon: MedicalIssue.icon(for: $0),
+                icon: MedicalIssue.symbol(for: $0),
                 category: MedicalIssue.category(for: $0)
             )
         }
@@ -1009,6 +1009,11 @@ extension RescueSituation {
         let normalized = SOSRuleConfig.normalizeKey(key)
         return RescueSituation(rawValue: normalized)?.icon ?? "❓"
     }
+
+    static func symbol(for key: String) -> String {
+        let normalized = SOSRuleConfig.normalizeKey(key)
+        return RescueSituation(rawValue: normalized)?.symbolName ?? "questionmark.circle.fill"
+    }
 }
 
 extension WaterDuration {
@@ -1043,6 +1048,11 @@ extension MedicalIssue {
     static func icon(for key: String) -> String {
         let normalized = SOSRuleConfig.normalizeKey(key)
         return MedicalIssue(rawValue: normalized)?.icon ?? "🏥"
+    }
+
+    static func symbol(for key: String) -> String {
+        let normalized = SOSRuleConfig.normalizeKey(key)
+        return MedicalIssue(rawValue: normalized)?.symbolName ?? "cross.case.fill"
     }
 
     static func category(for key: String) -> MedicalIssueCategory {

@@ -21,6 +21,7 @@ enum L10n {
         static let submitSucceeded = L10n.tr("common.submit_succeeded", "Đã nộp thành công")
         static let updateSucceeded = L10n.tr("common.update_succeeded", "Đã cập nhật thành công")
         static let checkInSucceeded = L10n.tr("common.check_in_succeeded", "Xác nhận có mặt thành công")
+        static let checkOutSucceeded = L10n.tr("common.check_out_succeeded", "Xác nhận rời đi thành công")
         static let invalidNotificationURL = L10n.tr("common.invalid_notification_url", "URL thông báo không hợp lệ")
         static let invalidNotificationHubURL = L10n.tr("common.invalid_notification_hub_url", "URL NotificationHub không hợp lệ")
         static let invalidChatHubURL = L10n.tr("common.invalid_chat_hub_url", "URL hub không hợp lệ")
@@ -136,7 +137,7 @@ enum L10n {
         }
 
         static func cannotCompleteFieldWork(_ detail: String) -> String {
-            L10n.tr("mission_team_report.cannot_complete_field_work", "Không thể hoàn tất thực địa: %@", detail)
+            L10n.tr("mission_team_report.cannot_complete_field_work", "Không thể hoàn tất nhiệm vụ: %@", detail)
         }
 
         static func cannotSaveDraft(_ detail: String) -> String {
@@ -183,6 +184,10 @@ enum L10n {
 
         static func checkInFailed(_ detail: String) -> String {
             L10n.tr("rescuer_mission.check_in_failed", "Xác nhận có mặt thất bại: %@", detail)
+        }
+
+        static func checkOutFailed(_ detail: String) -> String {
+            L10n.tr("rescuer_mission.check_out_failed", "Xác nhận rời đi thất bại: %@", detail)
         }
 
         static func cannotUpdateTeamStatus(_ detail: String) -> String {

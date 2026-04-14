@@ -308,10 +308,28 @@ struct ActivityRowView: View {
 
     private var availableActions: [ActivityAction] {
         guard isStatusEditable else { return [] }
+        guard allowsCompletionActions else { return [] }
+
+        if normalizedActivityTypeKey == "returnassemblypoint",
+           normalizedActivityDisplayStatus(activity.status) == "planned" {
+            return [
+                ActivityAction(
+                    label: "Đang trở về",
+                    icon: "arrow.triangle.2.circlepath.circle.fill",
+                    color: DS.Colors.warning,
+                    status: "OnGoing"
+                ),
+                ActivityAction(
+                    label: primaryCompleteActionLabel,
+                    icon: primaryCompleteActionIcon,
+                    color: DS.Colors.success,
+                    status: "Succeed"
+                )
+            ]
+        }
 
         switch activity.activityStatus {
         case .onGoing:
-            guard allowsCompletionActions else { return [] }
             return [
                 ActivityAction(
                     label: primaryCompleteActionLabel,

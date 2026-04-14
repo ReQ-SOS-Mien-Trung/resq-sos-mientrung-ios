@@ -182,9 +182,13 @@ struct SavedRelativeProfilesCard: View {
 
                     ForEach(formData.savedProfileNoteItems) { item in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("\(item.personType.icon) \(item.displayName)")
-                                .font(.subheadline.bold())
-                                .foregroundColor(DS.Colors.text)
+                            HStack(spacing: 6) {
+                                Image(systemName: item.personType.symbolName)
+                                    .foregroundColor(DS.Colors.accent)
+                                Text(item.displayName)
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(DS.Colors.text)
+                            }
 
                             ForEach(item.summaryLines, id: \.self) { line in
                                 Text(line)
@@ -264,8 +268,9 @@ struct SavedRelativeSnapshotRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(snapshot.personType.icon)
+            Image(systemName: snapshot.personType.symbolName)
                 .font(.title3)
+                .foregroundColor(DS.Colors.accent)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(displayName)

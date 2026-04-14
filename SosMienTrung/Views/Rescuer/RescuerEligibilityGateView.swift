@@ -111,18 +111,18 @@ struct RescuerEligibilityGateView: View {
     private var title: String {
         switch state {
         case .checking:
-            return "Dang xac minh rescuer"
+            return "Đang xác minh cứu hộ viên"
         case .locked:
-            return "Tai khoan chua duoc mo khoa"
+            return "Tài khoản được mở khóa"
         }
     }
 
     private var message: String {
         switch state {
         case .checking:
-            return "App dang goi /identity/user/me de kiem tra quyen isEligibleRescuer truoc khi mo giao dien noi bo."
+            return "Ứng dụng đang kiểm tra xem tài khoản của bạn đã đủ điều kiện để sử dụng tính năng cứu hộ hay chưa. Vui lòng chờ trong giây lát..."
         case .locked:
-            return "Tai khoan Google cua ban da dang nhap thanh cong nhung chua du dieu kien rescuer. Ban can dang ky tren web va cho backend phe duyet."
+            return "Tài khoản Google của bạn đã đăng nhập thành công nhưng chưa đủ điều kiện để trở thành cứu hộ viên. Bạn cần đăng ký trên web và chờ quản trị viên phê duyệt."
         }
     }
 }

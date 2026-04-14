@@ -292,7 +292,7 @@ struct Step0AutoInfoView: View {
                             } label: {
                                 HStack {
                                     if isResolvingLocation {
-                                        ProgressView().tint(DS.Colors.text)
+                                        ProgressView().tint(.white)
                                     } else {
                                         Image(systemName: "magnifyingglass")
                                     }
@@ -301,7 +301,7 @@ struct Step0AutoInfoView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .foregroundColor(DS.Colors.text)
+                                .foregroundColor(.white)
                                 .background(DS.Colors.accent)
                                 .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                             }
@@ -784,8 +784,9 @@ struct Step1SelectTypeView: View {
             VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 8) {
-                    Text("🆘")
+                    Image(systemName: "sos.circle.fill")
                         .font(.system(size: 48))
+                        .foregroundColor(DS.Colors.danger)
                     
                     Text("Bạn đang cần gì?")
                         .font(.title2.bold())
@@ -863,8 +864,9 @@ struct Step1SelectTypeView: View {
                         } else {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Text("🗂️")
+                                    Image(systemName: "person.2.badge.gearshape")
                                         .font(.title2)
+                                        .foregroundColor(DS.Colors.accent)
                                     Text("Chọn nhanh từ hồ sơ đã lưu")
                                         .font(DS.Typography.headline)
                                         .foregroundColor(DS.Colors.text)
@@ -941,8 +943,9 @@ struct SharedPeopleCountSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("👥")
+                Image(systemName: "person.3.fill")
                     .font(.title2)
+                    .foregroundColor(DS.Colors.accent)
                 Text("Số người cần hỗ trợ")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
@@ -954,19 +957,19 @@ struct SharedPeopleCountSection: View {
             
             VStack(spacing: 12) {
                 PeopleCountRowNew(
-                    icon: "🧑",
+                    iconName: Person.PersonType.adult.symbolName,
                     title: "Người lớn (15-60 tuổi)",
                     count: $peopleCount.adults,
                     minValue: minimumCount.adults
                 )
                 PeopleCountRowNew(
-                    icon: "👶",
+                    iconName: Person.PersonType.child.symbolName,
                     title: "Trẻ em (< 15 tuổi)",
                     count: $peopleCount.children,
                     minValue: minimumCount.children
                 )
                 PeopleCountRowNew(
-                    icon: "👴",
+                    iconName: Person.PersonType.elderly.symbolName,
                     title: "Người già (> 60 tuổi)",
                     count: $peopleCount.elderly,
                     minValue: minimumCount.elderly
@@ -996,9 +999,9 @@ struct SharedPeopleCountSection: View {
 
     private var footerText: String {
         if minimumCount.total > 0 {
-            return "💡 Không thể giảm thấp hơn số người đã chọn từ hồ sơ lưu"
+            return "Không thể giảm thấp hơn số người đã chọn từ hồ sơ lưu"
         }
-        return "💡 Chọn ít nhất 1 người tổng cộng"
+        return "Chọn ít nhất 1 người tổng cộng"
     }
 }
 
@@ -1008,6 +1011,10 @@ struct SOSTypeCheckbox: View {
     let type: SOSType
     let isSelected: Bool
     let action: () -> Void
+
+    private var selectionColor: Color {
+        type == .rescue ? DS.Colors.danger : DS.Colors.info
+    }
     
     var body: some View {
         Button(action: action) {
@@ -1015,11 +1022,12 @@ struct SOSTypeCheckbox: View {
                 // Checkbox
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                     .font(.title2)
-                    .foregroundColor(isSelected ? (type == .rescue ? .red : .yellow) : DS.Colors.textSecondary)
+                    .foregroundColor(isSelected ? selectionColor : DS.Colors.textSecondary)
                 
                 // Icon
-                Text(type.icon)
-                    .font(.system(size: 32))
+                Image(systemName: type.symbolName)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(selectionColor)
                 
                 // Text
                 VStack(alignment: .leading, spacing: 4) {
@@ -1041,11 +1049,11 @@ struct SOSTypeCheckbox: View {
                     .fill(DS.Colors.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)) : Color.clear)
+                            .fill(isSelected ? selectionColor.opacity(0.16) : Color.clear)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
+                            .stroke(isSelected ? selectionColor : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
                     )
             )
         }
@@ -1077,8 +1085,9 @@ struct Step2AReliefView: View {
             VStack(spacing: 24) {
                 // Header
                 VStack(spacing: 8) {
-                    Text("🎒")
-                        .font(.system(size: 48))
+                    Image(systemName: SOSType.relief.symbolName)
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundColor(DS.Colors.info)
                     
                     Text("Chi tiết cứu trợ")
                         .font(.title2.bold())
@@ -1238,7 +1247,7 @@ struct Step2AReliefView: View {
             Divider().padding(.vertical, 4)
             
             SharedPersonSelectionSection(
-                icon: "🍽",
+                iconName: "fork.knife",
                 title: "Ai cần chế độ ăn đặc biệt?",
                 subtitle: "Chọn người rồi nhập tên và mô tả chế độ ăn đặc biệt của họ",
                 people: formData.sharedPeople
@@ -1383,7 +1392,7 @@ struct Step2AReliefView: View {
                 .foregroundColor(.teal)
             
             SharedPersonSelectionSection(
-                icon: "👕",
+                iconName: "tshirt.fill",
                 title: "Ai cần quần áo?",
                 subtitle: "Chọn người rồi nhập tên và giới tính của họ",
                 people: formData.sharedPeople
@@ -1477,8 +1486,9 @@ struct Step2BRescueView: View {
             VStack(spacing: 24) {
                 // Header
                 VStack(spacing: 8) {
-                    Text("🚨")
-                        .font(.system(size: 48))
+                    Image(systemName: SOSType.rescue.symbolName)
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundColor(DS.Colors.danger)
                     
                     Text("Chi tiết cứu hộ")
                         .font(.title2.bold())
@@ -1573,8 +1583,9 @@ struct PeopleCountSectionNew: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("👥")
+                Image(systemName: "person.3.fill")
                     .font(.title2)
+                    .foregroundColor(DS.Colors.accent)
                 Text("Số người cần hỗ trợ")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
@@ -1582,19 +1593,19 @@ struct PeopleCountSectionNew: View {
             
             VStack(spacing: 12) {
                 PeopleCountRowNew(
-                    icon: "🧑",
+                    iconName: Person.PersonType.adult.symbolName,
                     title: "Người lớn (15-60 tuổi)",
                     count: $peopleCount.adults,
                     minValue: 0
                 )
                 PeopleCountRowNew(
-                    icon: "👶",
+                    iconName: Person.PersonType.child.symbolName,
                     title: "Trẻ em (< 15 tuổi)",
                     count: $peopleCount.children,
                     minValue: 0
                 )
                 PeopleCountRowNew(
-                    icon: "👴",
+                    iconName: Person.PersonType.elderly.symbolName,
                     title: "Người già (> 60 tuổi)",
                     count: $peopleCount.elderly,
                     minValue: 0
@@ -1607,7 +1618,7 @@ struct PeopleCountSectionNew: View {
                     .font(.subheadline.bold())
                     .foregroundColor(DS.Colors.text)
                 Spacer()
-                Text("💡 Chọn ít nhất 1 người tổng cộng")
+                Text("Chọn ít nhất 1 người tổng cộng")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textMuted)
             }
@@ -1617,14 +1628,15 @@ struct PeopleCountSectionNew: View {
 }
 
 struct PeopleCountRowNew: View {
-    let icon: String
+    let iconName: String
     let title: String
     @Binding var count: Int
     let minValue: Int
     
     var body: some View {
         HStack {
-            Text(icon)
+            Image(systemName: iconName)
+                .foregroundColor(DS.Colors.accent)
             Text(title)
                 .font(DS.Typography.subheadline)
                 .foregroundColor(DS.Colors.text)
@@ -1667,8 +1679,9 @@ struct InjuredQuestionSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("🩹")
+                Image(systemName: "bandage.fill")
                     .font(.title2)
+                    .foregroundColor(DS.Colors.warning)
                 Text("Có người bị thương không?")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
@@ -1704,7 +1717,7 @@ struct InjuredPersonSelectionSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SharedPersonSelectionSection(
-                icon: "👆",
+                iconName: "hand.point.up.left.fill",
                 title: "Ai bị thương?",
                 subtitle: "Chọn người bị thương, sau đó nhập tình trạng y tế",
                 people: formData.sharedPeople
@@ -1774,7 +1787,8 @@ struct PersonInjuredRow: View {
                     Image(systemName: isInjured ? "checkmark.square.fill" : "square")
                         .foregroundColor(isInjured ? .red : DS.Colors.textSecondary)
                     
-                    Text(person.type.icon)
+                    Image(systemName: person.type.symbolName)
+                        .foregroundColor(DS.Colors.accent)
                     Text(person.displayName)
                         .font(DS.Typography.subheadline)
                         .foregroundColor(DS.Colors.text)
@@ -1814,8 +1828,12 @@ struct PersonInjuredRow: View {
                         if !info.medicalIssues.isEmpty {
                             FlowLayout(spacing: 4) {
                                 ForEach(Array(info.medicalIssues), id: \.self) { issue in
-                                    Text("\(MedicalIssue.icon(for: issue)) \(MedicalIssue.title(for: issue))")
-                                        .font(.caption2)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: MedicalIssue.symbol(for: issue))
+                                            .font(.caption2)
+                                        Text(MedicalIssue.title(for: issue))
+                                            .font(.caption2)
+                                    }
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
                                         .background(Color.red.opacity(0.3))
@@ -1879,7 +1897,7 @@ struct PersonInjuredRow: View {
 }
 
 struct SharedPersonSelectionSection<RowContent: View>: View {
-    let icon: String
+    let iconName: String
     let title: String
     let subtitle: String
     let people: [Person]
@@ -1888,8 +1906,9 @@ struct SharedPersonSelectionSection<RowContent: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(icon)
+                Image(systemName: iconName)
                     .font(.title2)
+                    .foregroundColor(DS.Colors.accent)
                 Text(title)
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
@@ -1923,7 +1942,8 @@ struct PersonRequirementRow: View {
                     Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                         .foregroundColor(isSelected ? accentColor : DS.Colors.textSecondary)
 
-                    Text(person.type.icon)
+                    Image(systemName: person.type.symbolName)
+                        .foregroundColor(accentColor)
                     Text(person.displayName)
                         .font(DS.Typography.subheadline)
                         .foregroundColor(DS.Colors.text)
@@ -2063,8 +2083,9 @@ struct SpecialDietFormSheet: View {
             ScrollView {
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
-                        Text("🍽")
-                            .font(.system(size: 48))
+                        Image(systemName: "fork.knife")
+                            .font(.system(size: 44, weight: .semibold))
+                            .foregroundColor(.orange)
 
                         Text("Chế độ ăn của")
                             .font(.title3.bold())
@@ -2175,8 +2196,9 @@ struct ClothingPersonFormSheet: View {
             ScrollView {
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
-                        Text("👕")
-                            .font(.system(size: 48))
+                        Image(systemName: "tshirt.fill")
+                            .font(.system(size: 42, weight: .semibold))
+                            .foregroundColor(.teal)
 
                         Text("Thông tin người cần quần áo")
                             .font(.title3.bold())
@@ -2302,8 +2324,9 @@ struct PersonMedicalFormSheet: View {
                 VStack(spacing: 24) {
                     // Header
                     VStack(spacing: 8) {
-                        Text(person.type.icon)
-                            .font(.system(size: 48))
+                        Image(systemName: person.type.symbolName)
+                            .font(.system(size: 44, weight: .semibold))
+                            .foregroundColor(.red)
                         
                         Text("Tình trạng của")
                             .font(.title3.bold())
@@ -2473,8 +2496,9 @@ struct MedicalIssueCheckboxLight: View {
                     .foregroundColor(isSelected ? .red : .gray)
                     .font(.body)
                 
-                Text(icon)
+                Image(systemName: icon)
                     .font(.body)
+                    .foregroundColor(.red)
                 Text(title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(.primary)
@@ -2715,11 +2739,11 @@ struct Step4ReviewView: View {
                 // Summary card
                 VStack(alignment: .leading, spacing: 16) {
                     if let victimName = formData.effectiveVictimName {
-                        ReviewRow(icon: "🧍", title: "Nạn nhân", value: victimName)
+                        ReviewRow(icon: "person.fill", title: "Nạn nhân", value: victimName)
                     }
 
                     if let victimPhone = formData.effectiveVictimPhone {
-                        ReviewRow(icon: "📞", title: "Số điện thoại", value: victimPhone)
+                        ReviewRow(icon: "phone.fill", title: "Số điện thoại", value: victimPhone)
                     }
 
                     if !formData.savedProfileNoteItems.isEmpty || formData.usesSavedRelativeProfiles {
@@ -2731,25 +2755,25 @@ struct Step4ReviewView: View {
                     }
 
                     if let reporterName = formData.autoInfo?.userName {
-                        ReviewRow(icon: "👤", title: "Người tạo yêu cầu", value: reporterName)
+                        ReviewRow(icon: "person.badge.shield.checkmark", title: "Người tạo yêu cầu", value: reporterName)
                     }
 
                     if let location = formData.effectiveLocation {
                         ReviewRow(
-                            icon: "📍",
+                            icon: "mappin.and.ellipse",
                             title: "Vị trí",
                             value: reviewLocationSummaryText(for: location)
                         )
                     }
 
                     if let address = formData.addressToSend {
-                        ReviewRow(icon: "🏠", title: "Địa chỉ", value: address)
+                        ReviewRow(icon: "house.fill", title: "Địa chỉ", value: address)
                     }
                     
                     // SOS Types - hiển thị tất cả loại đã chọn
                     if !formData.selectedTypes.isEmpty {
                         let typesText = formData.selectedTypes.map { $0.title }.joined(separator: " + ")
-                        let icon = formData.needsBothSteps ? "🆘" : (formData.sosType?.icon ?? "🆘")
+                        let icon = formData.needsBothSteps ? "sos.circle.fill" : (formData.sosType?.symbolName ?? "sos.circle.fill")
                         ReviewRow(icon: icon, title: "Loại SOS", value: typesText)
                     }
                     
@@ -2763,13 +2787,13 @@ struct Step4ReviewView: View {
                         Divider()
                             .background(DS.Colors.surface)
                         
-                        Text("🚨 Thông tin cứu hộ")
+                        Label("Thông tin cứu hộ", systemImage: "cross.case.fill")
                             .font(.subheadline.bold())
                             .foregroundColor(DS.Colors.danger)
                         
                         if let situation = formData.rescueData.situation {
                             ReviewRow(
-                                icon: formData.situationIcon(for: situation),
+                                icon: formData.situationSymbol(for: situation),
                                 title: "Tình trạng",
                                 value: formData.situationTitle(for: situation)
                             )
@@ -2778,9 +2802,14 @@ struct Step4ReviewView: View {
                         // Thông tin y tế từng người bị thương
                         if formData.rescueData.hasInjured && !formData.rescueData.injuredPersonIds.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("🚑 Người bị thương:")
-                                    .font(.caption.bold())
-                                    .foregroundColor(DS.Colors.text)
+                                HStack(spacing: 6) {
+                                    Image(systemName: "cross.case.fill")
+                                        .font(.caption)
+                                        .foregroundColor(DS.Colors.danger)
+                                    Text("Người bị thương:")
+                                        .font(.caption.bold())
+                                        .foregroundColor(DS.Colors.text)
+                                }
 
                                 LazyVGrid(columns: summaryGridColumns, spacing: 10) {
                                     ForEach(formData.sharedPeople.filter {
@@ -2813,9 +2842,9 @@ struct Step4ReviewView: View {
                         Divider()
                             .background(DS.Colors.surface)
                         
-                        Text("🎒 Thông tin cứu trợ")
+                        Label("Thông tin cứu trợ", systemImage: "shippingbox.fill")
                             .font(.subheadline.bold())
-                            .foregroundColor(.yellow)
+                            .foregroundColor(DS.Colors.info)
 
                         ReliefSummaryGridContent(
                             relief: formData.reliefData,
@@ -2827,15 +2856,17 @@ struct Step4ReviewView: View {
                     if !formData.additionalDescription.isEmpty {
                         Divider()
                             .background(DS.Colors.surface)
-                        ReviewRow(icon: "📝", title: "Ghi chú", value: formData.additionalDescription)
+                        ReviewRow(icon: "note.text", title: "Ghi chú", value: formData.additionalDescription)
                     }
                     
                     // Time
-                    ReviewRow(icon: "🕒", title: "Thời gian", value: Date().formatted(date: .abbreviated, time: .shortened))
+                    ReviewRow(icon: "clock.fill", title: "Thời gian", value: Date().formatted(date: .abbreviated, time: .shortened))
                     
                     // Priority level
                     HStack {
-                        Text("⚡ Mức ưu tiên: \(formData.priorityLevel.title)")
+                        Image(systemName: "bolt.fill")
+                            .foregroundColor(formData.priorityLevel.color)
+                        Text("Mức ưu tiên: \(formData.priorityLevel.title)")
                             .font(.subheadline.bold())
                             .foregroundColor(formData.priorityLevel.color)
                     }
@@ -2870,9 +2901,13 @@ struct InjuredPersonReviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("\(person.type.icon) \(person.displayName)")
-                    .font(.subheadline.bold())
-                    .foregroundColor(DS.Colors.text)
+                HStack(spacing: 6) {
+                    Image(systemName: person.type.symbolName)
+                        .foregroundColor(DS.Colors.danger)
+                    Text(person.displayName)
+                        .font(.subheadline.bold())
+                        .foregroundColor(DS.Colors.text)
+                }
                 
                 Spacer()
                 
@@ -2889,7 +2924,7 @@ struct InjuredPersonReviewCard: View {
             if !medicalInfo.medicalIssues.isEmpty {
                 Text(
                     medicalInfo.medicalIssues
-                        .map { "\(MedicalIssue.icon(for: $0)) \(MedicalIssue.title(for: $0))" }
+                        .map(MedicalIssue.title(for:))
                         .joined(separator: ", ")
                 )
                     .font(DS.Typography.caption)
@@ -3031,11 +3066,16 @@ struct QuickPresetButton: View {
     let preset: QuickPreset
     let isSelected: Bool
     let action: () -> Void
+
+    private var selectionColor: Color {
+        preset.sosType == .rescue ? DS.Colors.danger : DS.Colors.info
+    }
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Text(preset.icon)
+                Image(systemName: preset.symbolName)
+                    .font(.caption.bold())
                 Text(preset.title)
                     .font(DS.Typography.caption)
             }
@@ -3046,11 +3086,11 @@ struct QuickPresetButton: View {
             
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(isSelected ? Color.red.opacity(0.25) : Color.clear)
+                    .fill(isSelected ? selectionColor.opacity(0.14) : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(isSelected ? Color.red : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? selectionColor : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
             )
         }
     }
@@ -3060,12 +3100,17 @@ struct SOSTypeCard: View {
     let type: SOSType
     let isSelected: Bool
     let action: () -> Void
+
+    private var selectionColor: Color {
+        type == .rescue ? DS.Colors.danger : DS.Colors.info
+    }
     
     var body: some View {
         Button(action: action) {
             VStack(spacing: 12) {
-                Text(type.icon)
-                    .font(.system(size: 40))
+                Image(systemName: type.symbolName)
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundColor(selectionColor)
                 
                 Text(type.title)
                     .font(.title3.bold())
@@ -3083,11 +3128,11 @@ struct SOSTypeCard: View {
                     .fill(DS.Colors.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(isSelected ? (type == .rescue ? Color.red.opacity(0.25) : Color.yellow.opacity(0.25)) : Color.clear)
+                            .fill(isSelected ? selectionColor.opacity(0.16) : Color.clear)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? (type == .rescue ? Color.red : Color.yellow) : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
+                            .stroke(isSelected ? selectionColor : DS.Colors.surface, lineWidth: isSelected ? 2 : 1)
                     )
             )
         }
@@ -3105,7 +3150,8 @@ struct SupplyCheckbox: View {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                     .foregroundColor(isSelected ? .green : DS.Colors.textSecondary)
                 
-                Text(supply.icon)
+                Image(systemName: supply.symbolName)
+                    .foregroundColor(.green)
                 Text(supply.title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(DS.Colors.text)
@@ -3139,7 +3185,8 @@ struct SituationRadio: View {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .foregroundColor(isSelected ? .red : DS.Colors.textSecondary)
                 
-                Text(icon)
+                Image(systemName: icon)
+                    .foregroundColor(.red)
                 Text(title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(DS.Colors.text)
@@ -3199,8 +3246,9 @@ struct MedicalIssueCheckbox: View {
                     .foregroundColor(isSelected ? .red : DS.Colors.textSecondary)
                     .font(DS.Typography.caption)
                 
-                Text(issue.icon)
+                Image(systemName: issue.symbolName)
                     .font(DS.Typography.caption)
+                    .foregroundColor(.red)
                 Text(issue.title)
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.text)
@@ -3245,7 +3293,7 @@ struct PeopleCountSection: View {
                 Spacer()
             }
             
-            Text("💡 Chọn ít nhất 1 người tổng cộng")
+            Text("Chọn ít nhất 1 người tổng cộng")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textMuted)
         }
@@ -3299,11 +3347,24 @@ struct ReviewRow: View {
     let icon: String
     let title: String
     let value: String
+
+    private var isSystemSymbol: Bool {
+        icon.unicodeScalars.allSatisfy(\.isASCII)
+    }
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(icon)
-                .frame(width: 24)
+            Group {
+                if isSystemSymbol {
+                    Image(systemName: icon)
+                        .font(.body)
+                } else {
+                    Text(icon)
+                        .font(.body)
+                }
+            }
+            .foregroundColor(DS.Colors.accent)
+            .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -3327,7 +3388,7 @@ let summaryGridColumns: [GridItem] = [
 
 struct PeopleCountMetric: Identifiable {
     let id: String
-    let icon: String
+    let symbolName: String
     let title: String
     let value: String
 }
@@ -3340,7 +3401,7 @@ struct ReliefSupplyCardLine: Identifiable {
 
 struct ReliefSupplyCardModel: Identifiable {
     let id: String
-    let icon: String
+    let symbolName: String
     let title: String
     let accentColor: Color
     let lines: [ReliefSupplyCardLine]
@@ -3349,7 +3410,7 @@ struct ReliefSupplyCardModel: Identifiable {
 struct PersonRequirementSummaryModel: Identifiable {
     let id: String
     let name: String
-    let typeIcon: String
+    let typeSymbolName: String
     let needsClothing: Bool
     let hasSpecialDiet: Bool
     let dietDescription: String?
@@ -3358,10 +3419,10 @@ struct PersonRequirementSummaryModel: Identifiable {
 
 func peopleCountMetrics(from peopleCount: PeopleCount) -> [PeopleCountMetric] {
     [
-        PeopleCountMetric(id: "total", icon: "👥", title: "Tổng người", value: "\(peopleCount.total)"),
-        PeopleCountMetric(id: "adults", icon: "🧑", title: "Người lớn", value: "\(peopleCount.adults)"),
-        PeopleCountMetric(id: "children", icon: "👶", title: "Trẻ em", value: "\(peopleCount.children)"),
-        PeopleCountMetric(id: "elderly", icon: "👴", title: "Người già", value: "\(peopleCount.elderly)")
+        PeopleCountMetric(id: "total", symbolName: "person.3.fill", title: "Tổng người", value: "\(peopleCount.total)"),
+        PeopleCountMetric(id: "adults", symbolName: Person.PersonType.adult.symbolName, title: "Người lớn", value: "\(peopleCount.adults)"),
+        PeopleCountMetric(id: "children", symbolName: Person.PersonType.child.symbolName, title: "Trẻ em", value: "\(peopleCount.children)"),
+        PeopleCountMetric(id: "elderly", symbolName: Person.PersonType.elderly.symbolName, title: "Người già", value: "\(peopleCount.elderly)")
     ]
 }
 
@@ -3387,7 +3448,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.water.rawValue,
-                icon: SupplyNeed.water.icon,
+                symbolName: SupplyNeed.water.symbolName,
                 title: SupplyNeed.water.title,
                 accentColor: .blue,
                 lines: lines.isEmpty ? fallbackLine() : lines
@@ -3403,7 +3464,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.food.rawValue,
-                icon: SupplyNeed.food.icon,
+                symbolName: SupplyNeed.food.symbolName,
                 title: SupplyNeed.food.title,
                 accentColor: .orange,
                 lines: lines.isEmpty ? fallbackLine() : lines
@@ -3422,7 +3483,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.medicine.rawValue,
-                icon: SupplyNeed.medicine.icon,
+                symbolName: SupplyNeed.medicine.symbolName,
                 title: SupplyNeed.medicine.title,
                 accentColor: .red,
                 lines: lines.isEmpty ? fallbackLine() : lines
@@ -3441,7 +3502,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.blanket.rawValue,
-                icon: "🛏️",
+                symbolName: SupplyNeed.blanket.symbolName,
                 title: "Chăn mền",
                 accentColor: .purple,
                 lines: lines.isEmpty ? fallbackLine() : lines
@@ -3456,7 +3517,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.clothes.rawValue,
-                icon: SupplyNeed.clothes.icon,
+                symbolName: SupplyNeed.clothes.symbolName,
                 title: SupplyNeed.clothes.title,
                 accentColor: .teal,
                 lines: lines
@@ -3471,7 +3532,7 @@ func reliefSupplyCardModels(from relief: ReliefData) -> [ReliefSupplyCardModel] 
         cards.append(
             ReliefSupplyCardModel(
                 id: SupplyNeed.other.rawValue,
-                icon: SupplyNeed.other.icon,
+                symbolName: SupplyNeed.other.symbolName,
                 title: SupplyNeed.other.title,
                 accentColor: DS.Colors.accent,
                 lines: lines
@@ -3497,7 +3558,7 @@ func personRequirementSummaryModels(from relief: ReliefData, people: [Person]) -
         return PersonRequirementSummaryModel(
             id: person.id,
             name: person.displayName,
-            typeIcon: person.type.icon,
+            typeSymbolName: person.type.symbolName,
             needsClothing: hasClothing,
             hasSpecialDiet: hasSpecialDiet,
             dietDescription: dietDescription?.isEmpty == false ? dietDescription : nil,
@@ -3532,8 +3593,9 @@ struct PeopleCountMetricCard: View {
         Group {
             if layoutStyle == .inline {
                 HStack(alignment: .center, spacing: 8) {
-                    Text(metric.icon)
+                    Image(systemName: metric.symbolName)
                         .font(.title3)
+                        .foregroundColor(DS.Colors.accent)
 
                     Text("\(metric.title):")
                         .font(DS.Typography.caption)
@@ -3545,8 +3607,9 @@ struct PeopleCountMetricCard: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(metric.icon)
+                    Image(systemName: metric.symbolName)
                         .font(.title3)
+                        .foregroundColor(DS.Colors.accent)
 
                     Text(metric.title)
                         .font(DS.Typography.caption)
@@ -3625,8 +3688,9 @@ struct ReliefSupplySummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(card.icon)
+                Image(systemName: card.symbolName)
                     .font(.headline)
+                    .foregroundColor(card.accentColor)
 
                 Text(card.title)
                     .font(.subheadline.bold())
@@ -3666,8 +3730,9 @@ struct PersonRequirementSummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Text(card.typeIcon)
+                Image(systemName: card.typeSymbolName)
                     .font(.headline)
+                    .foregroundColor(DS.Colors.accent)
 
                 Text(card.name)
                     .font(.subheadline.bold())

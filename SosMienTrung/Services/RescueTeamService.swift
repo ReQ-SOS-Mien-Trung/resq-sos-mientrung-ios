@@ -141,6 +141,43 @@ final class RescueTeamService {
         }
     }
 
+    // MARK: - POST /personnel/assembly-point/events/{eventId}/check-out
+    func checkOut(eventId: Int, latitude: Double, longitude: Double) async throws -> CheckInResponse {
+        guard let url = URL(string: "\(baseURL)/personnel/assembly-point/events/\(eventId)/check-out") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        var request = authorizedRequest(url: url, method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            CheckInRequestBody(latitude: latitude, longitude: longitude)
+        )
+
+        print("[RescueTeamService] → POST \(url.absoluteString) lat=\(latitude) lon=\(longitude)")
+
+        do {
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            return (try? JSONDecoder().decode(CheckInResponse.self, from: data))
+                ?? CheckInResponse(message: "Check-out thành công")
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
     private func updateTeamAvailability(teamId: Int, action: String) async throws -> String? {
         guard let url = URL(string: "\(baseURL)/personnel/rescue-teams/\(teamId)/\(action)") else {
             throw RescueTeamServiceError.invalidURL
