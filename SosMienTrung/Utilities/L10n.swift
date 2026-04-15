@@ -173,6 +173,8 @@ enum L10n {
         static let missionStatusUpdated = L10n.tr("rescuer_mission.mission_status_updated", "Đã cập nhật trạng thái nhiệm vụ")
         static let teamAvailable = L10n.tr("rescuer_mission.team_available", "Đội đã sẵn sàng nhận nhiệm vụ")
         static let teamUnavailable = L10n.tr("rescuer_mission.team_unavailable", "Đội đã chuyển sang trạng thái không sẵn sàng")
+        static let leaveTeamSucceeded = L10n.tr("rescuer_mission.leave_team_succeeded", "Bạn đã rời đội cứu hộ hiện tại")
+        static let cannotLeaveTeamDuringAssignedOrOnMission = L10n.tr("rescuer_mission.cannot_leave_team_during_assigned_or_on_mission", "Không thể rời đội khi đội đang được phân công hoặc đang làm nhiệm vụ")
 
         static func currentLocationUnavailable() -> String {
             L10n.tr("rescuer_mission.current_location_unavailable", "Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí hoặc chờ GPS cập nhật rồi thử lại.")
@@ -192,6 +194,10 @@ enum L10n {
 
         static func cannotUpdateTeamStatus(_ detail: String) -> String {
             L10n.tr("rescuer_mission.cannot_update_team_status", "Không thể cập nhật trạng thái đội: %@", detail)
+        }
+
+        static func cannotLeaveTeam(_ detail: String) -> String {
+            L10n.tr("rescuer_mission.cannot_leave_team", "Không thể rời đội: %@", detail)
         }
 
         static func cannotLoadMissions(_ detail: String) -> String {

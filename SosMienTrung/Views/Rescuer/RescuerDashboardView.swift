@@ -231,6 +231,7 @@ struct RescuerDashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isMembersExpanded = false
     @State private var showAssemblyEventsSheet = false
+    @State private var showLeaveTeamConfirmation = false
 
     init(locationManager: LocationManager = .shared) {
         _vm = StateObject(wrappedValue: RescuerMissionViewModel(locationManager: locationManager))
@@ -283,6 +284,10 @@ struct RescuerDashboardView: View {
 
     private var canSetTeamUnavailable: Bool {
         ["available", "ready"].contains(normalizedTeamStatus)
+    }
+
+    private var canLeaveTeam: Bool {
+        vm.canLeaveCurrentTeam
     }
 
     private func isCurrentUser(_ member: RescueTeamMember) -> Bool {
@@ -433,6 +438,14 @@ struct RescuerDashboardView: View {
             } message: {
                 Text(vm.successMessage ?? "")
             }
+            .alert("Rời đội cứu hộ?", isPresented: $showLeaveTeamConfirmation) {
+                Button("Ở lại", role: .cancel) {}
+                Button("Rời đội", role: .destructive) {
+                    vm.leaveCurrentTeam()
+                }
+            } message: {
+                Text("Bạn sẽ rời khỏi đội cứu hộ hiện tại. Điều phối viên có thể phân đội lại cho bạn khi cần.")
+            }
             .alert("Lỗi xác nhận có mặt", isPresented: Binding(
                 get: { assemblyVM.errorMessage != nil },
                 set: { if !$0 { assemblyVM.errorMessage = nil } }
@@ -483,11 +496,19 @@ struct RescuerDashboardView: View {
     @ViewBuilder
     private var teamCard: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            HStack {
+            HStack(alignment: .center, spacing: DS.Spacing.xs) {
                 EyebrowLabel(text: "ĐỘI CỦA BẠN")
                 Spacer()
 
-                if let status = vm.team?.status {
+                if vm.team != nil {
+                    HStack(spacing: DS.Spacing.xs) {
+                        if let status = vm.team?.status {
+                            StatusBadge(text: RescuerStatusBadgeText.team(status), color: teamStatusColor(status))
+                        }
+
+                        leaveTeamCompactButton
+                    }
+                } else if let status = vm.team?.status {
                     StatusBadge(text: RescuerStatusBadgeText.team(status), color: teamStatusColor(status))
                 }
             }
@@ -525,6 +546,13 @@ struct RescuerDashboardView: View {
                         .padding(.top, DS.Spacing.xs)
                 } else {
                     Label("Chỉ đội trưởng có thể đổi trạng thái sẵn sàng của đội cứu hộ", systemImage: "lock.fill")
+                        .font(DS.Typography.caption)
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .padding(.top, DS.Spacing.xs)
+                }
+
+                if canLeaveTeam == false {
+                    Text("Không thể rời đội khi đội đang được phân công hoặc đang làm nhiệm vụ")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                         .padding(.top, DS.Spacing.xs)
@@ -657,6 +685,34 @@ struct RescuerDashboardView: View {
         }
     }
 
+    private var leaveTeamCompactButton: some View {
+        Button {
+            showLeaveTeamConfirmation = true
+        } label: {
+            ZStack {
+                if vm.isLeavingTeam {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(canLeaveTeam ? .red : DS.Colors.textTertiary)
+                } else {
+                    Image(systemName: "person.crop.circle.badge.xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+            }
+            .frame(width: 34, height: 34)
+            .foregroundColor(canLeaveTeam ? .red : DS.Colors.textTertiary)
+            .background(canLeaveTeam ? Color.red.opacity(0.08) : DS.Colors.background)
+            .overlay(
+                Rectangle()
+                    .stroke(canLeaveTeam ? Color.red.opacity(0.35) : DS.Colors.border, lineWidth: DS.Border.thin)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+        }
+        .buttonStyle(.plain)
+        .disabled(vm.isLeavingTeam || vm.isUpdatingTeamAvailability || canLeaveTeam == false)
+        .accessibilityLabel("Rời đội")
+    }
+
     // MARK: Missions List
     private var missionsList: some View {
         VStack(spacing: DS.Spacing.sm) {
@@ -746,6 +802,7 @@ struct RescuerDashboardView: View {
                 ForEach(assemblyVM.events) { event in
                     AssemblyEventRowView(
                         event: event,
+                        hasCheckedOut: assemblyVM.hasCheckedOut(event: event),
                         isCheckingIn: assemblyVM.loadingEventId == event.eventId && assemblyVM.loadingAction == .checkIn,
                         isCheckingOut: assemblyVM.loadingEventId == event.eventId && assemblyVM.loadingAction == .checkOut,
                         allowsCheckOut: assemblyVM.isTeamAssignedOrOnMission == false,
@@ -1140,6 +1197,7 @@ struct RescuerAssemblyEventsView: View {
                 ForEach(vm.events) { event in
                     AssemblyEventRowView(
                         event: event,
+                        hasCheckedOut: vm.hasCheckedOut(event: event),
                         isCheckingIn: vm.loadingEventId == event.eventId && vm.loadingAction == .checkIn,
                         isCheckingOut: vm.loadingEventId == event.eventId && vm.loadingAction == .checkOut,
                         allowsCheckOut: vm.isTeamAssignedOrOnMission == false,
@@ -1154,6 +1212,7 @@ struct RescuerAssemblyEventsView: View {
 
 private struct AssemblyEventRowView: View {
     let event: AssemblyPointEvent
+    let hasCheckedOut: Bool
     let isCheckingIn: Bool
     let isCheckingOut: Bool
     let allowsCheckOut: Bool
@@ -1170,11 +1229,16 @@ private struct AssemblyEventRowView: View {
     }
 
     private var canCheckIn: Bool {
-        event.isCheckedIn == false && ["gathering", "ongoing", "planned", "scheduled"].contains(normalizedStatus)
+        event.isCheckedIn == false
+            && hasCheckedOut == false
+            && ["gathering", "ongoing", "planned", "scheduled"].contains(normalizedStatus)
     }
 
     private var canCheckOut: Bool {
-        allowsCheckOut && event.isCheckedIn && ["gathering", "ongoing"].contains(normalizedStatus)
+        allowsCheckOut
+            && hasCheckedOut == false
+            && event.isCheckedIn
+            && ["gathering", "ongoing"].contains(normalizedStatus)
     }
 
     private var normalizedStatus: String {
@@ -1224,7 +1288,7 @@ private struct AssemblyEventRowView: View {
 
             mapSection
 
-            if event.isCheckedIn {
+            if event.isCheckedIn && hasCheckedOut == false {
                 Label(
                     formattedDate(event.checkInTime).map { "Đã xác nhận có mặt lúc \($0)" } ?? "Đã xác nhận có mặt",
                     systemImage: "checkmark.seal.fill"
@@ -1233,7 +1297,14 @@ private struct AssemblyEventRowView: View {
                 .foregroundColor(DS.Colors.success)
             }
 
-            if event.isCheckedIn {
+            if hasCheckedOut {
+                Label(
+                    formattedDate(event.checkOutTime).map { "Đã xác nhận rời đi lúc \($0)" } ?? "Đã xác nhận rời đi",
+                    systemImage: "rectangle.portrait.and.arrow.right"
+                )
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.warning)
+            } else if event.isCheckedIn {
                 if allowsCheckOut {
                     Button(action: onCheckOut) {
                         HStack(spacing: DS.Spacing.xs) {

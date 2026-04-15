@@ -268,7 +268,7 @@ struct MissionTeamReportView: View {
                         statusIcon(symbol: "flag.checkered.circle.fill", tint: DS.Colors.success)
 
                         VStack(alignment: .leading, spacing: DS.Spacing.xxxs) {
-                            Text("Xác nhận đội đã hoàn thành hiện trường")
+                            Text("Xác nhận đội đã hoàn thành nhiệm vụ")
                                 .font(DS.Typography.headline)
                                 .foregroundColor(DS.Colors.text)
 
@@ -866,7 +866,7 @@ struct MissionTeamReportView: View {
         case "assigned":
             return "Đã phân công"
         case "inprogress":
-            return "Đang thực địa"
+            return "Đang thực hiện"
         case "completedwaitingreport":
             return "Chờ báo cáo"
         case "reported":
@@ -1988,7 +1988,7 @@ private struct MissionReportStageProgressView: View {
 
     private let titles = [
         "Tiếp nhận",
-        "Thực địa",
+        "Thực hiện",
         "Hoàn tất",
         "Nộp báo cáo"
     ]

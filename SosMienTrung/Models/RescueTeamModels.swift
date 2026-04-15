@@ -96,6 +96,8 @@ struct AssemblyPointEvent: Decodable, Identifiable {
     let eventStatus: String?
     let isCheckedIn: Bool
     let checkInTime: String?
+    let isCheckedOut: Bool
+    let checkOutTime: String?
     let createdAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -112,7 +114,13 @@ struct AssemblyPointEvent: Decodable, Identifiable {
         case eventStatus
         case status
         case isCheckedIn
+        case isCheckedOut
+        case checkedOut
         case checkInTime
+        case checkOutTime
+        case checkedOutTime
+        case checkOutAt
+        case checkedOutAt
         case createdAt
     }
 
@@ -144,8 +152,28 @@ struct AssemblyPointEvent: Decodable, Identifiable {
         eventStatus = try container.decodeIfPresent(String.self, forKey: .eventStatus)
             ?? container.decodeIfPresent(String.self, forKey: .status)
         isCheckedIn = try container.decodeIfPresent(Bool.self, forKey: .isCheckedIn) ?? false
+        isCheckedOut = try container.decodeIfPresent(Bool.self, forKey: .isCheckedOut)
+            ?? container.decodeIfPresent(Bool.self, forKey: .checkedOut)
+            ?? false
         checkInTime = try container.decodeIfPresent(String.self, forKey: .checkInTime)
+        checkOutTime = try container.decodeIfPresent(String.self, forKey: .checkOutTime)
+            ?? container.decodeIfPresent(String.self, forKey: .checkedOutTime)
+            ?? container.decodeIfPresent(String.self, forKey: .checkOutAt)
+            ?? container.decodeIfPresent(String.self, forKey: .checkedOutAt)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+
+    var hasCheckedOut: Bool {
+        if isCheckedOut {
+            return true
+        }
+
+        if let checkOutTime,
+           checkOutTime.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return true
+        }
+
+        return false
     }
 
     var id: Int { eventId }

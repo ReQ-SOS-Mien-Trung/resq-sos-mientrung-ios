@@ -32,6 +32,7 @@ final class RescuerMissionViewModel: ObservableObject {
     @Published var isLoadingTeam = false
     @Published var noTeamMessage: String?
     @Published var isUpdatingTeamAvailability = false
+    @Published var isLeavingTeam = false
     @Published var missions: [Mission] = []
     @Published var activities: [Activity] = []
     @Published var isLoading = false
@@ -228,6 +229,50 @@ final class RescuerMissionViewModel: ObservableObject {
                 errorMessage = serviceError.localizedDescription
             } catch {
                 errorMessage = L10n.RescuerMission.cannotUpdateTeamStatus(error.localizedDescription)
+            }
+        }
+    }
+
+    var isTeamAssignedOrOnMission: Bool {
+        ["assigned", "onmission"].contains(normalizedTeamStatus(team?.status))
+    }
+
+    var canLeaveCurrentTeam: Bool {
+        team != nil && isTeamAssignedOrOnMission == false
+    }
+
+    func leaveCurrentTeam() {
+        guard team != nil else { return }
+        guard isLeavingTeam == false else { return }
+        guard canLeaveCurrentTeam else {
+            errorMessage = L10n.RescuerMission.cannotLeaveTeamDuringAssignedOrOnMission
+            return
+        }
+
+        errorMessage = nil
+        successMessage = nil
+        isLeavingTeam = true
+        beginLoading()
+
+        Task {
+            defer {
+                isLeavingTeam = false
+                endLoading()
+            }
+
+            do {
+                let message = try await RescueTeamService.shared.leaveMyTeam()
+                team = nil
+                missions = []
+                activities = []
+                currentTeamActivities = []
+                currentTeamMissionTeamIds = []
+                noTeamMessage = L10n.RescueTeam.notAssignedYet
+                successMessage = message ?? L10n.RescuerMission.leaveTeamSucceeded
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                errorMessage = serviceError.localizedDescription
+            } catch {
+                errorMessage = L10n.RescuerMission.cannotLeaveTeam(error.localizedDescription)
             }
         }
     }
@@ -700,6 +745,15 @@ final class RescuerMissionViewModel: ObservableObject {
         loadingCount = max(loadingCount - 1, 0)
         isLoading = loadingCount > 0
     }
+
+    private func normalizedTeamStatus(_ status: String?) -> String {
+        (status ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+    }
 }
 
 @MainActor
@@ -722,6 +776,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
     @Published var loadingEventId: Int?
     @Published var loadingAction: AssemblyEventAction?
     @Published private(set) var teamStatus: String?
+    @Published private(set) var checkedOutEventIds: Set<Int> = []
     @Published var errorMessage: String?
     @Published var successMessage: String?
 
@@ -735,6 +790,10 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
 
     init(locationManager: LocationManager? = nil) {
         self.locationManager = locationManager ?? .shared
+    }
+
+    func hasCheckedOut(event: AssemblyPointEvent) -> Bool {
+        event.hasCheckedOut || checkedOutEventIds.contains(event.eventId)
     }
 
     func startLocationTracking() {
@@ -767,7 +826,18 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
                     pageNumber: pageNumber,
                     pageSize: pageSize
                 )
-                events = response.items
+                let fetchedEvents = response.items
+                events = fetchedEvents
+
+                let backendCheckedOutEventIds = Set(
+                    fetchedEvents
+                        .filter(\.hasCheckedOut)
+                        .map(\.eventId)
+                )
+                checkedOutEventIds.formUnion(backendCheckedOutEventIds)
+
+                let visibleEventIds = Set(fetchedEvents.map(\.eventId))
+                checkedOutEventIds = checkedOutEventIds.intersection(visibleEventIds)
             } catch {
                 errorMessage = L10n.RescuerMission.cannotLoadAssemblyEvents(error.localizedDescription)
             }
@@ -777,6 +847,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
     func checkIn(event: AssemblyPointEvent) {
         guard loadingEventId == nil else { return }
         guard event.isCheckedIn == false else { return }
+        guard hasCheckedOut(event: event) == false else { return }
 
         errorMessage = nil
         successMessage = nil
@@ -826,6 +897,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
                     latitude: coordinates.latitude,
                     longitude: coordinates.longitude
                 )
+                checkedOutEventIds.insert(event.eventId)
                 successMessage = response.message ?? L10n.Common.checkOutSucceeded
                 refresh(pageNumber: pageNumber, pageSize: pageSize)
             } catch let serviceError as RescueTeamService.RescueTeamServiceError {

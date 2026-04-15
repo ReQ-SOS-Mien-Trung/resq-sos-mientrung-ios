@@ -27,8 +27,8 @@ enum RescuerActivityIncidentType: String, Codable, CaseIterable, Identifiable {
         case .missingEquipment: return "Thiếu thiết bị để tiếp tục"
         case .insufficientStaff: return "Thiếu nhân lực cho hoạt động"
         case .accessRouteBlocked: return "Đường tiếp cận bị chặn"
-        case .sceneMoreDangerous: return "Điều kiện hiện trường nguy hiểm hơn dự kiến"
-        case .beyondCurrentCapability: return "Nạn nhân / hiện trường vượt khả năng xử lý hiện tại"
+        case .sceneMoreDangerous: return "Điều kiện nhiệm vụ nguy hiểm hơn dự kiến"
+        case .beyondCurrentCapability: return "Nạn nhân / nhiệm vụ vượt khả năng xử lý hiện tại"
         case .handOverToAnotherTeam: return "Bàn giao hoạt động cho đội khác"
         case .other: return "Khác"
         }

@@ -104,6 +104,37 @@ final class RescueTeamService {
         try await updateTeamAvailability(teamId: teamId, action: "set-unavailable")
     }
 
+    // MARK: - POST /personnel/rescue-teams/my/leave
+    func leaveMyTeam() async throws -> String? {
+        guard let url = URL(string: "\(baseURL)/personnel/rescue-teams/my/leave") else {
+            throw RescueTeamServiceError.invalidURL
+        }
+
+        guard AuthSessionStore.shared.hasAuthenticatedSession else {
+            throw RescueTeamServiceError.notAuthenticated
+        }
+
+        let request = authorizedRequest(url: url, method: "POST")
+        print("[RescueTeamService] → POST \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await sendAuthorized(request)
+            let statusCode = response.statusCode
+
+            guard (200...299).contains(statusCode) else {
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                print("[RescueTeamService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw RescueTeamServiceError.httpError(status: statusCode, message: backendMessage)
+            }
+
+            return Self.extractBackendSuccessMessage(from: data)
+        } catch let serviceError as RescueTeamServiceError {
+            throw serviceError
+        } catch {
+            throw RescueTeamServiceError.network(error)
+        }
+    }
+
     // MARK: - POST /personnel/assembly-point/events/{eventId}/check-in
     func checkIn(eventId: Int, latitude: Double, longitude: Double) async throws -> CheckInResponse {
         guard let url = URL(string: "\(baseURL)/personnel/assembly-point/events/\(eventId)/check-in") else {
