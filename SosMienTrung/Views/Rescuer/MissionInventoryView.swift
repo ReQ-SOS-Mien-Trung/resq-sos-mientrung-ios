@@ -249,12 +249,12 @@ struct MissionInventoryView: View {
 
                 if inventoryEntries.isEmpty {
                     IncidentFormSection(
-                        title: "Chưa có vật phẩm nào gắn với mission",
-                        subtitle: "Backend hiện chỉ trả vật phẩm qua `activities.suppliesToCollect`. Mission này chưa có activity nào chứa vật phẩm."
+                        title: "Chưa có vật phẩm nào gắn với nhiệm vụ",
+                        subtitle: "Hệ thống hiện chỉ trả vật phẩm qua trường activities.suppliesToCollect. Nhiệm vụ này chưa có hoạt động nào chứa vật phẩm."
                     ) {
                         IncidentInlineNotice(
                             icon: "shippingbox",
-                            text: "Khi mission có bước COLLECT_SUPPLIES, DELIVER_SUPPLIES hoặc activity khác mang `suppliesToCollect`, inventory sẽ hiện tại đây.",
+                            text: "Khi nhiệm vụ có bước COLLECT_SUPPLIES, DELIVER_SUPPLIES hoặc hoạt động khác có suppliesToCollect, túi đồ sẽ hiển thị tại đây.",
                             tone: DS.Colors.info
                         )
                     }
@@ -302,7 +302,7 @@ struct MissionInventoryView: View {
                 }
             }
 
-            Text("Theo dõi vật phẩm từ các activity của đội để biết món nào cần lấy, đang giữ, đã giao hoặc đang trong luồng hoàn trả.")
+            Text("Theo dõi vật phẩm từ các hoạt động của đội để biết món nào cần lấy, đang giữ, đã giao hoặc đang trong luồng hoàn trả.")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -385,10 +385,6 @@ struct MissionInventoryView: View {
 
     private var filterSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            Text("Lọc theo vòng đời vật phẩm")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(DS.Colors.text)
-
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.Spacing.xs) {
                     ForEach(MissionInventoryFilter.allCases) { filter in

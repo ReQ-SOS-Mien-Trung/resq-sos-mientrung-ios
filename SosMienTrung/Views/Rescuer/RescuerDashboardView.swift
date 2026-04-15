@@ -373,7 +373,7 @@ struct RescuerDashboardView: View {
                         }
 
                         if shouldShowMissionSection {
-                            Text("NHIỆM VỤ CỦA TEAM").sectionHeader()
+                            Text("NHIỆM VỤ CỦA ĐỘI").sectionHeader()
 
                             if vm.isLoading && vm.missions.isEmpty {
                                 ProgressView()
@@ -853,7 +853,7 @@ struct RescuerDashboardView: View {
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
 
-            Text("Ứng dụng đang đồng bộ quyền từ `/identity/user/me`. Khi backend cấp một trong các quyền mission, activity hoặc personnel liên quan, nút truy cập sẽ tự hiển thị.")
+            Text("Ứng dụng đang đồng bộ quyền từ /identity/user/me. Khi hệ thống cấp một trong các quyền nhiệm vụ, hoạt động hoặc nhân sự liên quan, nút truy cập sẽ tự hiển thị.")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

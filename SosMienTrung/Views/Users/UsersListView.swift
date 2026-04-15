@@ -63,7 +63,7 @@ struct UsersListView: View {
                         .font(DS.Typography.headline)
                         .foregroundColor(DS.Colors.textSecondary)
                         .multilineTextAlignment(.center)
-                    Text("Đợi người khác mở app và ở gần bạn")
+                    Text("Đợi người khác mở ứng dụng và ở gần bạn")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textTertiary)
                     Spacer()

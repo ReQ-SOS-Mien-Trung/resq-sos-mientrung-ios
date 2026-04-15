@@ -113,11 +113,11 @@ enum L10n {
         static let notLoggedIn = L10n.tr("victim_chat.not_logged_in", "Chưa đăng nhập, vui lòng đăng nhập lại")
 
         static func cannotOpenChat(_ detail: String) -> String {
-            L10n.tr("victim_chat.cannot_open_chat", "Không thể mở chat: %@", detail)
+            L10n.tr("victim_chat.cannot_open_chat", "Không thể mở cuộc trò chuyện: %@", detail)
         }
 
         static func uploadImageFailed(_ detail: String) -> String {
-            L10n.tr("victim_chat.upload_image_failed", "Upload ảnh thất bại: %@", detail)
+            L10n.tr("victim_chat.upload_image_failed", "Tải ảnh lên thất bại: %@", detail)
         }
 
         static func cannotLoadHistory(_ detail: String) -> String {
@@ -165,7 +165,7 @@ enum L10n {
         static let missingAssemblyPointId = L10n.tr("rescuer_mission.missing_assembly_point_id", "Không tìm thấy assemblyPointId để xác nhận có mặt. Vui lòng đồng bộ lại dữ liệu đội cứu hộ.")
         static let activityWaitingServerSync = L10n.tr("rescuer_mission.activity_waiting_server_sync", "Hoạt động này đang chờ đồng bộ máy chủ.")
         static let missingLocalActivity = L10n.tr("rescuer_mission.missing_local_activity", "Không tìm thấy hoạt động để lưu cục bộ.")
-        static let cannotSaveOfflineAction = L10n.tr("rescuer_mission.cannot_save_offline_action", "Không thể lưu thao tác offline cho hoạt động này.")
+        static let cannotSaveOfflineAction = L10n.tr("rescuer_mission.cannot_save_offline_action", "Không thể lưu thao tác ngoại tuyến cho hoạt động này.")
         static let offlineSavedWaitingSync = L10n.tr("rescuer_mission.offline_saved_waiting_sync", "Đã lưu cục bộ. Hoạt động đang chờ đồng bộ máy chủ.")
         static let proofImageRequiresConnection = L10n.tr("rescuer_mission.proof_image_requires_connection", "Không có mạng để tải ảnh minh chứng. Vui lòng thử lại hoặc hoàn thành bước mà không đính kèm ảnh.")
         static let activityStatusUpdated = L10n.tr("rescuer_mission.activity_status_updated", "Đã cập nhật trạng thái bước thực hiện")
@@ -179,7 +179,7 @@ enum L10n {
         }
 
         static func cannotLoadTeamInfo(_ detail: String) -> String {
-            L10n.tr("rescuer_mission.cannot_load_team_info", "Không thể tải thông tin team: %@", detail)
+            L10n.tr("rescuer_mission.cannot_load_team_info", "Không thể tải thông tin đội: %@", detail)
         }
 
         static func checkInFailed(_ detail: String) -> String {
@@ -224,15 +224,15 @@ enum L10n {
     }
 
     enum Incident {
-        static let reportCreatedWithTeamRequest = L10n.tr("incident.report_created_with_team_request", "Đã báo sự cố mission và gửi kèm yêu cầu giải cứu team")
-        static let reportCreatedWithHandover = L10n.tr("incident.report_created_with_handover", "Đã báo sự cố mission và gửi thông tin bàn giao")
-        static let reportCreatedForWholeTeam = L10n.tr("incident.report_created_for_whole_team", "Đã báo sự cố mission cho toàn đội")
-        static let activityReportCreated = L10n.tr("incident.activity_report_created", "Đã báo sự cố activity")
-        static let activityReportCreatedWithSupport = L10n.tr("incident.activity_report_created_with_support", "Đã báo sự cố activity và gửi kèm yêu cầu hỗ trợ")
+        static let reportCreatedWithTeamRequest = L10n.tr("incident.report_created_with_team_request", "Đã báo sự cố nhiệm vụ và gửi kèm yêu cầu giải cứu đội")
+        static let reportCreatedWithHandover = L10n.tr("incident.report_created_with_handover", "Đã báo sự cố nhiệm vụ và gửi thông tin bàn giao")
+        static let reportCreatedForWholeTeam = L10n.tr("incident.report_created_for_whole_team", "Đã báo sự cố nhiệm vụ cho toàn đội")
+        static let activityReportCreated = L10n.tr("incident.activity_report_created", "Đã báo sự cố hoạt động")
+        static let activityReportCreatedWithSupport = L10n.tr("incident.activity_report_created_with_support", "Đã báo sự cố hoạt động và gửi kèm yêu cầu hỗ trợ")
         static let incidentStatusUpdated = L10n.tr("incident.status_updated", "Đã cập nhật trạng thái sự cố")
 
         static func reportCreatedWithAssistance(_ assistanceId: String) -> String {
-            L10n.tr("incident.report_created_with_assistance", "Đã báo sự cố mission và tạo yêu cầu giải cứu #%@", assistanceId)
+            L10n.tr("incident.report_created_with_assistance", "Đã báo sự cố nhiệm vụ và tạo yêu cầu giải cứu #%@", assistanceId)
         }
 
         static func reportFailed(_ detail: String) -> String {
@@ -247,8 +247,8 @@ enum L10n {
     enum PhoneAuth {
         static let sessionExpiredResendOTP = L10n.tr("phone_auth.session_expired_resend_otp", "Phiên xác thực hết hạn, vui lòng gửi lại OTP")
         static let rescuerAccountInvalidRole = L10n.tr("phone_auth.rescuer_account_invalid_role", "Tài khoản này không thuộc nhóm người cứu hộ.")
-        static let apnsTokenMissing = L10n.tr("phone_auth.apns_token_missing", "Thiết bị chưa nhận APNs token. Hãy chờ vài giây sau khi mở app rồi gửi lại OTP trên thiết bị thật.")
-        static let apiKeyHTTPReferrerBlocked = L10n.tr("phone_auth.api_key_http_referrer_blocked", "Firebase API key hiện đang bị chặn theo HTTP referrer nên iOS không gọi được Phone Auth. Vào Google Cloud Console > APIs & Services > Credentials > chọn API key của Firebase và bỏ Application restriction kiểu HTTP referrers (hoặc tạo key mới cho iOS/Firebase), sau đó tải lại GoogleService-Info.plist và thay vào app.")
+        static let apnsTokenMissing = L10n.tr("phone_auth.apns_token_missing", "Thiết bị chưa nhận APNs token. Hãy chờ vài giây sau khi mở ứng dụng rồi gửi lại OTP trên thiết bị thật.")
+        static let apiKeyHTTPReferrerBlocked = L10n.tr("phone_auth.api_key_http_referrer_blocked", "Firebase API key hiện đang bị chặn theo HTTP referrer nên iOS không gọi được Phone Auth. Vào Google Cloud Console > APIs & Services > Credentials > chọn API key của Firebase và bỏ Application restriction kiểu HTTP referrers (hoặc tạo key mới cho iOS/Firebase), sau đó tải lại GoogleService-Info.plist và thay vào ứng dụng.")
         static let permissionDenied = L10n.tr("phone_auth.permission_denied", "Firebase từ chối quyền truy cập (403). Hãy kiểm tra API key trong GoogleService-Info.plist và cấu hình restriction của key trên Google Cloud/Firebase Console.")
         static let deviceVerificationError39 = L10n.tr("phone_auth.device_verification_error_39", "Lỗi xác thực thiết bị (Error 39). Vui lòng kiểm tra:\n• Chạy trên thiết bị thật (không phải Simulator)\n• APNs đã được cấu hình đúng\n• Thử lại sau vài phút")
         static let smsServiceUnavailable = L10n.tr("phone_auth.sms_service_unavailable", "Dịch vụ SMS tạm thời không khả dụng (503), vui lòng thử lại sau")
@@ -327,17 +327,17 @@ enum L10n {
 
     enum Media {
         static let invalidImageData = L10n.tr("media.invalid_image_data", "Không thể xử lý dữ liệu ảnh")
-        static let invalidUploadResponse = L10n.tr("media.invalid_upload_response", "Phản hồi upload không hợp lệ")
+        static let invalidUploadResponse = L10n.tr("media.invalid_upload_response", "Phản hồi tải ảnh lên không hợp lệ")
         static let missingUploadedURL = L10n.tr("media.missing_uploaded_url", "Cloudinary không trả về URL ảnh")
 
         static func uploadFailed(_ statusCode: String) -> String {
-            L10n.tr("media.upload_failed", "Upload ảnh lỗi (HTTP %@)", statusCode)
+            L10n.tr("media.upload_failed", "Tải ảnh lên lỗi (HTTP %@)", statusCode)
         }
     }
 
     enum VictimChatService {
         static func cannotJoinRoom(_ detail: String) -> String {
-            L10n.tr("victim_chat_service.cannot_join_room", "Không thể join phòng chat: %@", detail)
+            L10n.tr("victim_chat_service.cannot_join_room", "Không thể tham gia phòng trò chuyện: %@", detail)
         }
 
         static func sendFailed(_ detail: String) -> String {
@@ -347,12 +347,12 @@ enum L10n {
 
     enum Route {
         static let deviceGPS = L10n.tr("route.device_gps", "GPS thiết bị")
-        static let teamLocation = L10n.tr("route.team_location", "Vị trí team")
-        static let teamCoordinate = L10n.tr("route.team_coordinate", "Tọa độ team")
+        static let teamLocation = L10n.tr("route.team_location", "Vị trí đội")
+        static let teamCoordinate = L10n.tr("route.team_coordinate", "Tọa độ đội")
         static let unknownOrigin = L10n.tr("route.unknown_origin", "Chưa xác định được điểm xuất phát")
         static let dash = L10n.tr("route.dash", "-")
-        static let activityLocationUnavailable = L10n.tr("route.activity_location_unavailable", "Chưa lấy được GPS của thiết bị và cũng không có vị trí team để tính lộ trình. Nếu đang dùng iPhone Simulator, hãy chọn Features > Location để cấp vị trí mô phỏng.")
-        static let aggregateLocationUnavailable = L10n.tr("route.aggregate_location_unavailable", "Chưa lấy được GPS thiết bị và cũng không có tọa độ team để bắt đầu chỉ đường.")
+        static let activityLocationUnavailable = L10n.tr("route.activity_location_unavailable", "Chưa lấy được GPS của thiết bị và cũng không có vị trí đội để tính lộ trình. Nếu đang dùng trình giả lập iPhone, hãy chọn Features > Location để cấp vị trí mô phỏng.")
+        static let aggregateLocationUnavailable = L10n.tr("route.aggregate_location_unavailable", "Chưa lấy được GPS thiết bị và cũng không có tọa độ đội để bắt đầu chỉ đường.")
 
         static func destinationStep(_ step: String) -> String {
             L10n.tr("route.destination_step", "Điểm đến bước %@", step)
@@ -367,15 +367,15 @@ enum L10n {
         }
 
         static let activityMissingRouteData = L10n.tr("route.activity.missing_route_data", "Hệ thống chưa trả về dữ liệu lộ trình cho bước này.")
-        static let aggregateMissingMissionTeamId = L10n.tr("route.aggregate.missing_mission_team_id", "Không có missionTeamId nên chưa thể lấy lộ trình team.")
-        static let aggregateMissingRouteData = L10n.tr("route.aggregate.missing_route_data", "API route team chưa trả về dữ liệu lộ trình.")
+        static let aggregateMissingMissionTeamId = L10n.tr("route.aggregate.missing_mission_team_id", "Không có mã đội của nhiệm vụ nên chưa thể lấy lộ trình của đội.")
+        static let aggregateMissingRouteData = L10n.tr("route.aggregate.missing_route_data", "API lộ trình của đội chưa trả về dữ liệu lộ trình.")
 
         static func activityLoadFailed(_ detail: String) -> String {
             L10n.tr("route.activity.load_failed", "Không thể tải lộ trình: %@", detail)
         }
 
         static func aggregateInvalidStatus(_ status: String) -> String {
-            L10n.tr("route.aggregate.invalid_status", "API route team trả về trạng thái không hợp lệ: %@", status)
+            L10n.tr("route.aggregate.invalid_status", "API lộ trình của đội trả về trạng thái không hợp lệ: %@", status)
         }
 
         static func aggregateLoadFailed(_ detail: String) -> String {
@@ -416,7 +416,7 @@ enum L10n {
         }
 
         static func sharedStepsAtPoint(_ count: String) -> String {
-            L10n.tr("mission.shared_steps_at_point", "%@ bước cùng điểm trong mission", count)
+            L10n.tr("mission.shared_steps_at_point", "%@ bước cùng điểm trong nhiệm vụ", count)
         }
 
         static func coordinateReadFromDescription(_ label: String) -> String {

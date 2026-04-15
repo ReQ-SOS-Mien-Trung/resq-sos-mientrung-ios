@@ -68,7 +68,7 @@ struct ActivityIncidentReportFormView: View {
             }
 
         if labels.isEmpty {
-            return "Chọn activity để xem loại hoạt động"
+            return "Chọn hoạt động để xem loại hoạt động"
         }
 
         return labels.joined(separator: ", ")
@@ -104,7 +104,7 @@ struct ActivityIncidentReportFormView: View {
             .padding(DS.Spacing.md)
         }
         .background(DS.Colors.background.ignoresSafeArea())
-        .navigationTitle("Sự cố activity")
+        .navigationTitle("Sự cố hoạt động")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             configureDefaults()
@@ -132,15 +132,15 @@ struct ActivityIncidentReportFormView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "BÁO SỰ CỐ ACTIVITY")
+            EyebrowLabel(text: "BÁO SỰ CỐ HOẠT ĐỘNG")
 
-            Text("Dùng khi một hoặc nhiều activity gặp vấn đề nhưng team vẫn còn khả năng hoạt động ở mức nào đó.")
+            Text("Dùng khi một hoặc nhiều hoạt động gặp vấn đề nhưng đội vẫn còn khả năng hoạt động ở mức nào đó.")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(DS.Colors.text)
 
             IncidentInlineNotice(
                 icon: "point.bottomleft.forward.to.arrowtriangle.uturn.scurvepath",
-                text: "Form này dành cho sự cố cục bộ: đổi thiết bị, đổi phương tiện, bổ sung người hoặc điều team khác tới hỗ trợ / tiếp quản activity.",
+                text: "Biểu mẫu này dành cho sự cố cục bộ: đổi thiết bị, đổi phương tiện, bổ sung người hoặc điều đội khác tới hỗ trợ / tiếp quản hoạt động.",
                 tone: DS.Colors.warning
             )
         }
@@ -149,14 +149,14 @@ struct ActivityIncidentReportFormView: View {
     private var contextSection: some View {
         IncidentFormSection(
             title: "Thông tin ngữ cảnh",
-            subtitle: "Thông tin chung được lấy từ mission hiện tại và vị trí thiết bị."
+            subtitle: "Thông tin chung được lấy từ nhiệm vụ hiện tại và vị trí thiết bị."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                IncidentContextRow(icon: "flag.fill", title: "Mission", value: mission.title)
-                IncidentContextRow(icon: "person.3.fill", title: "Team đang thực hiện", value: teamName ?? "Chưa có thông tin")
+                IncidentContextRow(icon: "flag.fill", title: "Nhiệm vụ", value: mission.title)
+                IncidentContextRow(icon: "person.3.fill", title: "Đội đang thực hiện", value: teamName ?? "Chưa có thông tin")
                 IncidentContextRow(icon: "person.fill", title: "Người báo cáo", value: reporterName)
                 IncidentContextRow(icon: "clock.fill", title: "Thời gian ghi nhận", value: formattedDisplayDate(recordedAt))
-                IncidentContextRow(icon: "square.stack.3d.up.fill", title: "Loại activity", value: activityTypeSummary)
+                IncidentContextRow(icon: "square.stack.3d.up.fill", title: "Loại hoạt động", value: activityTypeSummary)
                 IncidentLocationSummaryCard(coordinate: currentLocation)
             }
         }
@@ -164,14 +164,14 @@ struct ActivityIncidentReportFormView: View {
 
     private var activitySelectionSection: some View {
         IncidentFormSection(
-            title: "Activity bị ảnh hưởng",
-            subtitle: "Có thể chọn nhiều activity nếu cùng chịu tác động từ một sự cố."
+            title: "Hoạt động bị ảnh hưởng",
+            subtitle: "Có thể chọn nhiều hoạt động nếu cùng chịu tác động từ một sự cố."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 if reportableActivities.isEmpty {
                     IncidentInlineNotice(
                         icon: "exclamationmark.triangle.fill",
-                        text: "Không còn activity dang dở để chọn. Hãy dùng báo sự cố mission nếu toàn team không thể tiếp tục.",
+                        text: "Không còn hoạt động dang dở để chọn. Hãy dùng báo sự cố nhiệm vụ nếu toàn đội không thể tiếp tục.",
                         tone: DS.Colors.danger
                     )
                 } else {
@@ -190,7 +190,7 @@ struct ActivityIncidentReportFormView: View {
                 }
 
                 if draft.selectedActivityIds.isEmpty {
-                    Text("Chọn ít nhất 1 activity để gửi báo cáo.")
+                    Text("Chọn ít nhất 1 hoạt động để gửi báo cáo.")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.danger)
                 }
@@ -200,8 +200,8 @@ struct ActivityIncidentReportFormView: View {
 
     private var incidentTypeSection: some View {
         IncidentFormSection(
-            title: "Loại sự cố activity",
-            subtitle: "Chọn loại chính để form mở đúng nhóm field nghiệp vụ."
+            title: "Loại sự cố hoạt động",
+            subtitle: "Chọn loại chính để biểu mẫu mở đúng nhóm trường nghiệp vụ."
         ) {
             LazyVGrid(columns: gridColumns, spacing: DS.Spacing.xs) {
                 ForEach(RescuerActivityIncidentType.allCases) { type in
@@ -219,22 +219,22 @@ struct ActivityIncidentReportFormView: View {
 
     private var impactSection: some View {
         IncidentFormSection(
-            title: "Mức độ ảnh hưởng tới activity",
-            subtitle: "Ba field này quyết định chỉ log incident hay mở hỗ trợ / điều phối lại activity."
+            title: "Mức độ ảnh hưởng tới hoạt động",
+            subtitle: "Ba trường này quyết định chỉ ghi nhận sự cố hay mở hỗ trợ / điều phối lại hoạt động."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 IncidentBooleanField(
-                    title: "Team hiện tại còn làm tiếp được activity này không?",
-                    subtitle: "Nếu không, điều phối viên cần xem xét hỗ trợ hoặc giao lại activity.",
+                    title: "Đội hiện tại còn làm tiếp được hoạt động này không?",
+                    subtitle: "Nếu không, điều phối viên cần xem xét hỗ trợ hoặc giao lại hoạt động.",
                     value: $draft.canContinueActivity
                 )
 
                 Toggle(isOn: $draft.needSupportSOS) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Tạo yêu cầu hỗ trợ cho activity này")
+                        Text("Tạo yêu cầu hỗ trợ cho hoạt động này")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(DS.Colors.text)
-                        Text("Dùng khi cần thêm team, phương tiện hoặc thiết bị để tiếp tục / hoàn thành.")
+                        Text("Dùng khi cần thêm đội, phương tiện hoặc thiết bị để tiếp tục / hoàn thành.")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
                     }
@@ -243,10 +243,10 @@ struct ActivityIncidentReportFormView: View {
 
                 Toggle(isOn: $draft.needReassignActivity) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Activity cần coordinator giao lại cho team khác")
+                        Text("Hoạt động cần điều phối viên giao lại cho đội khác")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(DS.Colors.text)
-                        Text("Khi bật, form sẽ tự tạo logic tiếp quản activity trong yêu cầu hỗ trợ.")
+                        Text("Khi bật, biểu mẫu sẽ tự thêm nội dung tiếp quản hoạt động trong yêu cầu hỗ trợ.")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
                     }
@@ -313,7 +313,7 @@ struct ActivityIncidentReportFormView: View {
                         text: $draft.lostSupplyQuantity,
                         keyboardType: .numberPad
                     )
-                    IncidentBooleanField(title: "Có ảnh hưởng trực tiếp đến activity không?", value: $draft.lostSupplyDirectImpact)
+                    IncidentBooleanField(title: "Có ảnh hưởng trực tiếp đến hoạt động không?", value: $draft.lostSupplyDirectImpact)
                 }
             case .insufficientStaff:
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
@@ -351,13 +351,13 @@ struct ActivityIncidentReportFormView: View {
             case .missingEquipment:
                 IncidentInlineNotice(
                     icon: "shippingbox.fill",
-                    text: "Phần báo cáo vật phẩm / thiết bị của mission sẽ được gắn API sau. Hiện tại hãy mô tả rõ loại thiết bị còn thiếu và tác động ở phần ghi chú.",
+                    text: "Phần báo cáo vật phẩm / thiết bị của nhiệm vụ sẽ được gắn API sau. Hiện tại hãy mô tả rõ loại thiết bị còn thiếu và tác động ở phần ghi chú.",
                     tone: DS.Colors.info
                 )
             case .accessRouteBlocked, .sceneMoreDangerous, .beyondCurrentCapability, .handOverToAnotherTeam, .other, .none:
                 IncidentInlineNotice(
                     icon: "text.bubble.fill",
-                    text: "Loại sự cố này dùng ghi chú nghiệp vụ bên dưới để mô tả nguyên nhân, phần activity bị ảnh hưởng và hỗ trợ cần nhất.",
+                    text: "Loại sự cố này dùng ghi chú nghiệp vụ bên dưới để mô tả nguyên nhân, phần hoạt động bị ảnh hưởng và hỗ trợ cần nhất.",
                     tone: DS.Colors.info
                 )
             }
@@ -368,8 +368,8 @@ struct ActivityIncidentReportFormView: View {
     private var supportRequestSection: some View {
         if draft.needSupportSOS {
             IncidentFormSection(
-                title: "Yêu cầu hỗ trợ activity",
-                subtitle: "Gửi kèm hỗ trợ điều phối khi activity cần thêm người, thiết bị, phương tiện hoặc team tiếp quản."
+                title: "Yêu cầu hỗ trợ hoạt động",
+                subtitle: "Gửi kèm hỗ trợ điều phối khi hoạt động cần thêm người, thiết bị, phương tiện hoặc đội tiếp quản."
             ) {
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     LazyVGrid(columns: gridColumns, spacing: DS.Spacing.xs) {
@@ -393,7 +393,7 @@ struct ActivityIncidentReportFormView: View {
                     ) { draft.supportPriority = $0 }
 
                     IncidentTextInputField(
-                        title: "Số team cần thêm",
+                        title: "Số đội cần thêm",
                         placeholder: "Có thể để trống nếu chưa xác định",
                         text: $draft.supportTeamCount,
                         keyboardType: .numberPad
@@ -420,7 +420,7 @@ struct ActivityIncidentReportFormView: View {
                     if draft.needReassignActivity {
                         IncidentInlineNotice(
                             icon: "arrow.triangle.swap",
-                            text: "Tiếp quản activity đã được khóa trong yêu cầu hỗ trợ vì bạn đánh dấu cần giao lại activity.",
+                            text: "Tiếp quản hoạt động đã được khóa trong yêu cầu hỗ trợ vì bạn đánh dấu cần giao lại hoạt động.",
                             tone: DS.Colors.warning
                         )
                     }
@@ -431,12 +431,12 @@ struct ActivityIncidentReportFormView: View {
 
     private var teamStatusSection: some View {
         IncidentFormSection(
-            title: "Tình trạng team hiện tại",
-            subtitle: "Activity incident có thể có người bị thương nhẹ nhưng chưa đến mức giải cứu toàn đội."
+            title: "Tình trạng đội hiện tại",
+            subtitle: "Sự cố hoạt động có thể có người bị thương nhẹ nhưng chưa đến mức giải cứu toàn đội."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 IncidentTextInputField(
-                    title: "Tổng số thành viên đang tham gia activity",
+                    title: "Tổng số thành viên đang tham gia hoạt động",
                     placeholder: "Nhập tổng số người",
                     text: $draft.totalMembers,
                     keyboardType: .numberPad
@@ -454,8 +454,8 @@ struct ActivityIncidentReportFormView: View {
                     keyboardType: .numberPad
                 )
                 IncidentTextInputField(
-                    title: "Số người tạm thời không thể tham gia activity",
-                    placeholder: "Nhập số người phải rút khỏi activity",
+                    title: "Số người tạm thời không thể tham gia hoạt động",
+                    placeholder: "Nhập số người phải rút khỏi hoạt động",
                     text: $draft.unavailableMembers,
                     keyboardType: .numberPad
                 )
@@ -467,7 +467,7 @@ struct ActivityIncidentReportFormView: View {
     private var notesSection: some View {
         IncidentFormSection(
             title: "Ghi chú",
-            subtitle: "Mô tả nguyên nhân, phần activity bị ảnh hưởng, những gì team đã thử xử lý và hỗ trợ cần nhất."
+            subtitle: "Mô tả nguyên nhân, phần hoạt động bị ảnh hưởng, những gì đội đã thử xử lý và hỗ trợ cần nhất."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 TextEditor(text: $draft.note)
@@ -491,12 +491,12 @@ struct ActivityIncidentReportFormView: View {
     private var evidenceSection: some View {
         IncidentFormSection(
             title: "Ảnh / video / bằng chứng",
-            subtitle: "Shell UI cho phase này. Upload media thật sẽ gắn ở bước backend / media tiếp theo."
+            subtitle: "Giao diện tạm cho giai đoạn này. Tải media thật sẽ được gắn ở bước máy chủ / media tiếp theo."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 IncidentInlineNotice(
                     icon: "camera.fill",
-                    text: "Có thể dùng cho ảnh phương tiện hỏng, đường bị chặn, thiết bị hư hoặc hiện trường. Hiện tại mới giữ chỗ ở giao diện và model request.",
+                    text: "Có thể dùng cho ảnh phương tiện hỏng, đường bị chặn, thiết bị hư hoặc hiện trường. Hiện tại mới giữ chỗ ở giao diện và mô hình yêu cầu.",
                     tone: DS.Colors.info
                 )
                 IncidentTextInputField(

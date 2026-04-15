@@ -250,7 +250,7 @@ struct MissionDetailView: View {
                     fallbackOriginCoordinate: currentTeamCoordinate,
                     fallbackOriginLabel: currentTeamOriginLabel
                 )
-                .navigationTitle(activity.step.map { "Lộ trình bước \($0)" } ?? "Lộ trình activity")
+                .navigationTitle(activity.step.map { "Lộ trình bước \($0)" } ?? "Lộ trình hoạt động")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -399,11 +399,11 @@ struct MissionDetailView: View {
                 .foregroundColor(DS.Colors.info)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(pendingActivitySyncCount) activity chưa đồng bộ máy chủ")
+                Text("\(pendingActivitySyncCount) hoạt động chưa đồng bộ máy chủ")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(DS.Colors.text)
 
-                Text("Các cập nhật này đã được lưu cục bộ trên thiết bị. App sẽ giữ nguyên trạng thái local cho tới khi backend hỗ trợ đồng bộ batch.")
+                Text("Các cập nhật này đã được lưu cục bộ trên thiết bị. Ứng dụng sẽ giữ nguyên trạng thái cục bộ cho tới khi máy chủ hỗ trợ đồng bộ theo lô.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -488,7 +488,7 @@ struct MissionDetailView: View {
 
     private var activityScopePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Phạm vi theo dõi activity", selection: $activityScopeFilter) {
+            Picker("Phạm vi theo dõi hoạt động", selection: $activityScopeFilter) {
                 ForEach(ActivityScopeFilter.allCases) { scope in
                     Text(scope.title).tag(scope)
                 }
@@ -520,7 +520,7 @@ struct MissionDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Lộ trình tổng hợp theo team")
+                    Text("Lộ trình tổng hợp theo đội")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(DS.Colors.text)
 
@@ -581,7 +581,7 @@ struct MissionDetailView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(DS.Colors.text)
 
-                            Text("Theo dõi nhanh vật phẩm đang được xử lý trong toàn bộ mission.")
+                            Text("Theo dõi nhanh vật phẩm đang được xử lý trong toàn bộ nhiệm vụ.")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(DS.Colors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -769,7 +769,7 @@ struct MissionDetailView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(DS.Colors.text)
 
-                    Text("Tất cả activity của đội hiện tại đã hoàn thành. Mở để tổng kết và nộp báo cáo.")
+                    Text("Tất cả hoạt động của đội hiện tại đã hoàn thành. Mở để tổng kết và nộp báo cáo.")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -928,7 +928,7 @@ struct MissionDetailView: View {
             return "Đội phối hợp: \(teamName)"
         }
 
-        return "Team #\(missionTeamId)"
+        return "Đội #\(missionTeamId)"
     }
 
     private func normalizedStatus(_ status: String) -> String {
@@ -1021,7 +1021,7 @@ struct MissionDetailView: View {
             return "\(activityCount) bước của đội bạn"
         case .all:
             if participatingTeamNames.count > 1 {
-                return "\(activityCount) bước cần theo dõi • \(participatingTeamNames.count) đội cùng mission"
+                return "\(activityCount) bước cần theo dõi • \(participatingTeamNames.count) đội cùng nhiệm vụ"
             }
             return "\(activityCount) bước cần theo dõi"
         }
@@ -1039,18 +1039,18 @@ struct MissionDetailView: View {
         switch activityScopeFilter {
         case .myTeam:
             if hiddenActivityCount > 0 {
-                return "Đang ẩn \(hiddenActivityCount) activity của team khác để bạn tập trung theo dõi phần việc của đội mình."
+                return "Đang ẩn \(hiddenActivityCount) hoạt động của đội khác để bạn tập trung theo dõi phần việc của đội mình."
             }
-            return "Đang chỉ hiển thị activity của đội bạn."
+            return "Đang chỉ hiển thị hoạt động của đội bạn."
         case .all:
-            return "Activity của team khác chỉ để theo dõi, không thể bấm hoàn thành hoặc thất bại."
+            return "Hoạt động của đội khác chỉ để theo dõi, không thể bấm hoàn thành hoặc thất bại."
         }
     }
 
     private var emptyActivitiesMessage: String {
         switch activityScopeFilter {
         case .myTeam:
-            return "Hiện chưa có activity nào được giao cho đội của bạn."
+            return "Hiện chưa có hoạt động nào được giao cho đội của bạn."
         case .all:
             return "Nhiệm vụ này chưa có bước thực hiện nào để theo dõi."
         }
@@ -1114,7 +1114,7 @@ struct MissionDetailView: View {
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.text)
 
-                Text("Backend đang bảo vệ các API mission và activity bằng permission động. Khi được cấp quyền phù hợp, phần hoạt động, báo cáo và sự cố sẽ tự mở.")
+                Text("Hệ thống đang bảo vệ API nhiệm vụ và hoạt động bằng quyền động. Khi được cấp quyền phù hợp, phần hoạt động, báo cáo và sự cố sẽ tự mở.")
                     .font(DS.Typography.caption)
                     .foregroundColor(DS.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

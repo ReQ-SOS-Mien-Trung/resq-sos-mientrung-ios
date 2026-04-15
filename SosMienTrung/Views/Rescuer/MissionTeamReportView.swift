@@ -337,7 +337,7 @@ struct MissionTeamReportView: View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             sectionHeader(
                 title: "Thông tin hiện trường",
-                subtitle: "Điền trực tiếp theo biểu mẫu, ứng dụng sẽ tự chuyển thành dữ liệu gửi backend"
+                subtitle: "Điền trực tiếp theo biểu mẫu, ứng dụng sẽ tự chuyển thành dữ liệu gửi máy chủ"
             )
 
             MissionReportPayloadFormSection(
@@ -700,7 +700,7 @@ struct MissionTeamReportView: View {
         case "fatalities":
             return ("Tử vong", "Số ca tử vong ghi nhận", "exclamationmark.octagon", DS.Colors.accent)
         default:
-            return (friendlyMetricTitle(from: key), "Dữ liệu tổng hợp từ backend", "chart.bar.doc.horizontal", DS.Colors.textSecondary)
+            return (friendlyMetricTitle(from: key), "Dữ liệu tổng hợp từ máy chủ", "chart.bar.doc.horizontal", DS.Colors.textSecondary)
         }
     }
 
@@ -1010,7 +1010,7 @@ private struct MissionReportActivityCard: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(DS.Colors.textSecondary)
 
-                        Text("Chưa tới bước này. Hoàn thành các bước trước để mở form điền thông tin.")
+                        Text("Chưa tới bước này. Hoàn thành các bước trước để mở biểu mẫu điền thông tin.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1055,7 +1055,7 @@ private struct MissionReportActivityCard: View {
                         )
                     }
                 } else {
-                    Text("Nhấn \"Mở form\" để nhập báo cáo bước này, xong có thể ẩn lại.")
+                    Text("Nhấn \"Mở biểu mẫu\" để nhập báo cáo bước này, xong có thể ẩn lại.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1075,7 +1075,7 @@ private struct MissionReportActivityCard: View {
             return "Đang khóa"
         }
 
-        return isExpanded ? "Ẩn form" : "Mở form"
+        return isExpanded ? "Ẩn biểu mẫu" : "Mở biểu mẫu"
     }
 
     private var expandButtonIcon: String {

@@ -40,7 +40,7 @@ struct ChatRoomsView: View {
         rooms.append(ChatRoom(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000000") ?? UUID(),
             type: .general,
-            name: "Chat Tổng",
+            name: "Trò chuyện tổng",
             avatar: "bubble.left.fill",
             user: nil,
             unreadCount: generalUnread,
@@ -91,7 +91,7 @@ struct ChatRoomsView: View {
             // Header
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 EyebrowLabel(text: "TIN NHẮN")
-                Text("Chat")
+                Text("Trò chuyện")
                     .font(DS.Typography.largeTitle)
                     .foregroundColor(DS.Colors.text)
 
@@ -112,7 +112,7 @@ struct ChatRoomsView: View {
 
             // Search bar
             ResQTextField(
-                placeholder: "Tìm kiếm phòng chat...",
+                placeholder: "Tìm kiếm phòng trò chuyện...",
                 text: $searchText,
                 icon: "magnifyingglass"
             )
@@ -125,10 +125,10 @@ struct ChatRoomsView: View {
                     Image(systemName: "bubble.left.slash")
                         .font(.system(size: 48, weight: .bold))
                         .foregroundColor(DS.Colors.textTertiary)
-                    Text("Chưa có phòng chat nào")
+                    Text("Chưa có phòng trò chuyện nào")
                         .font(DS.Typography.headline)
                         .foregroundColor(DS.Colors.textSecondary)
-                    Text("Đợi người khác mở app và ở gần bạn")
+                    Text("Đợi người khác mở ứng dụng và ở gần bạn")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textTertiary)
                 }

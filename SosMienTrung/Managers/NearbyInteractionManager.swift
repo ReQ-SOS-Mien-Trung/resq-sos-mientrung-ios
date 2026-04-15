@@ -71,7 +71,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         session.delegate = self
 
         guard isNearbyInteractionSupported else {
-            statusMessage = "Nearby Interaction not supported on this device."
+            statusMessage = "Nearby Interaction không được hỗ trợ trên thiết bị này."
             return
         }
 
@@ -87,7 +87,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
             print("🔎 NI EDM local support: \(caps.supportsExtendedDistanceMeasurement)")
         }
 
-        statusMessage = "Searching for rescue teammates..."
+        statusMessage = "Đang tìm đồng đội cứu hộ..."
         if hapticsAvailable {
             feedbackGenerator.prepare()
         }
@@ -204,7 +204,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         guard isModeActive else { return }
         guard let peer = trackedPeer, let token = tokensByPeer[peer] else { return }
 
-        statusMessage = "AR sensor unavailable. Using range-only tracking."
+        statusMessage = "Cảm biến AR không khả dụng. Chuyển sang theo dõi chỉ bằng khoảng cách."
         configureSession(for: peer, token: token)
     }
 
@@ -217,13 +217,13 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
     /// Bật Nearby Interaction khi user thực sự mở flow cứu hộ/chờ cứu.
     func configureForPeerFinding() {
         guard isNearbyInteractionSupported else {
-            statusMessage = "Nearby Interaction not supported on this device."
+            statusMessage = "Nearby Interaction không được hỗ trợ trên thiết bị này."
             return
         }
         pendingDeactivateWorkItem?.cancel()
         pendingDeactivateWorkItem = nil
         isModeActive = true
-        statusMessage = "Searching for nearby devices..."
+        statusMessage = "Đang tìm thiết bị ở gần..."
         print("🔎 Nearby mode active")
         prepareDiscoveryTokenIfNeeded()
         restoreTrackedPeerIfPossible()
@@ -245,7 +245,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         pendingDeactivateWorkItem = nil
         isModeActive = false
         trackedPeer = nil
-        statusMessage = "Nearby Interaction is idle."
+        statusMessage = "Nearby Interaction đang ở trạng thái chờ."
         latestDistance = nil
         latestDirection = nil
         latestHorizontalAngle = nil
@@ -272,7 +272,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
     func setActivePeer(_ peer: MCPeerID?) {
         guard isNearbyInteractionSupported else {
-            statusMessage = "Nearby Interaction not supported on this device."
+            statusMessage = "Nearby Interaction không được hỗ trợ trên thiết bị này."
             return
         }
 
@@ -288,11 +288,11 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
         trackedPeer = peer
         guard let peer else {
-            statusMessage = "Select a peer to start tracking."
+            statusMessage = "Hãy chọn thiết bị ngang hàng để bắt đầu theo dõi."
             return
         }
 
-        statusMessage = "Tracking \(peer.displayName)..."
+        statusMessage = "Đang theo dõi \(peer.displayName)..."
 
         guard let token = tokensByPeer[peer] else {
             // Token chưa sẵn sàng — lưu peer lại, sẽ configure khi nhận được token
@@ -314,7 +314,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         trackedPeer = nil
         pendingARSessionAttachment = false
         resetTrackingVisualState()
-        statusMessage = "Peer disconnected. Waiting to reconnect..."
+        statusMessage = "Thiết bị ngang hàng đã ngắt kết nối. Đang chờ kết nối lại..."
         recreateSession(allowARReattach: false, reason: "transport-disconnect")
     }
 
@@ -371,7 +371,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
     private func configureSession(for peer: MCPeerID, token: NIDiscoveryToken) {
         guard isNearbyInteractionSupported else {
-            statusMessage = "Nearby Interaction not supported on this device."
+            statusMessage = "Nearby Interaction không được hỗ trợ trên thiết bị này."
             return
         }
         guard multipeerSession?.isConnected(to: peer) ?? false else {
@@ -417,7 +417,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         }
 
         session.run(configuration)
-        statusMessage = "Tracking \(peer.displayName)"
+        statusMessage = "Đang theo dõi \(peer.displayName)"
         lastDistanceForHaptics = nil
         print("▶️ NISession.run() for peer \(peer.displayName) [cameraAssist=\(configuration.isCameraAssistanceEnabled)]")
     }
@@ -434,7 +434,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
             restartCount = 0
             // Tạo session mới KHÔNG có ARSession (range-only)
             recreateSession(allowARReattach: false, reason: "restart-range-only")
-            statusMessage = "Range-only mode (no AR)"
+            statusMessage = "Chế độ chỉ khoảng cách (không dùng AR)"
 
             // Đợi discoveryToken sẵn sàng trước khi configure + broadcast
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -449,7 +449,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         }
 
         recreateSession(allowARReattach: !cameraAssistanceFailed, reason: "restart")
-        statusMessage = "Reconnecting..."
+        statusMessage = "Đang kết nối lại..."
 
         // Đợi discoveryToken sẵn sàng (NISession cần vài ms sau init)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -509,7 +509,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
         pendingARSessionAttachment = false
         isARSessionAttachedToNI = false
         restartCount = 0
-        statusMessage = "Camera assistance unavailable. Falling back to range-only mode."
+        statusMessage = "Hỗ trợ camera không khả dụng. Chuyển về chế độ chỉ khoảng cách."
         print("⚠️ Invalid AR configuration. Falling back to range-only NI.")
 
         guard isModeActive else { return }
@@ -540,11 +540,11 @@ final class NearbyInteractionManager: NSObject, ObservableObject, ARSessionDeleg
 
         switch reason {
         case .peerEnded:
-            statusMessage = "Peer ended nearby session. Waiting to reconnect..."
+            statusMessage = "Thiết bị ngang hàng đã kết thúc phiên lân cận. Đang chờ kết nối lại..."
         case .timeout:
-            statusMessage = "Signal lost. Reconnecting..."
+            statusMessage = "Mất tín hiệu. Đang kết nối lại..."
         default:
-            statusMessage = "Peer removed. Re-establishing session..."
+            statusMessage = "Thiết bị ngang hàng đã bị gỡ. Đang thiết lập lại phiên..."
         }
 
         guard isModeActive else {
@@ -700,14 +700,14 @@ extension NearbyInteractionManager: NISessionDelegate {
                     self.showUpDownText = nil
                 }
                 
-                self.statusMessage = "Tracking \(peer.displayName)"
+                self.statusMessage = "Đang theo dõi \(peer.displayName)"
             }
         }
     }
 
     func sessionWasSuspended(_ session: NISession) {
         DispatchQueue.main.async {
-            self.statusMessage = "Session suspended. Moving will resume tracking."
+            self.statusMessage = "Phiên tạm ngưng. Di chuyển thiết bị sẽ tiếp tục theo dõi."
             self.currentWorldTransform = nil
             self.showCoachingOverlay = true
             self.showUpDownText = nil
@@ -742,7 +742,7 @@ extension NearbyInteractionManager: NISessionDelegate {
 
     func sessionSuspensionEnded(_ session: NISession) {
         DispatchQueue.main.async {
-            self.statusMessage = "Session resumed."
+            self.statusMessage = "Phiên đã tiếp tục."
             self.currentWorldTransform = nil
             self.showCoachingOverlay = true
             self.showUpDownText = nil
@@ -758,7 +758,7 @@ extension NearbyInteractionManager: NISessionDelegate {
         }
 
         DispatchQueue.main.async {
-            self.statusMessage = "Session invalidated: \(error.localizedDescription)"
+            self.statusMessage = "Phiên đã bị vô hiệu hóa: \(error.localizedDescription)"
             self.currentWorldTransform = nil
             self.showCoachingOverlay = true
             self.showUpDownText = nil

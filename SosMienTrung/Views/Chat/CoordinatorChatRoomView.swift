@@ -64,7 +64,7 @@ struct CoordinatorChatRoomView: View {
             inputBar
         }
         .background(DS.Colors.background)
-        .navigationTitle("Chat hỗ trợ")
+        .navigationTitle("Trò chuyện hỗ trợ")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             CoordinatorChatVisibilityState.shared.enter(conversationId: vm.conversationId)
@@ -295,7 +295,7 @@ struct CoordinatorChatRoomView: View {
                             .font(DS.Typography.headline)
                             .foregroundColor(DS.Colors.text)
 
-                        Text("Tạo SOS mới hoặc tải lại danh sách để chia sẻ thẻ SOS trong chat.")
+                        Text("Tạo SOS mới hoặc tải lại danh sách để chia sẻ thẻ SOS trong phòng trò chuyện.")
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.textSecondary)
                             .multilineTextAlignment(.center)

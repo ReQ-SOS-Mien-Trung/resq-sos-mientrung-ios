@@ -25,11 +25,11 @@ enum RescuerActivityIncidentType: String, Codable, CaseIterable, Identifiable {
         case .equipmentDamage: return "Hư hỏng thiết bị"
         case .vehicleDamage: return "Hư hỏng phương tiện"
         case .missingEquipment: return "Thiếu thiết bị để tiếp tục"
-        case .insufficientStaff: return "Thiếu nhân lực cho activity"
+        case .insufficientStaff: return "Thiếu nhân lực cho hoạt động"
         case .accessRouteBlocked: return "Đường tiếp cận bị chặn"
         case .sceneMoreDangerous: return "Điều kiện hiện trường nguy hiểm hơn dự kiến"
         case .beyondCurrentCapability: return "Nạn nhân / hiện trường vượt khả năng xử lý hiện tại"
-        case .handOverToAnotherTeam: return "Bàn giao activity cho team khác"
+        case .handOverToAnotherTeam: return "Bàn giao hoạt động cho đội khác"
         case .other: return "Khác"
         }
     }
@@ -97,15 +97,15 @@ enum ActivitySupportType: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .extraRescuerTeam: return "Thêm team rescuer hỗ trợ activity"
-        case .specializedTeam: return "Team chuyên môn phù hợp hơn"
+        case .extraRescuerTeam: return "Thêm đội người cứu hộ hỗ trợ hoạt động"
+        case .specializedTeam: return "Đội chuyên môn phù hợp hơn"
         case .replacementVehicle: return "Phương tiện thay thế"
         case .replacementEquipment: return "Thiết bị thay thế"
         case .medicalTeam: return "Đội y tế"
         case .roadClearanceTeam: return "Đội mở đường / phá dỡ"
         case .victimTransportTeam: return "Đội vận chuyển nạn nhân"
         case .fuelOrPowerSupply: return "Tiếp tế nhiên liệu / điện"
-        case .takeOverActivity: return "Tiếp quản activity"
+        case .takeOverActivity: return "Tiếp quản hoạt động"
         case .other: return "Khác"
         }
     }
@@ -179,13 +179,13 @@ enum RescuerMissionIncidentType: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .wholeTeamStranded: return "Cả team mắc kẹt"
+        case .wholeTeamStranded: return "Cả đội mắc kẹt"
         case .multipleMembersInjured: return "Nhiều thành viên bị thương"
         case .primaryVehicleDisabled: return "Phương tiện chính hỏng / lật / mất khả năng di chuyển"
-        case .cannotExitDangerZone: return "Team không thể rút khỏi khu vực nguy hiểm"
+        case .cannotExitDangerZone: return "Đội không thể rút khỏi khu vực nguy hiểm"
         case .lostCommunication: return "Mất liên lạc / mất định vị"
-        case .missionBeyondCapability: return "Hiện trường vượt quá khả năng mission"
-        case .forcedStopForSafety: return "Buộc dừng mission vì nguy cơ an toàn"
+        case .missionBeyondCapability: return "Hiện trường vượt quá khả năng nhiệm vụ"
+        case .forcedStopForSafety: return "Buộc dừng nhiệm vụ vì nguy cơ an toàn"
         case .insufficientManpower: return "Không còn đủ nhân lực để tiếp tục"
         case .missingCriticalEquipment: return "Không còn phương tiện / thiết bị cốt lõi"
         case .other: return "Khác"
@@ -204,10 +204,10 @@ enum MissionDecision: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .continueMission: return "Mission vẫn tiếp tục được"
-        case .pauseMission: return "Mission tạm dừng"
-        case .stopMission: return "Mission buộc dừng"
-        case .handOverMission: return "Cần bàn giao mission cho team khác"
+        case .continueMission: return "Nhiệm vụ vẫn tiếp tục được"
+        case .pauseMission: return "Nhiệm vụ tạm dừng"
+        case .stopMission: return "Nhiệm vụ buộc dừng"
+        case .handOverMission: return "Cần bàn giao nhiệm vụ cho đội khác"
         case .rescueWholeTeamImmediately: return "Cần giải cứu toàn đội ngay"
         }
     }
@@ -347,14 +347,14 @@ enum MissionRescueSupportType: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .rescuerExtractionTeam: return "Đội giải cứu rescuer team"
+        case .rescuerExtractionTeam: return "Đội giải cứu đội người cứu hộ"
         case .emergencyMedicalTeam: return "Đội y tế khẩn"
         case .evacuationVehicle: return "Phương tiện sơ tán"
         case .waterVehicle: return "Phương tiện đường thủy"
         case .specializedVehicle: return "Phương tiện chuyên dụng"
         case .advancedRescueEquipment: return "Thiết bị cứu hộ chuyên sâu"
         case .communicationTrackingSupport: return "Hỗ trợ liên lạc / định vị"
-        case .takeOverMissionTeam: return "Đội tiếp quản mission dang dở"
+        case .takeOverMissionTeam: return "Đội tiếp quản nhiệm vụ dang dở"
         case .transferVictimsWithTeam: return "Tiếp nhận nạn nhân đang đi cùng"
         case .other: return "Khác"
         }
@@ -626,8 +626,8 @@ struct ActivityIncidentDraft: Equatable {
 
     var submitButtonTitle: String {
         needSupportSOS
-            ? "Gửi báo cáo & yêu cầu hỗ trợ activity"
-            : "Gửi báo cáo sự cố activity"
+            ? "Gửi báo cáo & yêu cầu hỗ trợ hoạt động"
+            : "Gửi báo cáo sự cố hoạt động"
     }
 
     var trimmedNote: String {
@@ -855,14 +855,14 @@ struct MissionIncidentDraft: Equatable {
 
     var submitButtonTitle: String {
         if needsRescueSOS {
-            return "Gửi báo cáo & yêu cầu giải cứu team"
+            return "Gửi báo cáo & yêu cầu giải cứu đội"
         }
 
         if needsMissionHandover == true {
-            return "Gửi báo cáo & bàn giao mission"
+            return "Gửi báo cáo & bàn giao nhiệm vụ"
         }
 
-        return "Gửi báo cáo sự cố mission"
+        return "Gửi báo cáo sự cố nhiệm vụ"
     }
 
     var trimmedNote: String {

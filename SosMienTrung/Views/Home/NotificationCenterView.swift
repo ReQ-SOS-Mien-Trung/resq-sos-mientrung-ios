@@ -179,9 +179,9 @@ struct NotificationCenterView: View {
         case "flood_alert":
             return "Cảnh báo lũ"
         case "coordinator_join":
-            return "Coordinator đã tham gia"
+            return "Người điều phối đã tham gia"
         case "coordinator_leave":
-            return "Coordinator đã rời"
+            return "Người điều phối đã rời"
         case "supply_request":
             return "Yêu cầu cung cấp vật tư mới"
         case "supply_request_urgent":

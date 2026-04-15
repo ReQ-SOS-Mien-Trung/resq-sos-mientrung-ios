@@ -218,10 +218,10 @@ struct HomeView: View {
                 Image(systemName: "headphones.circle.fill")
                     .font(.system(size: 20, weight: .bold))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("CHAT VỚI TỔNG ĐÀI VIÊN")
+                    Text("TRÒ CHUYỆN VỚI ĐIỀU PHỐI VIÊN")
                         .font(DS.Typography.headline)
                         .tracking(1.5)
-                    Text("Kết nối trực tiếp với Coordinator hỗ trợ")
+                    Text("Kết nối trực tiếp với điều phối viên hỗ trợ")
                         .font(DS.Typography.caption)
                         .opacity(0.85)
                 }
@@ -275,7 +275,7 @@ struct HomeView: View {
             if canCreateSosRequest {
                 ResQGridButton(
                     icon: "figure.wave.circle.fill",
-                    title: "Chờ cứu\n(Victim)",
+                    title: "Chờ cứu\n(Nạn nhân)",
                     accentColor: DS.Colors.danger
                 ) {
                     showVictimStandby = true

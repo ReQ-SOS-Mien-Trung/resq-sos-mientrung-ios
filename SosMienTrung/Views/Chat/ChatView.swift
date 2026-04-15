@@ -15,8 +15,8 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Header
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                EyebrowLabel(text: "EMERGENCY CHAT")
-                Text("Chat Tổng")
+                EyebrowLabel(text: "TRÒ CHUYỆN KHẨN CẤP")
+                Text("Trò chuyện tổng")
                     .font(DS.Typography.largeTitle)
                     .foregroundColor(DS.Colors.text)
 

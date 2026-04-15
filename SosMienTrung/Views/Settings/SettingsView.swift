@@ -228,7 +228,7 @@ struct SettingsView: View {
         .alert("Về ứng dụng", isPresented: $showAbout) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("ResQ — SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động offline qua mạng mesh.\n\n© 2026 Capstone Project")
+            Text("ResQ — SOS Miền Trung v1.0.0\n\nỨng dụng hỗ trợ kết nối và cứu trợ trong thiên tai, hoạt động ngoại tuyến qua mạng mesh.\n\n© 2026 Dự án Capstone")
         }
         .alert("Đăng xuất", isPresented: $showLogoutConfirmation) {
             Button("Hủy", role: .cancel) { }
@@ -267,7 +267,7 @@ struct SettingsView: View {
         } else if relativeProfileStore.isServerSyncEnabled {
             syncStatus = "đồng bộ máy chủ"
         } else {
-            syncStatus = "chỉ lưu local"
+            syncStatus = "chỉ lưu cục bộ"
         }
 
         if count == 0 {
@@ -977,7 +977,7 @@ struct EditProfileView: View {
         } catch {
             localAvatarImage = previousLocalAvatar
             avatarUrl = previousAvatarURL
-            errorMessage = "Upload ảnh thất bại: \(error.localizedDescription)"
+            errorMessage = "Tải ảnh lên thất bại: \(error.localizedDescription)"
             showError = true
         }
     }

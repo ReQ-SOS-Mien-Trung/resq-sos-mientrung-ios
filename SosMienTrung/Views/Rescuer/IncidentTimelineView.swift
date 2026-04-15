@@ -143,7 +143,7 @@ struct IncidentRowView: View {
         case "mission":
             return "Toàn đội"
         case "activity":
-            return "Theo activity"
+            return "Theo hoạt động"
         default:
             return nil
         }

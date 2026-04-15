@@ -60,7 +60,7 @@ struct MissionAggregateRouteSheetView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            Text("Điều hướng theo toàn bộ activity còn lại")
+            Text("Điều hướng theo toàn bộ hoạt động còn lại")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(DS.Colors.text)
 
@@ -104,7 +104,7 @@ struct MissionAggregateRouteSheetView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(originKind == .device ? DS.Colors.success : DS.Colors.info)
 
-                Text("Điểm xuất phát của team")
+                Text("Điểm xuất phát của đội")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(DS.Colors.text)
 
@@ -146,7 +146,7 @@ struct MissionAggregateRouteSheetView: View {
     private var loadingCard: some View {
         HStack(spacing: DS.Spacing.sm) {
             ProgressView()
-            Text("Đang tổng hợp lộ trình xuất phát từ vị trí hiện tại của team...")
+            Text("Đang tổng hợp lộ trình xuất phát từ vị trí hiện tại của đội...")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
         }
@@ -204,12 +204,12 @@ struct MissionAggregateRouteSheetView: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundColor(DS.Colors.success)
-                Text("Tất cả activity đã hoàn tất")
+                Text("Tất cả hoạt động đã hoàn tất")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(DS.Colors.text)
             }
 
-            Text("Lộ trình sẽ tự cập nhật khi có activity mới được phân công.")
+            Text("Lộ trình sẽ tự cập nhật khi có hoạt động mới được phân công.")
                 .font(DS.Typography.caption)
                 .foregroundColor(DS.Colors.textSecondary)
         }

@@ -98,7 +98,7 @@ struct VictimStandbyView: View {
                 HStack {
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .foregroundColor(DS.Colors.accent)
-                    Text("Nearby Interaction (UWB)")
+                    Text("Tương tác lân cận (UWB)")
                         .font(DS.Typography.headline)
                     Spacer()
                     ResQBadge(text: "ĐANG QUÉT", color: DS.Colors.accent)
@@ -110,7 +110,7 @@ struct VictimStandbyView: View {
                 HStack {
                     Image(systemName: "network")
                         .foregroundColor(DS.Colors.info)
-                    Text("Local Network (Multipeer)")
+                    Text("Mạng cục bộ (Multipeer)")
                         .font(DS.Typography.headline)
                     Spacer()
                     ResQBadge(text: "SẴN SÀNG", color: DS.Colors.info)

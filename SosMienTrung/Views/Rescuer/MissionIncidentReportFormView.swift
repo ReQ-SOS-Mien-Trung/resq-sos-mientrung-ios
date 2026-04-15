@@ -77,7 +77,7 @@ struct MissionIncidentReportFormView: View {
             .padding(DS.Spacing.md)
         }
         .background(DS.Colors.background.ignoresSafeArea())
-        .navigationTitle("Sự cố mission")
+        .navigationTitle("Sự cố nhiệm vụ")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             configureDefaults()
@@ -109,15 +109,15 @@ struct MissionIncidentReportFormView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "BÁO SỰ CỐ MISSION", color: DS.Colors.danger)
+            EyebrowLabel(text: "BÁO SỰ CỐ NHIỆM VỤ", color: DS.Colors.danger)
 
-            Text("Dùng khi toàn bộ team đang làm mission rơi vào tình huống không thể tiếp tục nhiệm vụ.")
+            Text("Dùng khi toàn bộ đội đang làm nhiệm vụ rơi vào tình huống không thể tiếp tục.")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(DS.Colors.text)
 
             IncidentInlineNotice(
                 icon: "shield.lefthalf.filled.badge.exclamationmark",
-                text: "Form này nghiêm trọng hơn activity incident: có thể phải dừng mission, bàn giao cho team khác hoặc giải cứu chính đội cứu hộ hiện tại.",
+                text: "Biểu mẫu này nghiêm trọng hơn sự cố hoạt động: có thể phải dừng nhiệm vụ, bàn giao cho đội khác hoặc giải cứu chính đội cứu hộ hiện tại.",
                 tone: DS.Colors.danger
             )
         }
@@ -125,27 +125,27 @@ struct MissionIncidentReportFormView: View {
 
     private var contextSection: some View {
         IncidentFormSection(
-            title: "Thông tin mission",
-            subtitle: "Context tự động từ mission hiện tại, cộng thêm trạng thái nạn nhân / người dân đang đi cùng."
+            title: "Thông tin nhiệm vụ",
+            subtitle: "Ngữ cảnh tự động từ nhiệm vụ hiện tại, cộng thêm trạng thái nạn nhân / người dân đang đi cùng."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                IncidentContextRow(icon: "flag.fill", title: "Mission", value: mission.title)
-                IncidentContextRow(icon: "person.3.fill", title: "Team", value: teamName ?? "Chưa có thông tin")
+                IncidentContextRow(icon: "flag.fill", title: "Nhiệm vụ", value: mission.title)
+                IncidentContextRow(icon: "person.3.fill", title: "Đội", value: teamName ?? "Chưa có thông tin")
                 IncidentContextRow(icon: "person.fill", title: "Người báo cáo", value: reporterName)
                 IncidentContextRow(icon: "clock.fill", title: "Thời gian ghi nhận", value: formattedDisplayDate(recordedAt))
-                IncidentContextRow(icon: "checklist", title: "Số activity chưa hoàn thành", value: "\(unresolvedActivitiesCount)")
+                IncidentContextRow(icon: "checklist", title: "Số hoạt động chưa hoàn thành", value: "\(unresolvedActivitiesCount)")
                 IncidentLocationSummaryCard(coordinate: currentLocation)
 
                 IncidentBooleanField(
                     title: "Có nạn nhân / người dân đang đi cùng không?",
-                    subtitle: "Dùng khi team đang chở hoặc đang giữ an toàn cho người dân / nạn nhân.",
+                    subtitle: "Dùng khi đội đang chở hoặc đang giữ an toàn cho người dân / nạn nhân.",
                     value: $draft.hasCiviliansWithTeam
                 )
 
                 if draft.hasCiviliansWithTeam == true {
                     IncidentTextInputField(
                         title: "Số nạn nhân / người dân đang đi cùng",
-                        placeholder: "Nhập số người đang đi cùng team",
+                        placeholder: "Nhập số người đang đi cùng đội",
                         text: $draft.civilianCount,
                         keyboardType: .numberPad
                     )
@@ -162,8 +162,8 @@ struct MissionIncidentReportFormView: View {
 
     private var incidentTypeSection: some View {
         IncidentFormSection(
-            title: "Loại sự cố mission",
-            subtitle: "Chỉ dùng cho sự cố ảnh hưởng cấp toàn nhiệm vụ, không phải lỗi cục bộ của một activity."
+            title: "Loại sự cố nhiệm vụ",
+            subtitle: "Chỉ dùng cho sự cố ảnh hưởng cấp toàn nhiệm vụ, không phải lỗi cục bộ của một hoạt động."
         ) {
             LazyVGrid(columns: gridColumns, spacing: DS.Spacing.xs) {
                 ForEach(RescuerMissionIncidentType.allCases) { type in
@@ -181,8 +181,8 @@ struct MissionIncidentReportFormView: View {
 
     private var missionDecisionSection: some View {
         IncidentFormSection(
-            title: "Quyết định với mission",
-            subtitle: "Đây là block bắt buộc vì nó quyết định mission tiếp tục, dừng, bàn giao hay chuyển sang giải cứu đội."
+            title: "Quyết định với nhiệm vụ",
+            subtitle: "Đây là mục bắt buộc vì nó quyết định nhiệm vụ tiếp tục, dừng, bàn giao hay chuyển sang giải cứu đội."
         ) {
             LazyVGrid(columns: gridColumns, spacing: DS.Spacing.xs) {
                 ForEach(MissionDecision.allCases) { decision in
@@ -201,11 +201,11 @@ struct MissionIncidentReportFormView: View {
     private var teamStatusSection: some View {
         IncidentFormSection(
             title: "Tình trạng đội cứu hộ",
-            subtitle: "Phần trọng tâm để hệ thống biết chính team rescuer hiện đang an toàn đến đâu."
+            subtitle: "Phần trọng tâm để hệ thống biết chính đội người cứu hộ hiện đang an toàn đến đâu."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 IncidentTextInputField(
-                    title: "Tổng số thành viên team",
+                    title: "Tổng số thành viên đội",
                     placeholder: "Nhập tổng số thành viên",
                     text: $draft.totalMembers,
                     keyboardType: .numberPad
@@ -243,7 +243,7 @@ struct MissionIncidentReportFormView: View {
 
                 IncidentBooleanField(
                     title: "Có người cần cấp cứu ngay không?",
-                    subtitle: "Giữ lại logic SOS y tế nhưng đối tượng là rescuer team.",
+                    subtitle: "Giữ lại logic SOS y tế nhưng đối tượng là đội người cứu hộ.",
                     value: $draft.needsImmediateEmergencyCare
                 )
 
@@ -273,7 +273,7 @@ struct MissionIncidentReportFormView: View {
     private var vehicleSection: some View {
         IncidentFormSection(
             title: "Tình trạng phương tiện và khả năng rút lui",
-            subtitle: "Phần này giúp hệ thống quyết định team còn tự rút được hay cần giải cứu."
+            subtitle: "Phần này giúp hệ thống quyết định đội còn tự rút được hay cần giải cứu."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 selectGrid(
@@ -321,8 +321,8 @@ struct MissionIncidentReportFormView: View {
 
     private var rescueSection: some View {
         IncidentFormSection(
-            title: "Yêu cầu giải cứu team",
-            subtitle: "Dùng khi team hiện tại không thể tiếp tục mission và cần lực lượng khác tới giải cứu / sơ tán."
+            title: "Yêu cầu giải cứu đội",
+            subtitle: "Dùng khi đội hiện tại không thể tiếp tục nhiệm vụ và cần lực lượng khác tới giải cứu / sơ tán."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 Toggle(isOn: rescueToggleBinding) {
@@ -330,7 +330,7 @@ struct MissionIncidentReportFormView: View {
                         Text("Tạo yêu cầu giải cứu đội cứu hộ")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(DS.Colors.text)
-                        Text("Nếu bật, form sẽ gửi kèm nhu cầu giải cứu, sơ tán, y tế hoặc tiếp quản mission.")
+                        Text("Nếu bật, biểu mẫu sẽ gửi kèm nhu cầu giải cứu, sơ tán, y tế hoặc tiếp quản nhiệm vụ.")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
                     }
@@ -340,7 +340,7 @@ struct MissionIncidentReportFormView: View {
                 if requiresRescueRequest {
                     IncidentInlineNotice(
                         icon: "bolt.fill",
-                        text: "Yêu cầu giải cứu đã được bật bắt buộc vì mission cần giải cứu toàn đội ngay hoặc team không thể tự rút.",
+                        text: "Yêu cầu giải cứu đã được bật bắt buộc vì nhiệm vụ cần giải cứu toàn đội ngay hoặc đội không thể tự rút.",
                         tone: DS.Colors.danger
                     )
                 }
@@ -378,19 +378,19 @@ struct MissionIncidentReportFormView: View {
 
     private var handoverSection: some View {
         IncidentFormSection(
-            title: "Bàn giao mission",
-            subtitle: "Mission-level incident cần xác định rõ có phải chuyển giao phần việc dang dở cho team khác không."
+            title: "Bàn giao nhiệm vụ",
+            subtitle: "Sự cố cấp nhiệm vụ cần xác định rõ có phải chuyển giao phần việc dang dở cho đội khác không."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 if requiresHandover {
                     IncidentInlineNotice(
                         icon: "arrow.triangle.branch",
-                        text: "Block bàn giao đang ở trạng thái bắt buộc vì bạn chọn quyết định cần bàn giao mission cho team khác.",
+                        text: "Mục bàn giao đang ở trạng thái bắt buộc vì bạn chọn quyết định cần bàn giao nhiệm vụ cho đội khác.",
                         tone: DS.Colors.warning
                     )
                 } else {
                     IncidentBooleanField(
-                        title: "Có cần team khác tiếp quản mission không?",
+                        title: "Có cần đội khác tiếp quản nhiệm vụ không?",
                         value: $draft.needsMissionHandover
                     )
                 }
@@ -398,13 +398,13 @@ struct MissionIncidentReportFormView: View {
                 if draft.needsMissionHandover == true {
                     IncidentTextInputField(
                         title: "Phần việc dang dở",
-                        placeholder: "Mô tả những gì mission chưa thể hoàn tất",
+                        placeholder: "Mô tả những gì nhiệm vụ chưa thể hoàn tất",
                         text: $draft.unfinishedWork,
                         axis: .vertical
                     )
                     IncidentTextInputField(
-                        title: "Số activity chưa hoàn thành",
-                        placeholder: "Mặc định theo mission hiện tại",
+                        title: "Số hoạt động chưa hoàn thành",
+                        placeholder: "Mặc định theo nhiệm vụ hiện tại",
                         text: $draft.unfinishedActivityCount,
                         keyboardType: .numberPad
                     )
@@ -415,7 +415,7 @@ struct MissionIncidentReportFormView: View {
                         axis: .vertical
                     )
                     IncidentTextInputField(
-                        title: "Lưu ý cho team tiếp quản",
+                        title: "Lưu ý cho đội tiếp quản",
                         placeholder: "Cảnh báo hiện trường, tuyến vào, trạng thái nạn nhân, thiết bị còn lại...",
                         text: $draft.notesForTakeoverTeam,
                         axis: .vertical
@@ -434,7 +434,7 @@ struct MissionIncidentReportFormView: View {
     private var notesSection: some View {
         IncidentFormSection(
             title: "Ghi chú",
-            subtitle: "Mô tả ngắn nguyên nhân, mức nguy hiểm với team hiện tại và hành động đã thử trước khi gửi báo cáo."
+            subtitle: "Mô tả ngắn nguyên nhân, mức nguy hiểm với đội hiện tại và hành động đã thử trước khi gửi báo cáo."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 TextEditor(text: $draft.note)
@@ -458,12 +458,12 @@ struct MissionIncidentReportFormView: View {
     private var evidenceSection: some View {
         IncidentFormSection(
             title: "Ảnh / video / bằng chứng",
-            subtitle: "Shell UI để giữ chỗ cho media trong request model của phase sau."
+            subtitle: "Giao diện tạm để giữ chỗ cho media trong mô hình yêu cầu của giai đoạn sau."
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                 IncidentInlineNotice(
                     icon: "camera.macro",
-                    text: "Hiện chưa upload ảnh/video thật. Phần này chỉ giữ chỗ trong giao diện và model để backend/media hook vào sau.",
+                    text: "Hiện chưa tải ảnh/video thật. Phần này chỉ giữ chỗ trong giao diện và mô hình dữ liệu để hệ thống media kết nối vào sau.",
                     tone: DS.Colors.info
                 )
                 IncidentTextInputField(
