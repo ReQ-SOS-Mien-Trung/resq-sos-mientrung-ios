@@ -91,7 +91,7 @@ struct SOSDetailView: View {
                     }
                 }
             }
-            .sheet(isPresented: $isEditing) {
+            .fullScreenCover(isPresented: $isEditing) {
                 SOSEditView(
                     savedSOS: currentSOS,
                     bridgefyManager: bridgefyManager
@@ -523,8 +523,9 @@ struct SOSDetailView: View {
     
     private func sosTypeCard(_ type: SOSType) -> some View {
         HStack(spacing: 16) {
-            Text(type.icon)
-                .font(.system(size: 40))
+            Image(systemName: type.symbolName)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundColor(type == .rescue ? DS.Colors.danger : .orange)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(type.title)
@@ -563,6 +564,13 @@ struct SOSDetailView: View {
         return types
     }
 
+    private var detailTypeSymbolName: String {
+        guard detailSelectedTypes.count == 1 else {
+            return "exclamationmark.triangle.fill"
+        }
+        return detailSelectedTypes.first?.symbolName ?? "exclamationmark.triangle.fill"
+    }
+
     private var detailPeople: [Person] {
         if !displaySOS.sharedPeople.isEmpty {
             return displaySOS.sharedPeople
@@ -598,13 +606,12 @@ struct SOSDetailView: View {
     private var sosContentCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let lat = displaySOS.latitude, let lon = displaySOS.longitude {
-                ReviewRow(icon: "📍", title: "Vị trí", value: String(format: "%.4f, %.4f", lat, lon))
+                ReviewRow(icon: "location.circle.fill", title: "Vị trí", value: String(format: "%.4f, %.4f", lat, lon))
             }
 
             if !detailSelectedTypes.isEmpty {
                 let typesText = detailSelectedTypes.map(\.title).joined(separator: " + ")
-                let icon = detailSelectedTypes.count > 1 ? "🆘" : (detailSelectedTypes.first?.icon ?? "🆘")
-                ReviewRow(icon: icon, title: "Loại SOS", value: typesText)
+                ReviewRow(icon: detailTypeSymbolName, title: "Loại SOS", value: typesText)
             }
 
             if detailPeopleCount.total > 0 {
@@ -618,25 +625,25 @@ struct SOSDetailView: View {
                 Divider()
                     .background(DS.Colors.surface)
 
-                Text("🚨 Thông tin cứu hộ")
+                Label("Thông tin cứu hộ", systemImage: "cross.case.fill")
                     .font(.subheadline.bold())
                     .foregroundColor(DS.Colors.danger)
 
                 if let situation = rescue.situation {
                     ReviewRow(
-                        icon: RescueSituation.icon(for: situation),
+                        icon: RescueSituation.symbol(for: situation),
                         title: "Tình trạng",
                         value: RescueSituation.title(for: situation)
                     )
                 }
 
                 if !rescue.otherSituationDescription.isEmpty {
-                    ReviewRow(icon: "📝", title: "Mô tả thêm", value: rescue.otherSituationDescription)
+                    ReviewRow(icon: "note.text", title: "Mô tả thêm", value: rescue.otherSituationDescription)
                 }
 
                 if rescue.hasInjured && !rescue.injuredPersonIds.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("🚑 Người bị thương:")
+                        Label("Người bị thương", systemImage: "cross.case")
                             .font(.caption.bold())
                             .foregroundColor(DS.Colors.text)
 
@@ -667,9 +674,9 @@ struct SOSDetailView: View {
                 Divider()
                     .background(DS.Colors.surface)
 
-                Text("🎒 Thông tin cứu trợ")
+                Label("Thông tin cứu trợ", systemImage: "shippingbox.fill")
                     .font(.subheadline.bold())
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.orange)
 
                 ReliefSummaryGridContent(
                     relief: relief,
@@ -680,11 +687,11 @@ struct SOSDetailView: View {
             if !displaySOS.additionalDescription.isEmpty {
                 Divider()
                     .background(DS.Colors.surface)
-                ReviewRow(icon: "📝", title: "Ghi chú", value: displaySOS.additionalDescription)
+                ReviewRow(icon: "note.text", title: "Ghi chú", value: displaySOS.additionalDescription)
             }
 
             ReviewRow(
-                icon: "🕒",
+                icon: "clock.fill",
                 title: "Thời gian",
                 value: displaySOS.timestamp.formatted(date: .abbreviated, time: .shortened)
             )
@@ -697,7 +704,7 @@ struct SOSDetailView: View {
     
     private var rescueDetailsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("🚨 Thông tin cứu hộ")
+            Label("Thông tin cứu hộ", systemImage: "cross.case.fill")
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
             
@@ -705,14 +712,14 @@ struct SOSDetailView: View {
                 // Situation
                 if let situation = rescue.situation {
                     DetailRow(
-                        icon: RescueSituation.icon(for: situation),
+                        icon: RescueSituation.symbol(for: situation),
                         title: "Tình trạng",
                         value: RescueSituation.title(for: situation)
                     )
                 }
                 
                 if !rescue.otherSituationDescription.isEmpty {
-                    DetailRow(icon: "📝", title: "Mô tả thêm", value: rescue.otherSituationDescription)
+                    DetailRow(icon: "note.text", title: "Mô tả thêm", value: rescue.otherSituationDescription)
                 }
                 
                 PeopleCountSummaryGrid(peopleCount: rescue.peopleCount)
@@ -721,7 +728,7 @@ struct SOSDetailView: View {
                 if rescue.hasInjured {
                     Divider().background(DS.Colors.surface)
                     
-                    Text("🩹 Người bị thương: \(rescue.injuredPersonIds.count)")
+                    Label("Người bị thương: \(rescue.injuredPersonIds.count)", systemImage: "cross.case")
                         .font(.subheadline.bold())
                         .foregroundColor(DS.Colors.danger)
                     
@@ -747,7 +754,7 @@ struct SOSDetailView: View {
     
     private var reliefDetailsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("🎒 Thông tin cứu trợ")
+            Label("Thông tin cứu trợ", systemImage: "shippingbox.fill")
                 .font(DS.Typography.headline)
                 .foregroundColor(DS.Colors.text)
             
@@ -838,14 +845,15 @@ struct SOSDetailView: View {
     private func injuredPersonCard(info: PersonMedicalInfo, rescue: SavedRescueData) -> some View {
         let person = savedPerson(info.personId) ?? rescue.people.first(where: { $0.id == info.personId })
         let name = person?.displayName ?? personLabel(info.personId)
-        let personTypeIcon = person?.type.icon ?? "🧑"
+        let personTypeIcon = person?.type.symbolName ?? "person.fill"
         let personTypeTitle = person?.type.title ?? ""
         
         return VStack(alignment: .leading, spacing: 6) {
             // Header: icon + name
             HStack(spacing: 6) {
-                Text(personTypeIcon)
-                    .font(.title3)
+                Image(systemName: personTypeIcon)
+                    .font(.subheadline)
+                    .foregroundColor(DS.Colors.textSecondary)
                 Text(name)
                     .font(.caption.bold())
                     .foregroundColor(DS.Colors.text)
@@ -862,8 +870,9 @@ struct SOSDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(info.medicalIssues), id: \.self) { issue in
                         HStack(spacing: 4) {
-                            Text(MedicalIssue.icon(for: issue))
+                            Image(systemName: MedicalIssue.symbol(for: issue))
                                 .font(.caption2)
+                                .foregroundColor(DS.Colors.danger)
                             Text(MedicalIssue.title(for: issue))
                                 .font(.caption2)
                                 .foregroundColor(DS.Colors.textSecondary)
@@ -989,11 +998,24 @@ struct DetailRow: View {
     let icon: String
     let title: String
     let value: String
+
+    private var isSystemSymbol: Bool {
+        icon.unicodeScalars.allSatisfy(\.isASCII)
+    }
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(icon)
-                .font(.title3)
+            Group {
+                if isSystemSymbol {
+                    Image(systemName: icon)
+                        .font(.body)
+                } else {
+                    Text(icon)
+                        .font(.body)
+                }
+            }
+            .foregroundColor(DS.Colors.accent)
+            .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -1162,7 +1184,6 @@ struct SOSWizardContent: View {
     var body: some View {
         ZStack {
             DS.Colors.background.ignoresSafeArea()
-            Color.black.opacity(0.35).ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Progress
@@ -1281,8 +1302,14 @@ struct SOSWizardContent: View {
                         }
                     }
                 }
-                .padding()
-                .background(Color.black.opacity(0.3))
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(DS.Colors.surface)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(DS.Colors.border)
+                        .frame(height: DS.Border.thin)
+                }
             }
         }
     }

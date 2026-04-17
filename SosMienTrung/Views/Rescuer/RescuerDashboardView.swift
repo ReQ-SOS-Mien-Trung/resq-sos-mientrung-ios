@@ -695,7 +695,7 @@ struct RescuerDashboardView: View {
                         .progressViewStyle(.circular)
                         .tint(canLeaveTeam ? .red : DS.Colors.textTertiary)
                 } else {
-                    Image(systemName: "person.crop.circle.badge.xmark")
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
                         .font(.system(size: 13, weight: .semibold))
                 }
             }

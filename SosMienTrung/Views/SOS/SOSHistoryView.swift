@@ -83,8 +83,8 @@ struct SOSHistoryView: View {
     // MARK: - Stats Header
     private var statsHeader: some View {
         HStack(spacing: DS.Spacing.sm) {
-            StatCard(icon: "arrow.up.circle.fill", value: "\(mySOS.count)", label: "Đã gửi", color: DS.Colors.danger)
-            StatCard(icon: "arrow.down.circle.fill", value: "\(receivedSOS.count)", label: "Đã nhận", color: DS.Colors.info)
+            StatCard(icon: "paperplane.circle.fill", value: "\(mySOS.count)", label: "Đã gửi", color: DS.Colors.danger)
+            StatCard(icon: "tray.and.arrow.down.fill", value: "\(receivedSOS.count)", label: "Đã nhận", color: DS.Colors.info)
             if isSyncing {
                 VStack(spacing: 4) {
                     ProgressView()
@@ -99,7 +99,7 @@ struct SOSHistoryView: View {
                 .background(DS.Colors.surface)
                 .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
             } else {
-                StatCard(icon: networkMonitor.isConnected ? "wifi" : "wifi.slash", value: networkMonitor.isConnected ? "Online" : "Mesh", label: "Trạng thái", color: networkMonitor.isConnected ? DS.Colors.success : DS.Colors.warning)
+                StatCard(icon: networkMonitor.isConnected ? "wifi.circle.fill" : "dot.radiowaves.left.and.right", value: networkMonitor.isConnected ? "Online" : "Mesh", label: "Trạng thái", color: networkMonitor.isConnected ? DS.Colors.success : DS.Colors.warning)
             }
         }
         .padding(.horizontal, DS.Spacing.md)
@@ -110,7 +110,7 @@ struct SOSHistoryView: View {
     private var emptyState: some View {
         VStack(spacing: DS.Spacing.md) {
             Spacer()
-            Image(systemName: "checkmark.shield.fill")
+            Image(systemName: "checkmark.shield")
                 .font(.system(size: 48, weight: .bold))
                 .foregroundColor(DS.Colors.success.opacity(0.6))
             Text("Chưa có SOS nào")
@@ -123,7 +123,7 @@ struct SOSHistoryView: View {
             Spacer()
             Button { showSOSForm = true } label: {
                 HStack {
-                    Image(systemName: "sos.circle.fill")
+                    Image(systemName: "paperplane.fill")
                     Text("Gửi SOS MỚI").font(DS.Typography.headline).tracking(2)
                 }
                 .foregroundColor(.white)
@@ -144,7 +144,7 @@ struct SOSHistoryView: View {
             LazyVStack(spacing: 16) {
                 // Phần SOS đã gửi (từ storage - có thể xem chi tiết)
                 if !mySOS.isEmpty {
-                    sosSection(title: "🆘 SOS đã gửi", count: mySOS.count) {
+                    sosSection(title: "SOS đã gửi", symbolName: "paperplane.fill", count: mySOS.count) {
                         ForEach(mySOS) { savedSOS in
                             SavedSOSCard(savedSOS: savedSOS) {
                                 selectedSOS = savedSOS
@@ -155,7 +155,7 @@ struct SOSHistoryView: View {
                 
                 // Phần SOS đã nhận
                 if !receivedSOS.isEmpty {
-                    sosSection(title: "📥 SOS đã nhận", count: receivedSOS.count) {
+                    sosSection(title: "SOS đã nhận", symbolName: "tray.and.arrow.down.fill", count: receivedSOS.count) {
                         ForEach(receivedSOS) { message in
                             SOSHistoryCard(message: message, isMine: false)
                         }
@@ -167,13 +167,19 @@ struct SOSHistoryView: View {
     }
     
     // MARK: - SOS Section Builder (giống Settings)
-    private func sosSection<Content: View>(title: String, count: Int, @ViewBuilder content: () -> Content) -> some View {
+    private func sosSection<Content: View>(title: String, symbolName: String, count: Int, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // Section header
             HStack {
-                Text(title)
-                    .font(.headline)
-                    .foregroundColor(DS.Colors.text)
+                Label {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(DS.Colors.text)
+                } icon: {
+                    Image(systemName: symbolName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(DS.Colors.accent)
+                }
                 
                 Spacer()
                 
@@ -203,6 +209,21 @@ struct SavedSOSCard: View {
     
     let savedSOS: SavedSOS
     let onTap: () -> Void
+
+    private var typeSymbolName: String {
+        savedSOS.sosType?.symbolName ?? "exclamationmark.triangle.fill"
+    }
+
+    private var typeColor: Color {
+        switch savedSOS.sosType {
+        case .rescue:
+            return DS.Colors.danger
+        case .relief:
+            return .orange
+        case .none:
+            return DS.Colors.accent
+        }
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -210,13 +231,9 @@ struct SavedSOSCard: View {
                 // Header
                 HStack {
                     // SOS Type icon
-                    if let type = savedSOS.sosType {
-                        Text(type.icon)
-                            .font(.title2)
-                    } else {
-                        Image(systemName: "sos.circle.fill")
-                            .foregroundColor(.red)
-                    }
+                    Image(systemName: typeSymbolName)
+                        .font(.title2)
+                        .foregroundColor(typeColor)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -247,21 +264,21 @@ struct SavedSOSCard: View {
                 HStack(spacing: 16) {
                     // People count
                     if let rescue = savedSOS.rescueData {
-                        Label("\(rescue.peopleCount.total)", systemImage: "person.2")
+                        Label("\(rescue.peopleCount.total)", systemImage: "person.2.fill")
                             .font(.caption)
                             .foregroundColor(DS.Colors.textSecondary)
                         
                         if rescue.hasInjured {
-                            Label("\(rescue.injuredPersonIds.count) thương", systemImage: "bandage")
+                            Label("\(rescue.injuredPersonIds.count) thương", systemImage: "cross.case.fill")
                                 .font(.caption)
                                 .foregroundColor(.red)
                         }
                     } else if let relief = savedSOS.reliefData {
-                        Label("\(relief.peopleCount.total)", systemImage: "person.2")
+                        Label("\(relief.peopleCount.total)", systemImage: "person.2.fill")
                             .font(.caption)
                             .foregroundColor(DS.Colors.textSecondary)
                         
-                        Label("\(relief.supplies.count) mặt hàng", systemImage: "shippingbox")
+                        Label("\(relief.supplies.count) mặt hàng", systemImage: "shippingbox.fill")
                             .font(.caption)
                             .foregroundColor(.yellow)
                     }
@@ -272,7 +289,7 @@ struct SavedSOSCard: View {
                 // Location if available
                 if let lat = savedSOS.latitude, let lon = savedSOS.longitude {
                     HStack(spacing: 4) {
-                        Image(systemName: "location.fill")
+                        Image(systemName: "location.circle.fill")
                             .font(.caption)
                             .foregroundColor(.blue)
                         
@@ -365,7 +382,7 @@ struct SOSHistoryCard: View {
                     Circle()
                         .fill(Color.blue.opacity(0.12))
                         .frame(width: 38, height: 38)
-                    Image(systemName: "arrow.down.circle.fill")
+                    Image(systemName: "tray.and.arrow.down.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.blue)
                 }

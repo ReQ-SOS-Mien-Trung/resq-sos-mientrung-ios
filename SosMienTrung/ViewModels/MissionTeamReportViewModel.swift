@@ -185,6 +185,86 @@ final class MissionTeamReportViewModel: ObservableObject {
         }
     }
 
+    func fillDemoReportData() {
+        guard canEdit else { return }
+        guard reportStatus.normalizedStatusKey != "submitted" else { return }
+
+        errorMessage = nil
+        successMessage = nil
+
+        let timestamp = MissionTeamReportDemoData.timestampLabel()
+        let activityTotal = max(activities.count, 1)
+        let rescuedCount = max(activityTotal * 2, 2)
+        let treatedCount = max(activityTotal, 1)
+        let referredCount = activityTotal >= 3 ? 1 : 0
+
+        teamSummary = "Đội đã hoàn thành nhiệm vụ và bàn giao hiện trường an toàn. Dữ liệu này được điền nhanh để demo luồng báo cáo."
+        teamNote = "Mẫu demo tạo lúc \(timestamp). Vui lòng chỉnh lại nội dung thực tế trước khi gửi báo cáo chính thức."
+
+        teamStructuredPayload = MissionReportStructuredPayloadForm(
+            issueFlags: MissionReportIssueFlagsForm(
+                blockedRoad: activityTotal >= 3,
+                flooding: true,
+                landslide: activityTotal >= 4,
+                powerOutage: true,
+                communicationLoss: false,
+                unsafeArea: true,
+                medicalOverload: false
+            ),
+            issueExtras: [
+                MissionReportKeyValueEntry(key: "thoiTiet", value: "Mưa vừa, tầm nhìn hạn chế"),
+                MissionReportKeyValueEntry(key: "khuVuc", value: "Điểm tập kết trung tâm")
+            ],
+            resultMetrics: MissionReportResultMetricsForm(
+                rescued: "\(rescuedCount)",
+                treated: "\(treatedCount)",
+                referred: "\(referredCount)",
+                missing: "0",
+                fatalities: "0"
+            ),
+            resultExtras: [
+                MissionReportKeyValueEntry(key: "hoDaHoTro", value: "\(max(rescuedCount / 2, 1))"),
+                MissionReportKeyValueEntry(key: "thoiGianPhanUngPhut", value: "18")
+            ],
+            evidenceEntries: [
+                MissionReportEvidenceEntry(
+                    type: "note",
+                    url: "",
+                    note: "Dữ liệu mẫu phục vụ demo nhanh biểu mẫu báo cáo đội cứu hộ."
+                )
+            ]
+        )
+
+        activities = activities.enumerated().map { index, activity in
+            var updated = activity
+            let step = index + 1
+
+            updated.executionStatus = demoExecutionStatus(for: activity)
+            updated.summary = "Bước \(step) đã hoàn tất theo phương án điều phối, đội đã xác nhận kết quả tại hiện trường."
+            updated.structuredPayload = demoActivityPayload(step: step)
+            updated.issuesJson = ""
+            updated.resultJson = ""
+            updated.evidenceJson = ""
+
+            return updated
+        }
+
+        if canEvaluateMembers {
+            memberEvaluations = memberEvaluations.enumerated().map { index, evaluation in
+                var updated = evaluation
+                let baseScore = demoMemberBaseScore(at: index)
+
+                updated.responseTimeScore = baseScore
+                updated.rescueEffectivenessScore = min(baseScore + 0.5, 10)
+                updated.decisionHandlingScore = baseScore
+                updated.safetyMedicalSkillScore = min(baseScore + 0.5, 10)
+                updated.teamworkCommunicationScore = min(baseScore + 1.0, 10)
+
+                return updated
+            }
+        }
+    }
+
     private func apply(_ response: MissionTeamReportResponse) {
         report = response
         teamSummary = response.teamSummary ?? ""
@@ -220,6 +300,72 @@ final class MissionTeamReportViewModel: ObservableObject {
             }
 
             return form
+        }
+    }
+
+    private func demoExecutionStatus(for activity: MissionTeamReportActivityForm) -> String {
+        if let current = ReportExecutionStatusOption(apiValue: activity.executionStatus) {
+            return current == .failed || current == .cancelled
+                ? ReportExecutionStatusOption.completed.rawValue
+                : current.rawValue
+        }
+
+        if let fallback = ReportExecutionStatusOption(apiValue: activity.activityStatus ?? "") {
+            return fallback == .failed || fallback == .cancelled
+                ? ReportExecutionStatusOption.completed.rawValue
+                : fallback.rawValue
+        }
+
+        return ReportExecutionStatusOption.completed.rawValue
+    }
+
+    private func demoActivityPayload(step: Int) -> MissionReportStructuredPayloadForm {
+        let isLogisticStep = step % 2 == 0
+
+        return MissionReportStructuredPayloadForm(
+            issueFlags: MissionReportIssueFlagsForm(
+                blockedRoad: step % 3 == 0,
+                flooding: true,
+                landslide: step % 4 == 0,
+                powerOutage: isLogisticStep,
+                communicationLoss: false,
+                unsafeArea: step % 5 == 0,
+                medicalOverload: false
+            ),
+            issueExtras: [
+                MissionReportKeyValueEntry(key: "phatSinh", value: "Bước \(step) gặp cản trở nhẹ")
+            ],
+            resultMetrics: MissionReportResultMetricsForm(
+                rescued: isLogisticStep ? "1" : "2",
+                treated: "1",
+                referred: step % 4 == 0 ? "1" : "0",
+                missing: "0",
+                fatalities: "0"
+            ),
+            resultExtras: [
+                MissionReportKeyValueEntry(key: "vatPhamBanGiao", value: isLogisticStep ? "12" : "6")
+            ],
+            evidenceEntries: [
+                MissionReportEvidenceEntry(
+                    type: "note",
+                    url: "",
+                    note: "Bước \(step): dữ liệu minh họa để demo luồng nhập báo cáo."
+                )
+            ]
+        )
+    }
+
+    private func demoMemberBaseScore(at index: Int) -> Double {
+        let rotation = index % 4
+        switch rotation {
+        case 0:
+            return 7.5
+        case 1:
+            return 8.0
+        case 2:
+            return 8.5
+        default:
+            return 9.0
         }
     }
 
@@ -752,6 +898,15 @@ private enum MissionTeamReportValidationError: LocalizedError {
         case .nonLeaderCannotSaveWithExistingEvaluations:
             return L10n.MissionTeamReport.nonLeaderCannotSaveEvaluations
         }
+    }
+}
+
+private enum MissionTeamReportDemoData {
+    static func timestampLabel() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.dateFormat = "HH:mm dd/MM/yyyy"
+        return formatter.string(from: Date())
     }
 }
 

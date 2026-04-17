@@ -284,34 +284,6 @@ struct DeliveryConfirmationSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                IncidentFormSection(
-                    title: "Xác nhận phân phát vật phẩm",
-                    subtitle: "Nhập số lượng thực tế từng vật phẩm trước khi hoàn tất bước phân phát."
-                ) {
-                    VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                        IncidentInlineNotice(
-                            icon: "arrowshape.turn.up.right.circle.fill",
-                            text: hasDiscrepancy
-                                ? "Bạn đang nhập số lượng khác với kế hoạch. Phần vật phẩm chưa phân phát sẽ được chuyển sang bước hoàn trả."
-                                : "Giữ nguyên số lượng kế hoạch nếu đội đã phân phát đủ như dự kiến."
-                        )
-
-                        HStack(spacing: DS.Spacing.sm) {
-                            metricChip(
-                                title: "Tổng kế hoạch",
-                                value: quantityText(totalPlannedQuantity, unit: nil),
-                                tone: DS.Colors.info
-                            )
-
-                            metricChip(
-                                title: "Tổng thực tế",
-                                value: quantityText(totalActualQuantity, unit: nil),
-                                tone: hasDiscrepancy ? DS.Colors.warning : DS.Colors.success
-                            )
-                        }
-                    }
-                }
-
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
                         title: drafts[index].itemName,
@@ -447,16 +419,6 @@ struct DeliveryConfirmationSheet: View {
         drafts.contains { draft in
             guard let actualQuantity = parsedActualQuantity(for: draft) else { return false }
             return actualQuantity != draft.plannedQuantity
-        }
-    }
-
-    private var totalPlannedQuantity: Int {
-        drafts.reduce(0) { $0 + $1.plannedQuantity }
-    }
-
-    private var totalActualQuantity: Int {
-        drafts.reduce(0) { partial, draft in
-            partial + (parsedActualQuantity(for: draft) ?? 0)
         }
     }
 

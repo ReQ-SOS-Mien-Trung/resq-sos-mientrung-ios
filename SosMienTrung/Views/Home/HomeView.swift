@@ -217,17 +217,23 @@ struct HomeView: View {
             HStack(spacing: DS.Spacing.sm) {
                 Image(systemName: "headphones.circle.fill")
                     .font(.system(size: 20, weight: .bold))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("TRÒ CHUYỆN VỚI ĐIỀU PHỐI VIÊN")
+                    .frame(width: 24)
+
+                VStack(alignment: .center, spacing: 2) {
+                    Text("Trò chuyện với\nĐiều phối viên")
                         .font(DS.Typography.headline)
-                        .tracking(1.5)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
                     Text("Kết nối trực tiếp với điều phối viên hỗ trợ")
                         .font(DS.Typography.caption)
                         .opacity(0.85)
+                        .multilineTextAlignment(.center)
                 }
-                Spacer()
+                .frame(maxWidth: .infinity)
+
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
+                    .frame(width: 24)
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)

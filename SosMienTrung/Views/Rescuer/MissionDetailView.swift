@@ -270,14 +270,6 @@ struct MissionDetailView: View {
         } message: {
             Text(vm.errorMessage ?? "")
         }
-        .alert("Thông báo", isPresented: Binding(
-            get: { vm.successMessage != nil },
-            set: { if !$0 { vm.successMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { vm.successMessage = nil }
-        } message: {
-            Text(vm.successMessage ?? "")
-        }
         .onAppear {
             guard canViewMissionWorkspace else { return }
             refreshMissionWorkspace()

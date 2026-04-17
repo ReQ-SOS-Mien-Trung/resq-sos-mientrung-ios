@@ -421,6 +421,19 @@ struct MissionTeamReportView: View {
                 HStack(spacing: DS.Spacing.sm) {
                     if vm.canEdit {
                         Button {
+                            vm.fillDemoReportData()
+                        } label: {
+                            actionLabel(
+                                title: "Điền nhanh demo",
+                                icon: "sparkles",
+                                showsProgress: false
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .missionReportSecondaryButton(enabled: canFillDemoData)
+                        .disabled(!canFillDemoData)
+
+                        Button {
                             vm.saveDraft()
                         } label: {
                             actionLabel(
@@ -515,6 +528,15 @@ struct MissionTeamReportView: View {
 
     private var isSubmitted: Bool {
         vm.reportStatus.normalizedStatusKey == "submitted"
+    }
+
+    private var canFillDemoData: Bool {
+        vm.canEdit
+            && !isSubmitted
+            && !vm.isLoading
+            && !vm.isSaving
+            && !vm.isSubmitting
+            && !vm.isCompletingExecution
     }
 
     private var shouldShowBottomActionBar: Bool {
