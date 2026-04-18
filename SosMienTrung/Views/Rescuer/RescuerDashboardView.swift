@@ -1228,9 +1228,14 @@ private struct AssemblyEventRowView: View {
         RescuerStatusBadgeText.assemblyEvent(event.eventStatus)
     }
 
+    private var assemblyStatus: AssemblyEventStatus? {
+        event.assemblyEventStatus
+    }
+
     private var canCheckIn: Bool {
         event.isCheckedIn == false
             && hasCheckedOut == false
+            && assemblyStatus != .completed
             && ["gathering", "ongoing", "planned", "scheduled"].contains(normalizedStatus)
     }
 
@@ -1328,7 +1333,7 @@ private struct AssemblyEventRowView: View {
                     }
                     .disabled(isCheckingOut || canCheckOut == false)
                 }
-            } else {
+            } else if assemblyStatus != .completed {
                 Button(action: onCheckIn) {
                     HStack(spacing: DS.Spacing.xs) {
                         if isCheckingIn {
@@ -1420,19 +1425,20 @@ private struct AssemblyEventRowView: View {
     }
 
     private var statusColor: Color {
-        switch normalizedStatus {
-        case "gathering":
-            return DS.Colors.warning
-        case "ongoing":
-            return DS.Colors.success
-        case "planned", "scheduled":
+        switch assemblyStatus {
+        case .scheduled:
             return DS.Colors.info
-        case "finished", "completed":
-            return DS.Colors.textSecondary
-        case "cancelled":
-            return DS.Colors.accent
-        default:
-            return DS.Colors.textSecondary
+        case .gathering:
+            return DS.Colors.warning
+        case .completed:
+            return DS.Colors.success
+        case .none:
+            switch normalizedStatus {
+            case "cancelled":
+                return DS.Colors.accent
+            default:
+                return DS.Colors.textSecondary
+            }
         }
     }
 

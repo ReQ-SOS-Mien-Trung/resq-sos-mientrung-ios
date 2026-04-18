@@ -33,6 +33,13 @@ struct Step0ReportingModeView: View {
                 }
                 .padding(.top, 20)
 
+                SOSQuickFillEntryCard {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        formData.applyQuickFillSample()
+                    }
+                }
+                .padding(.horizontal)
+
                 VStack(spacing: 16) {
                     ForEach(SOSReportingTarget.allCases) { target in
                         SOSReportingTargetOptionCard(
@@ -49,6 +56,47 @@ struct Step0ReportingModeView: View {
 
                 Spacer(minLength: 100)
             }
+        }
+    }
+}
+
+private struct SOSQuickFillEntryCard: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "sparkles.rectangle.stack.fill")
+                        .font(.title2)
+                        .foregroundColor(DS.Colors.info)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Điền mẫu nhanh")
+                            .font(DS.Typography.headline)
+                            .foregroundColor(DS.Colors.text)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(DS.Colors.info)
+                }
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(DS.Colors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(DS.Colors.info.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(DS.Colors.info.opacity(0.45), lineWidth: 1.5)
+                    )
+            )
         }
     }
 }
@@ -2668,10 +2716,6 @@ struct Step3AdditionalInfoView: View {
                                 Text("Thông tin y tế nền sẽ gửi kèm")
                                     .font(.headline)
                                     .foregroundColor(DS.Colors.text)
-                                Text("Các dữ liệu này lấy từ hồ sơ đã chuẩn bị sẵn và sẽ được gộp vào `additional_description` khi gửi SOS.")
-                                    .font(DS.Typography.caption)
-                                    .foregroundColor(DS.Colors.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
 
@@ -2749,6 +2793,8 @@ struct Step4ReviewView: View {
                     if !formData.savedProfileNoteItems.isEmpty || formData.usesSavedRelativeProfiles {
                         SavedRelativeProfilesCard(
                             formData: formData,
+                            showsStoredInfo: false,
+                            showsPersonDetails: false,
                             onChangeSelection: nil,
                             onSwitchToManual: nil
                         )

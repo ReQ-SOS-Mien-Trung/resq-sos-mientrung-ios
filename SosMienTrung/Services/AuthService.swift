@@ -46,6 +46,9 @@ struct FirebasePhoneLoginResponse: Codable {
 /// Error response from server
 struct APIErrorResponse: Codable, Sendable {
     let message: String
+    let code: String?
+    let innerError: String?
+    let errors: [String: [String]]?
     
     /// Safe decoding that can be called from any context
     static func decode(from data: Data) -> APIErrorResponse? {

@@ -82,6 +82,34 @@ struct CheckInResponse: Codable {
     let message: String?
 }
 
+enum AssemblyEventStatus: String, Codable {
+    case scheduled
+    case gathering
+    case completed
+
+    init?(backendValue: String?) {
+        switch Self.normalized(backendValue) {
+        case "scheduled", "planned":
+            self = .scheduled
+        case "gathering", "ongoing":
+            self = .gathering
+        case "completed", "finished":
+            self = .completed
+        default:
+            return nil
+        }
+    }
+
+    private static func normalized(_ value: String?) -> String {
+        (value ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+    }
+}
+
 struct AssemblyPointEvent: Decodable, Identifiable {
     let eventId: Int
     let assemblyPointId: Int
@@ -174,6 +202,10 @@ struct AssemblyPointEvent: Decodable, Identifiable {
         }
 
         return false
+    }
+
+    var assemblyEventStatus: AssemblyEventStatus? {
+        AssemblyEventStatus(backendValue: eventStatus)
     }
 
     var id: Int { eventId }

@@ -391,6 +391,8 @@ final class MissionTeamReportViewModel: ObservableObject {
     }
 
     private func makeSubmitRequest() throws -> SubmitMissionTeamReportRequest {
+        try validateDeliveryShortfallReasonsForSubmit()
+
         let teamPayloadJSON = try buildPayloadJSON(
             from: teamStructuredPayload,
             context: "Tổng quan đội"
@@ -426,6 +428,12 @@ final class MissionTeamReportViewModel: ObservableObject {
                 resultJson: payloadJSON.resultJson,
                 evidenceJson: payloadJSON.evidenceJson
             )
+        }
+    }
+
+    private func validateDeliveryShortfallReasonsForSubmit() throws {
+        if let activity = activities.first(where: \.needsDeliveryShortfallReason) {
+            throw MissionTeamReportValidationError.missingDeliveryShortfallReason(activity.title)
         }
     }
 
@@ -885,6 +893,7 @@ private enum MissionTeamReportValidationError: LocalizedError {
     case invalidJSON(String)
     case partialMemberEvaluation(String)
     case missingMemberEvaluation(String)
+    case missingDeliveryShortfallReason(String)
     case nonLeaderCannotSaveWithExistingEvaluations
 
     var errorDescription: String? {
@@ -895,6 +904,8 @@ private enum MissionTeamReportValidationError: LocalizedError {
             return L10n.MissionTeamReport.partialMemberEvaluation(memberName)
         case .missingMemberEvaluation(let memberName):
             return L10n.MissionTeamReport.missingMemberEvaluation(memberName)
+        case .missingDeliveryShortfallReason(let activityName):
+            return L10n.MissionTeamReport.missingDeliveryShortfallReason(activityName)
         case .nonLeaderCannotSaveWithExistingEvaluations:
             return L10n.MissionTeamReport.nonLeaderCannotSaveEvaluations
         }

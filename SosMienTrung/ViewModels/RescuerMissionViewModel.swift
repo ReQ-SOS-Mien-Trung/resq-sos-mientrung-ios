@@ -848,6 +848,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
         guard loadingEventId == nil else { return }
         guard event.isCheckedIn == false else { return }
         guard hasCheckedOut(event: event) == false else { return }
+        guard event.assemblyEventStatus != .completed else { return }
 
         errorMessage = nil
         successMessage = nil

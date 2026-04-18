@@ -41,8 +41,20 @@ struct MissionTeamReportActivity: Codable, Identifiable {
     let issuesJson: String?
     let resultJson: String?
     let evidenceJson: String?
+    let deliveryShortfalls: [MissionTeamReportDeliveryShortfall]?
 
     var id: Int { missionActivityId }
+}
+
+struct MissionTeamReportDeliveryShortfall: Codable, Identifiable, Equatable {
+    let itemId: Int
+    let itemName: String
+    let unit: String?
+    let plannedQuantity: Int
+    let actualDeliveredQuantity: Int
+    let shortfallQuantity: Int
+
+    var id: Int { itemId }
 }
 
 struct MissionTeamReportMemberEvaluation: Codable, Identifiable {
@@ -230,6 +242,7 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
     let activityCode: String?
     let activityType: String?
     let activityStatus: String?
+    let deliveryShortfalls: [MissionTeamReportDeliveryShortfall]
     var executionStatus: String
     var summary: String
     var issuesJson: String
@@ -252,6 +265,7 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
         activityCode = activity.activityCode
         activityType = activity.activityType
         activityStatus = activity.activityStatus
+        deliveryShortfalls = activity.deliveryShortfalls ?? []
         executionStatus = activity.executionStatus ?? activity.activityStatus ?? ""
         summary = activity.summary ?? ""
         issuesJson = activity.issuesJson ?? ""
@@ -269,6 +283,15 @@ struct MissionTeamReportActivityForm: Identifiable, Equatable {
         }
 
         return "Hoạt động #\(missionActivityId)"
+    }
+
+    var hasDeliveryShortfall: Bool {
+        deliveryShortfalls.isEmpty == false
+    }
+
+    var needsDeliveryShortfallReason: Bool {
+        hasDeliveryShortfall
+            && summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

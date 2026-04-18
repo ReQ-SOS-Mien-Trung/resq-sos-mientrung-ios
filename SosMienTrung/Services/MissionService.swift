@@ -46,13 +46,42 @@ final class MissionService {
         let (data, http) = try await authExecutor.perform(request, using: session)
 
         guard (200...299).contains(http.statusCode) else {
-            let message = APIErrorResponse.decode(from: data)?.message
-                ?? String(data: data, encoding: .utf8)
+            let decodedError = APIErrorResponse.decode(from: data)
+            let rawBody = String(data: data, encoding: .utf8)
+            let message = decodedError?.message ?? rawBody
+
             print("[MissionService] ✗ HTTP \(http.statusCode): \(message ?? "")")
+
+            if let code = decodedError?.code, code.isEmpty == false {
+                print("[MissionService] ✗ errorCode: \(code)")
+            }
+
+            if let innerError = decodedError?.innerError, innerError.isEmpty == false {
+                print("[MissionService] ✗ innerError: \(innerError)")
+            }
+
+            if let errors = decodedError?.errors, errors.isEmpty == false {
+                print("[MissionService] ✗ validationErrors: \(errors)")
+            }
+
+            if let rawBody, rawBody.isEmpty == false, rawBody != message {
+                print("[MissionService] ✗ rawBody: \(rawBody)")
+            }
+
             throw MissionServiceError.httpStatus(http.statusCode, message)
         }
 
         return data
+    }
+
+    private func debugJSONString(from data: Data) -> String? {
+        if let object = try? JSONSerialization.jsonObject(with: data),
+           let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+           let prettyString = String(data: prettyData, encoding: .utf8) {
+            return prettyString
+        }
+
+        return String(data: data, encoding: .utf8)
     }
 
     // MARK: - GET /operations/missions/my-team
@@ -162,8 +191,12 @@ final class MissionService {
             actualDeliveredItems: actualDeliveredItems,
             deliveryNote: deliveryNote?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         )
-        req.httpBody = try JSONEncoder().encode(payload)
+        let encodedPayload = try JSONEncoder().encode(payload)
+        req.httpBody = encodedPayload
         print("[MissionService] → POST \(url.absoluteString) deliveredItems=\(actualDeliveredItems.count)")
+        if let payloadString = debugJSONString(from: encodedPayload) {
+            print("[MissionService] payload=\n\(payloadString)")
+        }
 
         let data = try await send(req)
         return try missionDecoder().decode(MissionConfirmDeliveryResponse.self, from: data)

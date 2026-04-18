@@ -129,8 +129,25 @@ private struct RelativeProfilePickerEmptyState: View {
 struct SavedRelativeProfilesCard: View {
     @ObservedObject var formData: SOSFormData
     var showsStoredInfo: Bool = true
+    var showsPersonDetails: Bool = true
     var onChangeSelection: (() -> Void)? = nil
     var onSwitchToManual: (() -> Void)? = nil
+
+    private var selectedRelativeCount: Int {
+        Set(formData.selectedRelativeSnapshots.map(\.profileId)).count
+    }
+
+    private var selectedRelativeNames: [String] {
+        var seen = Set<String>()
+        return formData.selectedRelativeSnapshots.compactMap { snapshot in
+            guard seen.insert(snapshot.profileId).inserted else { return nil }
+            return formData.person(for: snapshot.personId)?.displayName.nilIfBlank ?? snapshot.displayName.nilIfBlank
+        }
+    }
+
+    private var manualAdditionalCount: Int {
+        max(formData.sharedPeopleCount.total - selectedRelativeCount, 0)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -140,13 +157,15 @@ struct SavedRelativeProfilesCard: View {
                         .font(DS.Typography.headline)
                         .foregroundColor(DS.Colors.text)
 
-                    Text("Danh sách này được lấy từ hồ sơ đã lưu và có thể chỉnh riêng cho lần SOS hiện tại.")
+                    Text(showsPersonDetails
+                        ? "Danh sách này được lấy từ hồ sơ đã lưu và có thể chỉnh riêng cho lần SOS hiện tại."
+                        : "Danh sách hồ sơ đã áp dụng cho lần SOS hiện tại.")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if formData.hasManualAdditionalPeople {
-                        Text("Đang có thêm người được nhập thủ công ngoài danh sách hồ sơ đã lưu.")
+                    if manualAdditionalCount > 0 {
+                        Text("Có thêm \(manualAdditionalCount) người nhập thủ công ngoài danh sách hồ sơ đã lưu.")
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -155,8 +174,8 @@ struct SavedRelativeProfilesCard: View {
 
                 Spacer()
 
-                if formData.sharedPeopleCount.total > 0 {
-                    Text("\(formData.sharedPeopleCount.total) người")
+                if selectedRelativeCount > 0 {
+                    Text("\(selectedRelativeCount) người")
                         .font(.caption.bold())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -168,8 +187,26 @@ struct SavedRelativeProfilesCard: View {
 
             if !formData.selectedRelativeSnapshots.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(formData.selectedRelativeSnapshots, id: \.profileId) { snapshot in
-                        SavedRelativeSnapshotRow(snapshot: snapshot, person: formData.person(for: snapshot.personId))
+                    if showsPersonDetails {
+                        ForEach(formData.selectedRelativeSnapshots, id: \.profileId) { snapshot in
+                            SavedRelativeSnapshotRow(snapshot: snapshot, person: formData.person(for: snapshot.personId))
+                        }
+                    } else {
+                        FlowLayout(spacing: 8) {
+                            ForEach(selectedRelativeNames, id: \.self) { name in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "person.fill")
+                                        .font(.caption)
+                                    Text(name)
+                                        .font(DS.Typography.caption.bold())
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .foregroundColor(DS.Colors.text)
+                                .background(DS.Colors.background)
+                                .clipShape(Capsule())
+                            }
+                        }
                     }
                 }
             }

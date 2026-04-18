@@ -20,6 +20,25 @@ struct MissionConfirmPickupResponse: Codable {
 struct MissionActualDeliveredItemRequest: Codable {
     let itemId: Int
     let actualQuantity: Int
+    let lotAllocations: [MissionDeliveryLotAllocationRequest]?
+    let reusableUnits: [MissionDeliveryReusableUnitRequest]?
+}
+
+struct MissionDeliveryLotAllocationRequest: Codable {
+    let lotId: Int
+    let quantityTaken: Int
+    let receivedDate: String?
+    let expiredDate: String?
+    let remainingQuantityAfterExecution: Int
+}
+
+struct MissionDeliveryReusableUnitRequest: Codable {
+    let reusableItemId: Int
+    let itemModelId: Int
+    let itemName: String
+    let serialNumber: String?
+    let condition: String?
+    let note: String?
 }
 
 struct MissionConfirmDeliveryRequest: Codable {

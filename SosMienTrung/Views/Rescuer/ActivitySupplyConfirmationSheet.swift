@@ -290,22 +290,6 @@ struct DeliveryConfirmationSheet: View {
                         subtitle: "Kế hoạch \(quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit))"
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                            HStack(spacing: DS.Spacing.xs) {
-                                quickActionChip(
-                                    title: "Đủ kế hoạch",
-                                    isSelected: parsedActualQuantity(at: index) == drafts[index].plannedQuantity
-                                ) {
-                                    drafts[index].actualQuantityText = String(drafts[index].plannedQuantity)
-                                }
-
-                                quickActionChip(
-                                    title: "Chưa phát",
-                                    isSelected: parsedActualQuantity(at: index) == 0
-                                ) {
-                                    drafts[index].actualQuantityText = "0"
-                                }
-                            }
-
                             IncidentTextInputField(
                                 title: "Số lượng đã giao thực tế",
                                 placeholder: String(drafts[index].plannedQuantity),
@@ -331,7 +315,7 @@ struct DeliveryConfirmationSheet: View {
                 IncidentFormSection(
                     title: hasDiscrepancy ? "Ghi chú chênh lệch" : "Ghi chú phân phát",
                     subtitle: hasDiscrepancy
-                        ? "Nên ghi rõ lý do nếu số lượng phân phát khác với kế hoạch."
+                        ? "Có thể ghi lý do giao thiếu ngay tại đây; nếu để trống thì bước báo cáo đội sẽ yêu cầu bổ sung."
                         : "Có thể để trống nếu đội đã phân phát đúng theo kế hoạch."
                 ) {
                     IncidentTextInputField(
@@ -408,9 +392,14 @@ struct DeliveryConfirmationSheet: View {
     private var submitPayload: [MissionActualDeliveredItemRequest] {
         drafts.compactMap { draft in
             guard let actualQuantity = parsedActualQuantity(for: draft) else { return nil }
+            let lotAllocations = builtLotAllocations(for: draft, actualQuantity: actualQuantity)
+            let reusableUnits = builtReusableUnits(for: draft, actualQuantity: actualQuantity)
+
             return MissionActualDeliveredItemRequest(
                 itemId: draft.itemId,
-                actualQuantity: actualQuantity
+                actualQuantity: actualQuantity,
+                lotAllocations: lotAllocations.isEmpty ? nil : lotAllocations,
+                reusableUnits: reusableUnits.isEmpty ? nil : reusableUnits
             )
         }
     }
@@ -444,6 +433,24 @@ struct DeliveryConfirmationSheet: View {
         if actualQuantity < 0 {
             return "Số lượng thực tế không được nhỏ hơn 0."
         }
+        if actualQuantity > draft.plannedQuantity {
+            return "Số lượng thực tế không được lớn hơn kế hoạch."
+        }
+        if draft.hasLotTracking && draft.hasReusableTracking {
+            return "Vật phẩm này có dữ liệu giao theo cả lô và reusable unit. Vui lòng tải lại nhiệm vụ."
+        }
+        if draft.hasLotTracking && actualQuantity > draft.availableLotQuantity {
+            return "Số lượng thực tế vượt quá số lượng theo lô mà đội đang mang theo."
+        }
+        if draft.hasReusableTracking && actualQuantity > draft.availableReusableQuantity {
+            return "Số lượng thực tế vượt quá số reusable unit mà đội đang mang theo."
+        }
+        if draft.hasLotTracking && actualQuantity > 0 && builtLotAllocations(for: draft, actualQuantity: actualQuantity).isEmpty {
+            return "Không thể tự phân bổ số lượng theo lô cho vật phẩm này."
+        }
+        if draft.hasReusableTracking && actualQuantity > 0 && builtReusableUnits(for: draft, actualQuantity: actualQuantity).count != actualQuantity {
+            return "Không thể xác định đủ reusable unit để xác nhận phân phát."
+        }
         return nil
     }
 
@@ -457,6 +464,67 @@ struct DeliveryConfirmationSheet: View {
             return "Còn thiếu \(quantityText(abs(delta), unit: draft.unit)) so với kế hoạch."
         }
         return "Nhiều hơn kế hoạch \(quantityText(delta, unit: draft.unit))."
+    }
+
+    private func builtLotAllocations(
+        for draft: DeliveryDraft,
+        actualQuantity: Int
+    ) -> [MissionDeliveryLotAllocationRequest] {
+        guard actualQuantity > 0, draft.hasLotTracking else {
+            return []
+        }
+
+        var remaining = actualQuantity
+        var allocations: [MissionDeliveryLotAllocationRequest] = []
+
+        for lot in draft.deliveryLotAllocations {
+            guard remaining > 0 else { break }
+            guard
+                let lotId = lot.numericLotId,
+                let availableQuantity = lot.quantityTaken,
+                availableQuantity > 0
+            else {
+                continue
+            }
+
+            let quantityTaken = min(availableQuantity, remaining)
+            allocations.append(
+                MissionDeliveryLotAllocationRequest(
+                    lotId: lotId,
+                    quantityTaken: quantityTaken,
+                    receivedDate: lot.receivedDate,
+                    expiredDate: lot.expiredDate,
+                    remainingQuantityAfterExecution: max(0, availableQuantity - quantityTaken)
+                )
+            )
+            remaining -= quantityTaken
+        }
+
+        return remaining == 0 ? allocations : []
+    }
+
+    private func builtReusableUnits(
+        for draft: DeliveryDraft,
+        actualQuantity: Int
+    ) -> [MissionDeliveryReusableUnitRequest] {
+        guard actualQuantity > 0, draft.hasReusableTracking else {
+            return []
+        }
+
+        return Array(draft.deliveryReusableUnits.prefix(actualQuantity)).compactMap { unit in
+            guard let reusableItemId = unit.reusableItemId, reusableItemId > 0 else {
+                return nil
+            }
+
+            return MissionDeliveryReusableUnitRequest(
+                reusableItemId: reusableItemId,
+                itemModelId: unit.itemModelId ?? draft.itemId,
+                itemName: unit.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? draft.itemName,
+                serialNumber: unit.serialNumber?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                condition: unit.condition,
+                note: unit.note
+            )
+        }
     }
 }
 
@@ -487,16 +555,75 @@ private struct DeliveryDraft: Identifiable {
     let itemName: String
     let unit: String?
     let plannedQuantity: Int
+    let deliveryLotAllocations: [MissionSupplyLotAllocation]
+    let deliveryReusableUnits: [MissionSupplyReusableUnit]
     var actualQuantityText: String
 
     var id: String { "\(itemId)" }
+
+    var hasLotTracking: Bool { deliveryLotAllocations.isEmpty == false }
+    var hasReusableTracking: Bool { deliveryReusableUnits.isEmpty == false }
+    var availableLotQuantity: Int {
+        deliveryLotAllocations.reduce(0) { partialResult, lot in
+            partialResult + max(0, lot.quantityTaken ?? 0)
+        }
+    }
+    var availableReusableQuantity: Int { deliveryReusableUnits.count }
 
     init(supply: MissionSupply) {
         itemId = supply.itemId ?? -1
         itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm"
         unit = supply.unit
         plannedQuantity = supply.quantity
+        deliveryLotAllocations = DeliveryDraft.normalizedLotAllocations(from: supply)
+        deliveryReusableUnits = DeliveryDraft.normalizedReusableUnits(from: supply)
         actualQuantityText = String(supply.actualDeliveredQuantity ?? supply.quantity)
+    }
+
+    private static func normalizedLotAllocations(from supply: MissionSupply) -> [MissionSupplyLotAllocation] {
+        let availableDeliveryLots = nonEmptyLotAllocations(supply.availableDeliveryLotAllocations)
+        if availableDeliveryLots.isEmpty == false {
+            return availableDeliveryLots
+        }
+
+        let pickupLots = nonEmptyLotAllocations(supply.pickupLotAllocations)
+        if pickupLots.isEmpty == false {
+            return pickupLots
+        }
+
+        return nonEmptyLotAllocations(supply.plannedPickupLotAllocations)
+    }
+
+    private static func nonEmptyLotAllocations(
+        _ allocations: [MissionSupplyLotAllocation]?
+    ) -> [MissionSupplyLotAllocation] {
+        (allocations ?? []).filter(\.hasDisplayableValue)
+    }
+
+    private static func normalizedReusableUnits(from supply: MissionSupply) -> [MissionSupplyReusableUnit] {
+        let availableDeliveryUnits = nonEmptyReusableUnits(supply.availableDeliveryReusableUnits)
+        if availableDeliveryUnits.isEmpty == false {
+            return availableDeliveryUnits
+        }
+
+        let pickedUnits = nonEmptyReusableUnits(supply.pickedReusableUnits)
+        if pickedUnits.isEmpty == false {
+            return pickedUnits
+        }
+
+        return nonEmptyReusableUnits(supply.plannedPickupReusableUnits)
+    }
+
+    private static func nonEmptyReusableUnits(
+        _ units: [MissionSupplyReusableUnit]?
+    ) -> [MissionSupplyReusableUnit] {
+        (units ?? []).filter { unit in
+            if let reusableItemId = unit.reusableItemId {
+                return reusableItemId > 0
+            }
+
+            return false
+        }
     }
 }
 

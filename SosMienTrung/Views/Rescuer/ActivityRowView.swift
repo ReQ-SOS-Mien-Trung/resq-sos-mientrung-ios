@@ -415,6 +415,50 @@ struct ActivityRowView: View {
                     }
                 }
             }
+
+            if isExpanded, supplyLotOverviewBlocks.isEmpty == false {
+                Divider()
+                    .overlay(supplyOverviewColor.opacity(0.2))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Chi tiết lô lấy")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(DS.Colors.textSecondary)
+
+                    ForEach(supplyLotOverviewBlocks) { block in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(block.itemLabel)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(DS.Colors.text)
+
+                            supplyLotRows(
+                                title: block.primaryTitle,
+                                rows: block.primaryRows,
+                                tone: supplyOverviewColor
+                            )
+
+                            if let referenceTitle = block.referenceTitle,
+                               block.referenceRows.isEmpty == false {
+                                supplyLotRows(
+                                    title: referenceTitle,
+                                    rows: block.referenceRows,
+                                    tone: DS.Colors.info
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(DS.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                        )
+                    }
+                }
+            }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
@@ -534,6 +578,116 @@ struct ActivityRowView: View {
         }
 
         return Array(rows.prefix(2)) + ["+\(rows.count - 2) vật phẩm khác"]
+    }
+
+    private var supplyLotOverviewBlocks: [SupplyLotOverviewBlock] {
+        guard normalizedActivityTypeKey == "collectsupplies" else {
+            return []
+        }
+
+        return supplyItems.compactMap { supply in
+            let actualLots = nonEmptyLotAllocations(supply.pickupLotAllocations)
+            let plannedLots = nonEmptyLotAllocations(supply.plannedPickupLotAllocations)
+
+            guard actualLots.isEmpty == false || plannedLots.isEmpty == false else {
+                return nil
+            }
+
+            let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật phẩm"
+            let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let usesActualLots = actualLots.isEmpty == false
+            let primaryLots = usesActualLots ? actualLots : plannedLots
+            let primaryTitle = usesActualLots ? "Đã lấy thực tế" : "Dự kiến lấy"
+
+            let referenceRows = usesActualLots ? lotRows(from: plannedLots, unit: unit) : []
+            let referenceTitle = usesActualLots && plannedLots.isEmpty == false ? "Dự kiến ban đầu" : nil
+
+            return SupplyLotOverviewBlock(
+                id: supply.id,
+                itemLabel: itemLabel,
+                primaryTitle: primaryTitle,
+                primaryRows: lotRows(from: primaryLots, unit: unit),
+                referenceTitle: referenceTitle,
+                referenceRows: referenceRows
+            )
+        }
+    }
+
+    private func supplyLotRows(title: String, rows: [String], tone: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(tone)
+
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: 7) {
+                    Circle()
+                        .fill(tone.opacity(0.75))
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 5)
+
+                    Text(row)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func nonEmptyLotAllocations(_ allocations: [MissionSupplyLotAllocation]?) -> [MissionSupplyLotAllocation] {
+        (allocations ?? []).filter(\.hasDisplayableValue)
+    }
+
+    private func lotRows(from allocations: [MissionSupplyLotAllocation], unit: String?) -> [String] {
+        allocations.map { allocation in
+            let lotLabel = lotIdLabel(allocation.lotId)
+            let quantityLabel = lotQuantityLabel(allocation.quantityTaken, unit: unit)
+            let expiredDateLabel = lotDateLabel(allocation.expiredDate)
+            let remainingLabel = lotQuantityLabel(allocation.remainingQuantityAfterExecution, unit: unit)
+            return "Lô \(lotLabel) - SL lấy \(quantityLabel) - HSD \(expiredDateLabel) - Còn lại \(remainingLabel)"
+        }
+    }
+
+    private func lotIdLabel(_ lotId: String?) -> String {
+        guard let lotId = lotId?.trimmingCharacters(in: .whitespacesAndNewlines), lotId.isEmpty == false else {
+            return "?"
+        }
+
+        return lotId
+    }
+
+    private func lotQuantityLabel(_ quantity: Int?, unit: String?) -> String {
+        guard let quantity else { return "?" }
+
+        if let unit = unit?.trimmingCharacters(in: .whitespacesAndNewlines), unit.isEmpty == false {
+            return "\(quantity) \(unit)"
+        }
+
+        return "\(quantity)"
+    }
+
+    private func lotDateLabel(_ raw: String?) -> String {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), raw.isEmpty == false else {
+            return "?"
+        }
+
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoBasic = ISO8601DateFormatter()
+        isoBasic.formatOptions = [.withInternetDateTime]
+
+        guard let date = isoFull.date(from: raw) ?? isoBasic.date(from: raw) else {
+            return raw
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter.string(from: date)
     }
 
     private var normalizedActivityTypeKey: String {
@@ -877,6 +1031,15 @@ private struct ActivityAction: Identifiable {
     var borderColor: Color {
         color.opacity(0.25)
     }
+}
+
+private struct SupplyLotOverviewBlock: Identifiable {
+    let id: String
+    let itemLabel: String
+    let primaryTitle: String
+    let primaryRows: [String]
+    let referenceTitle: String?
+    let referenceRows: [String]
 }
 
 private struct ActivityDetailItem: Identifiable {

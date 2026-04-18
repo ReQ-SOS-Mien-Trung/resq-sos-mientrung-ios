@@ -159,6 +159,10 @@ enum L10n {
         static func missingMemberEvaluation(_ memberName: String) -> String {
             L10n.tr("mission_team_report.missing_member_evaluation", "Cần đánh giá đầy đủ cho %@ trước khi nộp báo cáo.", memberName)
         }
+
+        static func missingDeliveryShortfallReason(_ activityName: String) -> String {
+            L10n.tr("mission_team_report.missing_delivery_shortfall_reason", "Cần nhập lý do giao thiếu cho %@ trước khi nộp báo cáo.", activityName)
+        }
     }
 
     enum RescuerMission {

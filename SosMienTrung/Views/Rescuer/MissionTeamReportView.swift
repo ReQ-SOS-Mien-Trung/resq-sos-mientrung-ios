@@ -58,10 +58,21 @@ struct MissionTeamReportView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    vm.refresh()
+                Menu {
+                    Button {
+                        vm.refresh()
+                    } label: {
+                        Label("Làm mới", systemImage: "arrow.clockwise")
+                    }
+
+                    Button {
+                        vm.fillDemoReportData()
+                    } label: {
+                        Label("Điền nhanh báo cáo demo", systemImage: "sparkles")
+                    }
+                    .disabled(!canFillDemoData)
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "ellipsis.circle")
                 }
                 .foregroundColor(DS.Colors.warning)
                 .disabled(vm.isLoading || vm.isSaving || vm.isSubmitting || vm.isCompletingExecution)
@@ -420,19 +431,6 @@ struct MissionTeamReportView: View {
 
                 HStack(spacing: DS.Spacing.sm) {
                     if vm.canEdit {
-                        Button {
-                            vm.fillDemoReportData()
-                        } label: {
-                            actionLabel(
-                                title: "Điền nhanh demo",
-                                icon: "sparkles",
-                                showsProgress: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .missionReportSecondaryButton(enabled: canFillDemoData)
-                        .disabled(!canFillDemoData)
-
                         Button {
                             vm.saveDraft()
                         } label: {
@@ -985,6 +983,12 @@ private struct MissionReportActivityCard: View {
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(DS.Colors.warning)
                             }
+
+                            if activity.needsDeliveryShortfallReason && isUnlocked {
+                                Text("Cần lý do giao thiếu")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(DS.Colors.warning)
+                            }
                         }
 
                         Text(localizedActivityTitle)
@@ -1051,6 +1055,28 @@ private struct MissionReportActivityCard: View {
                             .foregroundColor(DS.Colors.textSecondary)
                     }
 
+                    if activity.hasDeliveryShortfall {
+                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                            IncidentInlineNotice(
+                                icon: activity.needsDeliveryShortfallReason ? "exclamationmark.triangle.fill" : "shippingbox.fill",
+                                text: activity.needsDeliveryShortfallReason
+                                    ? "Bước này đang giao thiếu so với kế hoạch. Hãy nhập lý do ở phần tóm tắt trước khi nộp báo cáo cuối."
+                                    : "Bước này có vật phẩm giao thiếu. Lý do đã được lưu trong phần tóm tắt của bước này.",
+                                tone: activity.needsDeliveryShortfallReason ? DS.Colors.warning : DS.Colors.info
+                            )
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(activity.deliveryShortfalls) { shortfall in
+                                    Text(shortfallLine(shortfall))
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(.leading, DS.Spacing.xs)
+                        }
+                    }
+
                     ExecutionStatusMenuField(
                         title: "Trạng thái thực hiện",
                         value: $activity.executionStatus,
@@ -1061,7 +1087,7 @@ private struct MissionReportActivityCard: View {
                         title: "Tóm tắt kết quả",
                         text: $activity.summary,
                         placeholder: "Mô tả ngắn kết quả thực hiện của hoạt động này.",
-                        caption: isEditable ? "Trạng thái đầu việc sẽ thay đổi theo lựa chọn ở mục trạng thái thực hiện." : nil,
+                        caption: summaryCaption,
                         isEditable: isEditable,
                         minHeight: 88
                     )
@@ -1149,6 +1175,18 @@ private struct MissionReportActivityCard: View {
         activity.structuredPayload.hasAnyContent
     }
 
+    private var summaryCaption: String? {
+        if activity.needsDeliveryShortfallReason {
+            return "Bước này đang giao thiếu so với kế hoạch; cần ghi rõ lý do trong phần tóm tắt trước khi nộp báo cáo."
+        }
+
+        if isEditable {
+            return "Trạng thái đầu việc sẽ thay đổi theo lựa chọn ở mục trạng thái thực hiện."
+        }
+
+        return nil
+    }
+
     private func localizedActivityLabel(from rawValue: String?) -> String? {
         guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
             return nil
@@ -1206,6 +1244,22 @@ private struct MissionReportActivityCard: View {
         default:
             return DS.Colors.textSecondary
         }
+    }
+
+    private func shortfallLine(_ shortfall: MissionTeamReportDeliveryShortfall) -> String {
+        let planned = quantityLabel(shortfall.plannedQuantity, unit: shortfall.unit)
+        let actual = quantityLabel(shortfall.actualDeliveredQuantity, unit: shortfall.unit)
+        let missing = quantityLabel(shortfall.shortfallQuantity, unit: shortfall.unit)
+
+        return "\(shortfall.itemName): kế hoạch \(planned), thực tế \(actual), thiếu \(missing)."
+    }
+
+    private func quantityLabel(_ quantity: Int, unit: String?) -> String {
+        if let unit, unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return "\(quantity) \(unit)"
+        }
+
+        return "\(quantity)"
     }
 }
 

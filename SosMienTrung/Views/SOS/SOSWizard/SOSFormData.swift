@@ -623,7 +623,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
                 // Chấn thương
                 .bleeding, .fracture,
                 // Nguy hiểm
-                .unconscious, .breathingDifficulty, .highFever, .dehydration, .drowning,
+                .unconscious, .breathingDifficulty, .cannotMove, .highFever, .dehydration, .drowning,
                 // Đặc thù
                 .infantNeedsMilk, .lostParent,
                 // Khác
@@ -785,6 +785,80 @@ struct AutoCollectedInfo: Codable {
         self.accuracy = accuracy
         self.isOnline = isOnline
         self.batteryLevel = batteryLevel
+    }
+}
+
+private enum SOSQuickFillSample {
+    static let address = "Hồ Chí Minh, Thành Phố Hồ Chí Minh, Việt Nam"
+    static let latitude = 10.7765713
+    static let longitude = 106.7012093
+
+    static let adultId = "adult_1"
+    static let childId = "child_1"
+    static let elderlyId = "elderly_1"
+
+    static let additionalDescription = """
+    Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!
+    Thông tin y tế nền: Khoa (Bệnh nền: Tim mạch, Tiểu đường, Bệnh thận; Dị ứng: Dị ứng thuốc; Thiết bị hỗ trợ: Bình oxy; Tiền sử chấn thương / phẫu thuật: Đã từng gãy xương; Yêu cầu đặc biệt: Cần người dìu)
+    """
+
+    static func makeReliefData(peopleCount: PeopleCount) -> ReliefData {
+        ReliefData(
+            supplies: [.water, .food, .clothes, .blanket, .medicine, .other],
+            otherSupplyDescription: "Pin sạc dự phòng",
+            peopleCount: peopleCount,
+            waterDuration: WaterDuration.from6to12h.rawValue,
+            waterRemaining: nil,
+            foodDuration: FoodDuration.from12to24h.rawValue,
+            specialDietNeed: nil,
+            specialDietPersonIds: [childId, adultId, elderlyId],
+            specialDietInfoByPerson: [
+                childId: PersonSpecialDietInfo(personId: childId, dietDescription: "Ăn lỏng"),
+                adultId: PersonSpecialDietInfo(personId: adultId, dietDescription: "Không ăn béo."),
+                elderlyId: PersonSpecialDietInfo(personId: elderlyId, dietDescription: "Dị ứng hải sản.")
+            ],
+            needsUrgentMedicine: true,
+            medicineConditions: [.chronicDisease, .injured],
+            medicineOtherDescription: "",
+            medicalNeeds: [.commonMedicine, .firstAid],
+            medicalDescription: "",
+            isColdOrWet: true,
+            blanketAvailability: .notEnough,
+            areBlanketsEnough: false,
+            blanketRequestCount: 2,
+            clothingStatus: .partiallyLacking,
+            clothingPersonIds: [childId],
+            clothingInfoByPerson: [
+                childId: ClothingPersonInfo(personId: childId, gender: .male)
+            ]
+        )
+    }
+
+    static func makeRescueData(peopleCount: PeopleCount, people: [Person]) -> RescueData {
+        RescueData(
+            situation: RescueSituation.trapped.rawValue,
+            otherSituationDescription: "",
+            peopleCount: peopleCount,
+            people: people,
+            hasInjured: true,
+            injuredPersonIds: [childId],
+            medicalInfoByPerson: [
+                childId: PersonMedicalInfo(
+                    personId: childId,
+                    medicalIssues: [
+                        MedicalIssue.fracture.rawValue,
+                        MedicalIssue.unconscious.rawValue,
+                        MedicalIssue.lostParent.rawValue,
+                        MedicalIssue.cannotMove.rawValue,
+                        MedicalIssue.bleeding.rawValue
+                    ],
+                    otherDescription: ""
+                )
+            ],
+            medicalIssues: [],
+            otherMedicalDescription: "",
+            othersAreStable: false
+        )
     }
 }
 
@@ -2007,6 +2081,53 @@ final class SOSFormData: ObservableObject {
         case .collapsed:
             rescueData.situation = RescueSituation.collapsed.rawValue
         }
+    }
+
+    func applyQuickFillSample() {
+        appliedPreset = nil
+        reportingTarget = .other
+        reportingTargetSelectionMade = true
+        personSourceMode = .manual
+        selectedRelativeSnapshots = []
+
+        victimName = "Nhóm 3 người"
+        victimPhone = ""
+        addressQuery = SOSQuickFillSample.address
+        resolvedAddress = SOSQuickFillSample.address
+        manualLocation = SOSManualLocation(
+            latitude: SOSQuickFillSample.latitude,
+            longitude: SOSQuickFillSample.longitude,
+            accuracy: nil
+        )
+
+        selectedTypes = [.rescue, .relief]
+        additionalDescription = SOSQuickFillSample.additionalDescription
+
+        setSharedPeopleCountSilently(
+            PeopleCount(
+                adults: 1,
+                children: 1,
+                elderly: 1
+            )
+        )
+        syncPeopleCount()
+
+        updatePersonName("Thảo", for: SOSQuickFillSample.adultId)
+        updatePersonName("Khoa", for: SOSQuickFillSample.childId)
+        updatePersonName("Chu", for: SOSQuickFillSample.elderlyId)
+
+        reliefData = SOSQuickFillSample.makeReliefData(peopleCount: sharedPeopleCount)
+        rescueData = SOSQuickFillSample.makeRescueData(
+            peopleCount: sharedPeopleCount,
+            people: sharedPeople
+        )
+
+        let validIds = Set(sharedPeople.map(\.id))
+        reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
+        rescueData.syncToValidPeople(validIds: validIds)
+
+        completedSteps = Set(SOSWizardStep.allCases.filter { $0 != .review })
+        currentStep = .review
     }
     
     /// Convert to SOSPacket message format

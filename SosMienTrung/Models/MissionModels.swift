@@ -49,6 +49,142 @@ enum ActivityStatus: String, Codable, CaseIterable {
 }
 
 // MARK: - Activity Supply
+struct MissionSupplyLotAllocation: Codable, Identifiable {
+    let lotId: String?
+    let quantityTaken: Int?
+    let receivedDate: String?
+    let expiredDate: String?
+    let remainingQuantityAfterExecution: Int?
+
+    var id: String {
+        let lotLabel = lotId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return lotLabel?.isEmpty == false
+            ? lotLabel!
+            : "unknown-\(receivedDate ?? "")-\(expiredDate ?? "")-\(quantityTaken ?? -1)-\(remainingQuantityAfterExecution ?? -1)"
+    }
+
+    var hasDisplayableValue: Bool {
+        let cleanedLotId = lotId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleanedLotId?.isEmpty == false
+            || quantityTaken != nil
+            || receivedDate?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || expiredDate?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || remainingQuantityAfterExecution != nil
+    }
+
+    var numericLotId: Int? {
+        guard let lotId = lotId?.trimmingCharacters(in: .whitespacesAndNewlines), lotId.isEmpty == false else {
+            return nil
+        }
+
+        return Int(lotId)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case lotId
+        case quantityTaken
+        case receivedDate
+        case expiredDate
+        case remainingQuantityAfterExecution
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let textValue = try? container.decodeIfPresent(String.self, forKey: .lotId) {
+            lotId = textValue
+        } else if let intValue = try? container.decodeIfPresent(Int.self, forKey: .lotId) {
+            lotId = String(intValue)
+        } else if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: .lotId) {
+            lotId = String(Int(doubleValue.rounded()))
+        } else {
+            lotId = nil
+        }
+
+        quantityTaken = MissionSupplyLotAllocation.decodeLossyInt(container: container, key: .quantityTaken)
+        receivedDate = try? container.decodeIfPresent(String.self, forKey: .receivedDate)
+        expiredDate = try? container.decodeIfPresent(String.self, forKey: .expiredDate)
+        remainingQuantityAfterExecution = MissionSupplyLotAllocation.decodeLossyInt(container: container, key: .remainingQuantityAfterExecution)
+    }
+
+    private static func decodeLossyInt(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Int? {
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return intValue
+        }
+
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return Int(doubleValue.rounded())
+        }
+
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+}
+
+struct MissionSupplyReusableUnit: Codable, Identifiable {
+    let reusableItemId: Int?
+    let itemModelId: Int?
+    let itemName: String?
+    let serialNumber: String?
+    let condition: String?
+    let note: String?
+
+    var id: String {
+        if let reusableItemId {
+            return "reusable-\(reusableItemId)"
+        }
+
+        let serialNumber = serialNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return serialNumber?.isEmpty == false
+            ? "serial-\(serialNumber!)"
+            : "reusable-unknown-\(itemModelId ?? -1)"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case reusableItemId
+        case itemModelId
+        case itemName
+        case serialNumber
+        case condition
+        case note
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reusableItemId = MissionSupplyReusableUnit.decodeLossyInt(container: container, key: .reusableItemId)
+        itemModelId = MissionSupplyReusableUnit.decodeLossyInt(container: container, key: .itemModelId)
+        itemName = try? container.decodeIfPresent(String.self, forKey: .itemName)
+        serialNumber = try? container.decodeIfPresent(String.self, forKey: .serialNumber)
+        condition = try? container.decodeIfPresent(String.self, forKey: .condition)
+        note = try? container.decodeIfPresent(String.self, forKey: .note)
+    }
+
+    private static func decodeLossyInt(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Int? {
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return intValue
+        }
+
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return Int(doubleValue.rounded())
+        }
+
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+}
+
 struct MissionSupply: Codable, Identifiable {
     let itemId: Int?
     let itemName: String?
@@ -60,6 +196,14 @@ struct MissionSupply: Codable, Identifiable {
     let bufferUsedQuantity: Int?
     let bufferUsedReason: String?
     let actualDeliveredQuantity: Int?
+    let plannedPickupLotAllocations: [MissionSupplyLotAllocation]?
+    let plannedPickupReusableUnits: [MissionSupplyReusableUnit]?
+    let pickupLotAllocations: [MissionSupplyLotAllocation]?
+    let pickedReusableUnits: [MissionSupplyReusableUnit]?
+    let availableDeliveryLotAllocations: [MissionSupplyLotAllocation]?
+    let availableDeliveryReusableUnits: [MissionSupplyReusableUnit]?
+    let deliveredLotAllocations: [MissionSupplyLotAllocation]?
+    let deliveredReusableUnits: [MissionSupplyReusableUnit]?
 
     var id: String {
         "\(itemId ?? -1)-\(itemName ?? "supply")-\(quantity)"
