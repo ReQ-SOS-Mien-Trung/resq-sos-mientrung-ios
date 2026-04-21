@@ -789,13 +789,12 @@ struct AutoCollectedInfo: Codable {
 }
 
 private enum SOSQuickFillSample {
-    static let address = "Hồ Chí Minh, Thành Phố Hồ Chí Minh, Việt Nam"
-    static let latitude = 10.7765713
-    static let longitude = 106.7012093
-
     static let adultId = "adult_1"
     static let childId = "child_1"
     static let elderlyId = "elderly_1"
+    static let demoLatitude = 16.469621
+    static let demoLongitude = 107.592778
+    static let demoAddress = "Demo: 16.469621, 107.592778"
 
     static let additionalDescription = "Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!"
 
@@ -2119,35 +2118,17 @@ final class SOSFormData: ObservableObject {
         appliedPreset = nil
         reportingTarget = .self
         reportingTargetSelectionMade = true
-        personSourceMode = .manual
-        selectedRelativeSnapshots = []
-
-        victimName = "Nhóm 3 người"
-        victimPhone = ""
-        addressQuery = SOSQuickFillSample.address
-        resolvedAddress = SOSQuickFillSample.address
+        resolvedAddress = SOSQuickFillSample.demoAddress
+        addressQuery = SOSQuickFillSample.demoAddress
         manualLocation = SOSManualLocation(
-            latitude: SOSQuickFillSample.latitude,
-            longitude: SOSQuickFillSample.longitude,
+            latitude: SOSQuickFillSample.demoLatitude,
+            longitude: SOSQuickFillSample.demoLongitude,
             accuracy: nil
         )
 
         selectedTypes = [.rescue, .relief]
         additionalDescription = SOSQuickFillSample.additionalDescription
         supplementalMedicalContextItems = SOSQuickFillSample.medicalContextItems
-
-        setSharedPeopleCountSilently(
-            PeopleCount(
-                adults: 1,
-                children: 1,
-                elderly: 1
-            )
-        )
-        syncPeopleCount()
-
-        updatePersonName("Thảo", for: SOSQuickFillSample.adultId)
-        updatePersonName("Khoa", for: SOSQuickFillSample.childId)
-        updatePersonName("Chu", for: SOSQuickFillSample.elderlyId)
 
         reliefData = SOSQuickFillSample.makeReliefData(peopleCount: sharedPeopleCount)
         rescueData = SOSQuickFillSample.makeRescueData(

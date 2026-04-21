@@ -72,7 +72,7 @@ private struct SOSQuickFillEntryCard: View {
                         .foregroundColor(DS.Colors.info)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Điền mẫu nhanh")
+                        Text("Demo")
                             .font(DS.Typography.headline)
                             .foregroundColor(DS.Colors.text)
                     }
