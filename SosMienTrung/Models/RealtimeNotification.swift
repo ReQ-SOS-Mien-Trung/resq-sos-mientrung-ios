@@ -1,5 +1,69 @@
 import Foundation
 
+private func notificationTrim(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+private func notificationNormalizedType(_ value: String?) -> String? {
+    notificationTrim(value)?
+        .replacingOccurrences(of: "_", with: " ")
+        .capitalized
+}
+
+private func notificationNormalizedJSONObject(_ object: Any) -> Any {
+    if let dictionary = object as? [AnyHashable: Any] {
+        return dictionary.reduce(into: [String: Any]()) { partialResult, item in
+            guard let key = item.key as? String else { return }
+            partialResult[key] = notificationNormalizedJSONObject(item.value)
+        }
+    }
+
+    if let array = object as? [Any] {
+        return array.map(notificationNormalizedJSONObject)
+    }
+
+    return object
+}
+
+private func notificationMakeJSONData(from object: Any) -> Data? {
+    if let rawString = object as? String {
+        let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false,
+              trimmed.first == "{" || trimmed.first == "[" else {
+            return nil
+        }
+        return trimmed.data(using: .utf8)
+    }
+
+    let normalizedObject = notificationNormalizedJSONObject(object)
+    guard JSONSerialization.isValidJSONObject(normalizedObject) else {
+        return nil
+    }
+
+    return try? JSONSerialization.data(withJSONObject: normalizedObject)
+}
+
+private func notificationParseDate(_ rawValue: String) -> Date? {
+    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if let timestamp = Double(trimmed) {
+        return Date(timeIntervalSince1970: timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp)
+    }
+
+    let formatterWithFraction = ISO8601DateFormatter()
+    formatterWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatterWithFraction.date(from: trimmed) {
+        return date
+    }
+
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter.date(from: trimmed)
+}
+
 enum NotificationOrigin: String, Equatable {
     case backend
     case broadcastPush
@@ -34,12 +98,12 @@ struct BroadcastAlertPayload: Codable, Equatable {
 
     var primaryAlertTitle: String? {
         alerts.compactMap { alert in
-            Self.trim(alert.title) ?? Self.normalizedType(alert.eventType)
+            notificationTrim(alert.title) ?? notificationNormalizedType(alert.eventType)
         }.first
     }
 
     var summaryMessage: String {
-        let city = Self.trim(location?.city)
+        let city = notificationTrim(location?.city)
 
         switch alerts.count {
         case 0:
@@ -49,17 +113,17 @@ struct BroadcastAlertPayload: Codable, Equatable {
             return "Canh bao moi tu he thong."
         case 1:
             let alert = alerts[0]
-            var message = Self.trim(alert.title) ?? Self.normalizedType(alert.eventType) ?? "Canh bao moi"
+            var message = notificationTrim(alert.title) ?? notificationNormalizedType(alert.eventType) ?? "Canh bao moi"
 
             if let city {
                 message += " tai \(city)"
             }
 
-            if let severity = Self.trim(alert.severity) {
+            if let severity = notificationTrim(alert.severity) {
                 message += " (\(severity.uppercased()))"
             }
 
-            let areas = (alert.areasAffected ?? []).compactMap(Self.trim)
+            let areas = (alert.areasAffected ?? []).compactMap(notificationTrim)
             if areas.isEmpty == false {
                 let preview = Array(areas.prefix(2))
                 message += ". Khu vuc anh huong: \(preview.joined(separator: ", "))"
@@ -82,53 +146,8 @@ struct BroadcastAlertPayload: Codable, Equatable {
     }
 
     static func decode(fromJSONObject object: Any) -> BroadcastAlertPayload? {
-        guard let data = makeJSONData(from: object) else { return nil }
+        guard let data = notificationMakeJSONData(from: object) else { return nil }
         return try? RealtimeNotification.decoder().decode(BroadcastAlertPayload.self, from: data)
-    }
-
-    private static func makeJSONData(from object: Any) -> Data? {
-        if let rawString = object as? String {
-            let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.isEmpty == false,
-                  trimmed.first == "{" || trimmed.first == "[" else {
-                return nil
-            }
-            return trimmed.data(using: .utf8)
-        }
-
-        let normalizedObject = normalizedJSONObject(object)
-        guard JSONSerialization.isValidJSONObject(normalizedObject) else {
-            return nil
-        }
-
-        return try? JSONSerialization.data(withJSONObject: normalizedObject)
-    }
-
-    private static func normalizedJSONObject(_ object: Any) -> Any {
-        if let dictionary = object as? [AnyHashable: Any] {
-            return dictionary.reduce(into: [String: Any]()) { partialResult, item in
-                guard let key = item.key as? String else { return }
-                partialResult[key] = normalizedJSONObject(item.value)
-            }
-        }
-
-        if let array = object as? [Any] {
-            return array.map(normalizedJSONObject)
-        }
-
-        return object
-    }
-
-    private static func trim(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func normalizedType(_ value: String?) -> String? {
-        trim(value)?
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
     }
 }
 
@@ -306,7 +325,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
             let container = try nestedDecoder.singleValueContainer()
 
             if let rawString = try? container.decode(String.self),
-               let date = parseDate(rawString) {
+               let date = notificationParseDate(rawString) {
                 return date
             }
 
@@ -468,7 +487,7 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         for rawKey in keys {
             let key = DynamicCodingKey(rawValue: rawKey)
             if let rawValue = try? container.decode(String.self, forKey: key),
-               let date = parseDate(rawValue) {
+               let date = notificationParseDate(rawValue) {
                 return date
             }
 
@@ -483,25 +502,6 @@ struct RealtimeNotification: Decodable, Identifiable, Equatable {
         }
 
         return nil
-    }
-
-    private static func parseDate(_ rawValue: String) -> Date? {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        if let timestamp = Double(trimmed) {
-            return Date(timeIntervalSince1970: timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp)
-        }
-
-        let formatterWithFraction = ISO8601DateFormatter()
-        formatterWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatterWithFraction.date(from: trimmed) {
-            return date
-        }
-
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: trimmed)
     }
 }
 

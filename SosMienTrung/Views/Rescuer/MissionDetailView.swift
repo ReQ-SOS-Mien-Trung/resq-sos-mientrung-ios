@@ -28,6 +28,7 @@ struct MissionDetailView: View {
     @State private var showMissionInventory = false
     @State private var pickupConfirmationActivity: Activity?
     @State private var deliveryConfirmationActivity: Activity?
+    @State private var returnConfirmationActivity: Activity?
     @State private var completionProofActivity: Activity?
     @State private var routePreviewActivity: Activity?
     @State private var missionStatus: String
@@ -149,7 +150,9 @@ struct MissionDetailView: View {
                 mission: activeMission,
                 activities: currentTeamActivities,
                 incidentVM: incidentVM
-            )
+            ) {
+                showReportIncident = false
+            }
         }
         .navigationDestination(isPresented: $showMissionReport) {
             if let teamId = viewerMissionTeamId {
@@ -220,6 +223,22 @@ struct MissionDetailView: View {
                         activityId: activity.id,
                         actualDeliveredItems: actualDeliveredItems,
                         deliveryNote: deliveryNote,
+                        proofImage: proofImage
+                    )
+                }
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $returnConfirmationActivity) { activity in
+            NavigationStack {
+                ReturnSuppliesConfirmationSheet(
+                    activity: activity,
+                    isSubmitting: vm.isLoadingActivities
+                ) { proofImage in
+                    await vm.completeActivity(
+                        missionId: activeMission.id,
+                        activityId: activity.id,
+                        knownActivities: currentTeamActivities.isEmpty ? displayedActivities : currentTeamActivities,
                         proofImage: proofImage
                     )
                 }
@@ -835,6 +854,11 @@ struct MissionDetailView: View {
 
             if activity.isDeliverSuppliesActivity {
                 deliveryConfirmationActivity = activity
+                return
+            }
+
+            if activity.isReturnSuppliesActivity {
+                returnConfirmationActivity = activity
                 return
             }
 

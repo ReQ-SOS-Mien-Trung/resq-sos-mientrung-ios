@@ -11,6 +11,7 @@ struct ContentView: View {
     @StateObject private var authSession = AuthSessionStore.shared
     @StateObject private var sosRuleConfigStore = SOSRuleConfigStore.shared
     @ObservedObject private var appearance = AppearanceManager.shared
+    @ObservedObject private var navigationCoordinator = AppNavigationCoordinator.shared
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
     @State private var lastObservedAuthSession: AuthSession? = AuthSessionStore.shared.session
@@ -105,6 +106,7 @@ struct ContentView: View {
             .onChange(of: userProfile.currentUser) { newUser in
                 if newUser == nil {
                     isSetupComplete = false
+                    navigationCoordinator.resetToHome()
                     teardownAuthenticatedNetworking()
                 } else if isFullyAuthenticated {
                     isSetupComplete = true
@@ -116,6 +118,9 @@ struct ContentView: View {
                 lastObservedAuthSession = newSession
 
                 if newSession != nil {
+                    if previousSession == nil {
+                        navigationCoordinator.resetToHome()
+                    }
                     Task { @MainActor in
                         await notificationHub.handleAuthSessionTransition(from: previousSession, to: newSession)
                     }
@@ -123,6 +128,7 @@ struct ContentView: View {
 
                 if newSession == nil {
                     isSetupComplete = false
+                    navigationCoordinator.resetToHome()
                     teardownAuthenticatedNetworking()
                 } else if isFullyAuthenticated {
                     isSetupComplete = true

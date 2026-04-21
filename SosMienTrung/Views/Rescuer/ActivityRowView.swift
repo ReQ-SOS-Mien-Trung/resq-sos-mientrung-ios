@@ -421,7 +421,7 @@ struct ActivityRowView: View {
                     .overlay(supplyOverviewColor.opacity(0.2))
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Chi tiết lô lấy")
+                    Text(supplyLotOverviewTitle)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(DS.Colors.textSecondary)
 
@@ -581,37 +581,67 @@ struct ActivityRowView: View {
     }
 
     private var supplyLotOverviewBlocks: [SupplyLotOverviewBlock] {
-        guard normalizedActivityTypeKey == "collectsupplies" else {
-            return []
-        }
+        switch normalizedActivityTypeKey {
+        case "collectsupplies":
+            return supplyItems.compactMap { supply in
+                let actualLots = nonEmptyLotAllocations(supply.pickupLotAllocations)
+                let plannedLots = nonEmptyLotAllocations(supply.plannedPickupLotAllocations)
 
-        return supplyItems.compactMap { supply in
-            let actualLots = nonEmptyLotAllocations(supply.pickupLotAllocations)
-            let plannedLots = nonEmptyLotAllocations(supply.plannedPickupLotAllocations)
+                guard actualLots.isEmpty == false || plannedLots.isEmpty == false else {
+                    return nil
+                }
 
-            guard actualLots.isEmpty == false || plannedLots.isEmpty == false else {
-                return nil
+                let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật phẩm"
+                let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let usesActualLots = actualLots.isEmpty == false
+                let primaryLots = usesActualLots ? actualLots : plannedLots
+                let primaryTitle = usesActualLots ? "Đã lấy thực tế" : "Dự kiến lấy"
+
+                let referenceRows = usesActualLots ? lotRows(from: plannedLots, unit: unit, quantityVerb: "lấy") : []
+                let referenceTitle = usesActualLots && plannedLots.isEmpty == false ? "Dự kiến ban đầu" : nil
+
+                return SupplyLotOverviewBlock(
+                    id: supply.id,
+                    itemLabel: itemLabel,
+                    primaryTitle: primaryTitle,
+                    primaryRows: lotRows(from: primaryLots, unit: unit, quantityVerb: "lấy"),
+                    referenceTitle: referenceTitle,
+                    referenceRows: referenceRows
+                )
             }
+        case "returnsupplies":
+            return supplyItems.compactMap { supply in
+                let returnedLots = nonEmptyLotAllocations(supply.returnedLotAllocations)
+                let expectedLots = nonEmptyLotAllocations(supply.expectedReturnLotAllocations)
 
-            let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật phẩm"
-            let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard returnedLots.isEmpty == false || expectedLots.isEmpty == false else {
+                    return nil
+                }
 
-            let usesActualLots = actualLots.isEmpty == false
-            let primaryLots = usesActualLots ? actualLots : plannedLots
-            let primaryTitle = usesActualLots ? "Đã lấy thực tế" : "Dự kiến lấy"
+                let itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let itemLabel = itemName?.isEmpty == false ? itemName! : "Vật phẩm"
+                let unit = supply.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let referenceRows = usesActualLots ? lotRows(from: plannedLots, unit: unit) : []
-            let referenceTitle = usesActualLots && plannedLots.isEmpty == false ? "Dự kiến ban đầu" : nil
+                let hasReturnedLots = returnedLots.isEmpty == false
+                let primaryLots = hasReturnedLots ? returnedLots : expectedLots
+                let primaryTitle = hasReturnedLots ? "Đã hoàn trả" : "Dự kiến hoàn trả"
 
-            return SupplyLotOverviewBlock(
-                id: supply.id,
-                itemLabel: itemLabel,
-                primaryTitle: primaryTitle,
-                primaryRows: lotRows(from: primaryLots, unit: unit),
-                referenceTitle: referenceTitle,
-                referenceRows: referenceRows
-            )
+                let referenceRows = hasReturnedLots ? lotRows(from: expectedLots, unit: unit, quantityVerb: "trả") : []
+                let referenceTitle = hasReturnedLots && expectedLots.isEmpty == false ? "Dự kiến ban đầu" : nil
+
+                return SupplyLotOverviewBlock(
+                    id: supply.id,
+                    itemLabel: itemLabel,
+                    primaryTitle: primaryTitle,
+                    primaryRows: lotRows(from: primaryLots, unit: unit, quantityVerb: "trả"),
+                    referenceTitle: referenceTitle,
+                    referenceRows: referenceRows
+                )
+            }
+        default:
+            return []
         }
     }
 
@@ -641,13 +671,25 @@ struct ActivityRowView: View {
         (allocations ?? []).filter(\.hasDisplayableValue)
     }
 
-    private func lotRows(from allocations: [MissionSupplyLotAllocation], unit: String?) -> [String] {
+    private func lotRows(
+        from allocations: [MissionSupplyLotAllocation],
+        unit: String?,
+        quantityVerb: String
+    ) -> [String] {
         allocations.map { allocation in
             let lotLabel = lotIdLabel(allocation.lotId)
             let quantityLabel = lotQuantityLabel(allocation.quantityTaken, unit: unit)
             let expiredDateLabel = lotDateLabel(allocation.expiredDate)
-            let remainingLabel = lotQuantityLabel(allocation.remainingQuantityAfterExecution, unit: unit)
-            return "Lô \(lotLabel) - SL lấy \(quantityLabel) - HSD \(expiredDateLabel) - Còn lại \(remainingLabel)"
+            return "Lô \(lotLabel) - SL \(quantityVerb) \(quantityLabel) - HSD \(expiredDateLabel)"
+        }
+    }
+
+    private var supplyLotOverviewTitle: String {
+        switch normalizedActivityTypeKey {
+        case "returnsupplies":
+            return "Chi tiết lô hoàn trả"
+        default:
+            return "Chi tiết lô lấy"
         }
     }
 

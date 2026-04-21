@@ -1,16 +1,13 @@
 import SwiftUI
 
 struct ReportIncidentView: View {
-    private enum IncidentReportRoute: String, Hashable {
-        case activity
-        case mission
-    }
-
     let mission: Mission
     let activities: [Activity]
     @ObservedObject var incidentVM: IncidentViewModel
+    let onReportSubmitted: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @State private var showActivityReport = false
+    @State private var showMissionReport = false
 
     private var missionTeamId: Int? {
         mission.missionTeamId
@@ -22,7 +19,9 @@ struct ReportIncidentView: View {
                 headerSection
 
                 if missionTeamId != nil {
-                    NavigationLink(value: IncidentReportRoute.activity) {
+                    Button {
+                        showActivityReport = true
+                    } label: {
                         chooserCard(
                             eyebrow: "HOẠT ĐỘNG",
                             title: "Báo sự cố hoạt động",
@@ -34,7 +33,9 @@ struct ReportIncidentView: View {
                     }
                     .buttonStyle(.plain)
 
-                    NavigationLink(value: IncidentReportRoute.mission) {
+                    Button {
+                        showMissionReport = true
+                    } label: {
                         chooserCard(
                             eyebrow: "NHIỆM VỤ",
                             title: "Báo sự cố nhiệm vụ",
@@ -63,24 +64,24 @@ struct ReportIncidentView: View {
         .background(DS.Colors.background.ignoresSafeArea())
         .navigationTitle("Báo sự cố")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: IncidentReportRoute.self) { route in
+        .navigationDestination(isPresented: $showActivityReport) {
             if let missionTeamId {
-                switch route {
-                case .activity:
-                    ActivityIncidentReportFormView(
-                        mission: mission,
-                        missionTeamId: missionTeamId,
-                        activities: activities,
-                        incidentVM: incidentVM
-                    )
-                case .mission:
-                    MissionIncidentReportFormView(
-                        mission: mission,
-                        missionTeamId: missionTeamId,
-                        activities: activities,
-                        incidentVM: incidentVM
-                    )
-                }
+                ActivityIncidentReportFormView(
+                    mission: mission,
+                    missionTeamId: missionTeamId,
+                    activities: activities,
+                    incidentVM: incidentVM
+                )
+            }
+        }
+        .navigationDestination(isPresented: $showMissionReport) {
+            if let missionTeamId {
+                MissionIncidentReportFormView(
+                    mission: mission,
+                    missionTeamId: missionTeamId,
+                    activities: activities,
+                    incidentVM: incidentVM
+                )
             }
         }
         .alert("Lỗi", isPresented: Binding(
@@ -93,21 +94,28 @@ struct ReportIncidentView: View {
         }
         .onChange(of: incidentVM.successMessage) { message in
             guard message != nil else { return }
+
+            showActivityReport = false
+            showMissionReport = false
             incidentVM.loadIncidents(missionId: mission.id)
-            dismiss()
+            incidentVM.successMessage = nil
+            onReportSubmitted()
         }
     }
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            EyebrowLabel(text: "CHỌN LOẠI BÁO CÁO")
-            Text("Đừng để người dùng phải tự suy luận mình đang báo loại nào.")
-                .font(.system(size: 18, weight: .bold))
+            EyebrowLabel(text: "BÁO SỰ CỐ")
+
+            Text("Chọn đúng loại biểu mẫu để điều phối viên nhận cảnh báo đúng mức độ và điều hướng hỗ trợ nhanh hơn.")
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(DS.Colors.text)
 
-            Text("Chọn đúng điểm vào ngay từ đầu để biểu mẫu mở đúng logic điều phối phía sau.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(DS.Colors.textSecondary)
+            IncidentInlineNotice(
+                icon: "info.circle.fill",
+                text: "Sự cố hoạt động dành cho tình huống cục bộ. Sự cố nhiệm vụ dành cho tình huống toàn đội không thể tiếp tục nhiệm vụ.",
+                tone: DS.Colors.info
+            )
         }
     }
 

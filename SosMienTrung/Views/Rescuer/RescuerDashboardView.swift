@@ -357,43 +357,7 @@ struct RescuerDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                    if canAccessRescuerWorkspace == false {
-                        restrictedStateView
-                            .padding(.top, DS.Spacing.md)
-                    } else {
-                        if canViewMissionWorkspace {
-                            teamCard
-                                .padding(.top, DS.Spacing.md)
-                        }
-
-                        if shouldShowAssemblySection {
-                            Text("TRIỆU TẬP").sectionHeader()
-                                .padding(.top, canViewMissionWorkspace ? 0 : DS.Spacing.md)
-                            assemblyEventsSection
-
-                            if canViewMissionWorkspace {
-                                checkInGateMessage
-                            }
-                        }
-
-                        if shouldShowMissionSection {
-                            Text("NHIỆM VỤ CỦA ĐỘI").sectionHeader()
-
-                            if vm.isLoading && vm.missions.isEmpty {
-                                ProgressView()
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, DS.Spacing.lg)
-                            } else if vm.missions.isEmpty {
-                                emptyMissionsView
-                            } else {
-                                missionsList
-                            }
-                        }
-                    }
-
-                    Spacer(minLength: 80)
-                }
+                dashboardContent
                 .padding(.horizontal, DS.Spacing.md)
             }
             .background(DS.Colors.background)
@@ -489,6 +453,47 @@ struct RescuerDashboardView: View {
         .onDisappear {
             vm.stopLocationTracking()
             assemblyVM.stopLocationTracking()
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardContent: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+            if canAccessRescuerWorkspace == false {
+                restrictedStateView
+                    .padding(.top, DS.Spacing.md)
+            } else {
+                if canViewMissionWorkspace {
+                    teamCard
+                        .padding(.top, DS.Spacing.md)
+                }
+
+                if shouldShowAssemblySection {
+                    Text("TRIỆU TẬP").sectionHeader()
+                        .padding(.top, canViewMissionWorkspace ? 0 : DS.Spacing.md)
+                    assemblyEventsSection
+
+                    if canViewMissionWorkspace {
+                        checkInGateMessage
+                    }
+                }
+
+                if shouldShowMissionSection {
+                    Text("NHIỆM VỤ CỦA ĐỘI").sectionHeader()
+
+                    if vm.isLoading && vm.missions.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, DS.Spacing.lg)
+                    } else if vm.missions.isEmpty {
+                        emptyMissionsView
+                    } else {
+                        missionsList
+                    }
+                }
+            }
+
+            Spacer(minLength: 80)
         }
     }
 
@@ -743,28 +748,27 @@ struct RescuerDashboardView: View {
         .padding(.top, DS.Spacing.lg * 2)
     }
 
+    @ViewBuilder
     private var checkInGateMessage: some View {
         HStack(alignment: .top, spacing: DS.Spacing.sm) {
-            Image(systemName: "lock.circle.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(DS.Colors.info)
+            Image(systemName: isMissionAccessUnlocked ? "checkmark.shield.fill" : "lock.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(isMissionAccessUnlocked ? DS.Colors.success : DS.Colors.warning)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Xác nhận có mặt để mở nhiệm vụ")
-                    .font(DS.Typography.subheadline.bold())
-                    .foregroundColor(DS.Colors.text)
-
-                Text("Sau khi bạn bấm Xác nhận có mặt ở phần Triệu tập & Xác nhận có mặt, thông tin Đội cứu hộ của bạn và Nhiệm vụ của đội sẽ hiển thị.")
-                    .font(DS.Typography.caption)
-                    .foregroundColor(DS.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(
+                isMissionAccessUnlocked
+                    ? "Bạn đã xác nhận có mặt tại điểm tập kết, có thể truy cập đầy đủ không gian nhiệm vụ."
+                    : "Bạn cần xác nhận có mặt ở ít nhất một sự kiện điểm tập kết để mở quyền thao tác trong không gian nhiệm vụ."
+            )
+            .font(DS.Typography.caption)
+            .foregroundColor(DS.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
         }
-        .padding(DS.Spacing.md)
-        .background(DS.Colors.surface)
-        .overlay(Rectangle().stroke(DS.Colors.info.opacity(0.3), lineWidth: DS.Border.medium))
+        .padding(DS.Spacing.sm)
+        .background(DS.Colors.info.opacity(0.08))
+        .overlay(Rectangle().stroke(DS.Colors.info.opacity(0.28), lineWidth: DS.Border.thin))
     }
 
     @ViewBuilder
@@ -785,7 +789,7 @@ struct RescuerDashboardView: View {
                 Image(systemName: "calendar.badge.exclamationmark")
                     .font(.system(size: 36, weight: .bold))
                     .foregroundColor(DS.Colors.textTertiary)
-                Text("Hiện chưa có sự kiện triệu tập")
+                Text("Hiện chưa có sự kiện triệu tập sắp tới")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.textSecondary)
                 Text("Khi người điều phối tạo phiên tập trung, bạn sẽ thấy lịch triệu tập và có thể xác nhận có mặt ngay tại đây.")
@@ -1050,7 +1054,7 @@ struct RescuerAssemblyEventsView: View {
                     headerSection
                         .padding(.top, DS.Spacing.md)
 
-                    Text("TẤT CẢ SỰ KIỆN").sectionHeader()
+                    Text("SỰ KIỆN SẮP TỚI").sectionHeader()
 
                     contentSection
 
@@ -1182,7 +1186,7 @@ struct RescuerAssemblyEventsView: View {
                 Image(systemName: "calendar.badge.exclamationmark")
                     .font(.system(size: 38, weight: .bold))
                     .foregroundColor(DS.Colors.textTertiary)
-                Text("Hiện chưa có sự kiện tập kết")
+                Text("Hiện chưa có sự kiện tập kết sắp tới")
                     .font(DS.Typography.headline)
                     .foregroundColor(DS.Colors.textSecondary)
                 Text("Khi tổng đài tạo phiên tập trung cho đội của bạn, sự kiện sẽ hiển thị tại đây.")

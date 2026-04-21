@@ -40,6 +40,11 @@ enum DS {
             adaptive(light: UIColor(hex: "16A34A"), dark: UIColor(hex: "117B38"))
         }
 
+        /// Assistant purple (AI helper)
+        static var assistant: Color {
+            adaptive(light: UIColor(hex: "7C3AED"), dark: UIColor(hex: "5B21B6"))
+        }
+
         /// Warning yellow-orange
         static var warning: Color {
             adaptive(light: UIColor(hex: "F59E0B"), dark: UIColor(hex: "C07E09"))

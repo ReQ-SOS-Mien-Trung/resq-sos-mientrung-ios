@@ -48,14 +48,14 @@ enum AppLanguage: String, CaseIterable {
 }
 
 // MARK: - Settings Manager
-class SettingsManager: ObservableObject {
+@MainActor
+final class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
     
     @Published var selectedTheme: AppTheme {
         didSet {
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "appTheme")
-            AppearanceManager.shared.isDarkTheme = (selectedTheme == .dark)
-            AppearanceManager.shared.isLightThemeForced = (selectedTheme == .light)
+            scheduleAppearanceSync()
         }
     }
     
@@ -68,8 +68,7 @@ class SettingsManager: ObservableObject {
     @Published var batterySavingMode: Bool {
         didSet {
             UserDefaults.standard.set(batterySavingMode, forKey: "batterySavingMode")
-            // Sync với AppearanceManager để áp dụng cho toàn app
-            AppearanceManager.shared.batterySavingMode = batterySavingMode
+            scheduleAppearanceSync()
         }
     }
     
@@ -82,12 +81,18 @@ class SettingsManager: ObservableObject {
         
         let savedBatterySaving = UserDefaults.standard.bool(forKey: "batterySavingMode")
         self.batterySavingMode = savedBatterySaving
-        // Sync với AppearanceManager khi khởi tạo - defer to avoid publishing during view update
-        DispatchQueue.main.async {
-            let theme = AppTheme(rawValue: themeRaw) ?? .system
-            AppearanceManager.shared.batterySavingMode = savedBatterySaving
-            AppearanceManager.shared.isDarkTheme = (theme == .dark)
-            AppearanceManager.shared.isLightThemeForced = (theme == .light)
+        scheduleAppearanceSync()
+    }
+
+    private func scheduleAppearanceSync() {
+        let theme = selectedTheme
+        let isBatterySavingEnabled = batterySavingMode
+
+        Task { @MainActor in
+            AppearanceManager.shared.apply(
+                theme: theme,
+                batterySavingMode: isBatterySavingEnabled
+            )
         }
     }
 }

@@ -100,6 +100,7 @@ private struct MissionInventoryEntry: Identifiable {
     let step: Int?
     let depotName: String?
     let stage: MissionInventoryStage
+    let lotAllocations: [MissionSupplyLotAllocation]
 }
 
 private struct MissionInventoryGroup: Identifiable {
@@ -108,7 +109,15 @@ private struct MissionInventoryGroup: Identifiable {
     let imageUrl: URL?
     let unit: String?
     let totalQuantity: Int
+    let sharedLots: [MissionInventorySharedLot]
     let entries: [MissionInventoryEntry]
+}
+
+private struct MissionInventorySharedLot: Identifiable {
+    let id: String
+    let lotId: String
+    let expiryDisplay: String
+    let expirySortDate: Date?
 }
 
 private struct MissionInventorySummaryMetric: Identifiable {
@@ -143,7 +152,8 @@ struct MissionInventoryView: View {
                     activityStatus: activity.status,
                     step: activity.step,
                     depotName: activity.depotName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                    stage: stage
+                    stage: stage,
+                    lotAllocations: inventoryLotAllocations(for: supply, stage: stage)
                 )
             }
         }
@@ -190,6 +200,7 @@ struct MissionInventoryView: View {
                 imageUrl: sortedEntries.compactMap(\.imageUrl).first,
                 unit: first.unit,
                 totalQuantity: sortedEntries.reduce(0) { $0 + $1.quantity },
+                sharedLots: sharedLots(from: sortedEntries),
                 entries: sortedEntries
             )
         }
@@ -532,10 +543,116 @@ struct MissionInventoryView: View {
         return max(actualDeliveredQuantity, 0)
     }
 
+    private func inventoryLotAllocations(
+        for supply: MissionSupply,
+        stage: MissionInventoryStage
+    ) -> [MissionSupplyLotAllocation] {
+        switch stage {
+        case .plannedPickup, .pickingUp:
+            return inventoryNormalizedLotAllocations(supply.plannedPickupLotAllocations)
+        case .pickedUp:
+            let pickupLots = inventoryNormalizedLotAllocations(supply.pickupLotAllocations)
+            if pickupLots.isEmpty == false {
+                return pickupLots
+            }
+            return inventoryNormalizedLotAllocations(supply.plannedPickupLotAllocations)
+        case .readyForDelivery, .delivering:
+            let availableLots = inventoryNormalizedLotAllocations(supply.availableDeliveryLotAllocations)
+            if availableLots.isEmpty == false {
+                return availableLots
+            }
+
+            let pickupLots = inventoryNormalizedLotAllocations(supply.pickupLotAllocations)
+            if pickupLots.isEmpty == false {
+                return pickupLots
+            }
+
+            return inventoryNormalizedLotAllocations(supply.plannedPickupLotAllocations)
+        case .delivered:
+            let deliveredLots = inventoryNormalizedLotAllocations(supply.deliveredLotAllocations)
+            if deliveredLots.isEmpty == false {
+                return deliveredLots
+            }
+            return inventoryNormalizedLotAllocations(supply.availableDeliveryLotAllocations)
+        case .readyForReturn, .returning:
+            let expectedReturnLots = inventoryNormalizedLotAllocations(supply.expectedReturnLotAllocations)
+            if expectedReturnLots.isEmpty == false {
+                return expectedReturnLots
+            }
+
+            let deliveredLots = inventoryNormalizedLotAllocations(supply.deliveredLotAllocations)
+            if deliveredLots.isEmpty == false {
+                return deliveredLots
+            }
+
+            return inventoryNormalizedLotAllocations(supply.availableDeliveryLotAllocations)
+        case .returned:
+            let returnedLots = inventoryNormalizedLotAllocations(supply.returnedLotAllocations)
+            if returnedLots.isEmpty == false {
+                return returnedLots
+            }
+            return inventoryNormalizedLotAllocations(supply.expectedReturnLotAllocations)
+        case .plannedUse, .inUse:
+            let pickupLots = inventoryNormalizedLotAllocations(supply.pickupLotAllocations)
+            if pickupLots.isEmpty == false {
+                return pickupLots
+            }
+            return inventoryNormalizedLotAllocations(supply.plannedPickupLotAllocations)
+        case .used:
+            let deliveredLots = inventoryNormalizedLotAllocations(supply.deliveredLotAllocations)
+            if deliveredLots.isEmpty == false {
+                return deliveredLots
+            }
+            return inventoryNormalizedLotAllocations(supply.pickupLotAllocations)
+        case .released:
+            return []
+        }
+    }
+
     private var inHandQuantity: Int {
         inventoryEntries
             .filter(isInHandEntry)
             .reduce(0) { $0 + $1.quantity }
+    }
+
+    private func sharedLots(from entries: [MissionInventoryEntry]) -> [MissionInventorySharedLot] {
+        var uniqueLotsByKey: [String: MissionInventorySharedLot] = [:]
+
+        for lot in entries.flatMap(\.lotAllocations) {
+            let lotId = inventoryLotIdDisplay(lot.lotId)
+            let rawExpiry = lot.expiredDate?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = "\(lotId)|\(rawExpiry ?? "")"
+
+            guard uniqueLotsByKey[key] == nil else { continue }
+
+            uniqueLotsByKey[key] = MissionInventorySharedLot(
+                id: key,
+                lotId: lotId,
+                expiryDisplay: inventoryLotExpiryDisplay(lot.expiredDate),
+                expirySortDate: inventoryLotSortDate(lot.expiredDate)
+            )
+        }
+
+        return uniqueLotsByKey.values.sorted { lhs, rhs in
+            switch (lhs.expirySortDate, rhs.expirySortDate) {
+            case let (left?, right?):
+                if left != right {
+                    return left < right
+                }
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                break
+            }
+
+            if lhs.lotId != rhs.lotId {
+                return lhs.lotId < rhs.lotId
+            }
+
+            return lhs.id < rhs.id
+        }
     }
 
     private func matchesSelectedFilter(_ entry: MissionInventoryEntry) -> Bool {
@@ -656,6 +773,21 @@ private struct MissionInventoryGroupCard: View {
                     Text("\(group.totalQuantity)\(group.unit.map { " \($0)" } ?? "") • \(group.entries.count) phân bổ")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(DS.Colors.textSecondary)
+
+                    if group.sharedLots.isEmpty == false {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Lô và hạn sử dụng")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(DS.Colors.info)
+
+                            ForEach(group.sharedLots) { lot in
+                                Text("• Lô \(lot.lotId) • HSD \(lot.expiryDisplay)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(DS.Colors.textSecondary)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
 
                 Spacer()
@@ -856,6 +988,74 @@ private struct MissionInventoryItemThumbnail: View {
         }
         return "shippingbox.fill"
     }
+}
+
+private func inventoryNormalizedLotAllocations(
+    _ allocations: [MissionSupplyLotAllocation]?
+) -> [MissionSupplyLotAllocation] {
+    let filteredAllocations = (allocations ?? []).filter(\.hasDisplayableValue)
+    return filteredAllocations.sorted { lhs, rhs in
+        let leftDate = inventoryLotSortDate(lhs.expiredDate)
+        let rightDate = inventoryLotSortDate(rhs.expiredDate)
+
+        switch (leftDate, rightDate) {
+        case let (left?, right?):
+            if left != right {
+                return left < right
+            }
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            break
+        }
+
+        return inventoryLotSortKey(lhs.lotId) < inventoryLotSortKey(rhs.lotId)
+    }
+}
+
+private func inventoryLotIdDisplay(_ lotId: String?) -> String {
+    lotId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "?"
+}
+
+private func inventoryLotExpiryDisplay(_ rawValue: String?) -> String {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return "?"
+    }
+
+    let isoWithFractionalSeconds = ISO8601DateFormatter()
+    isoWithFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let isoBasic = ISO8601DateFormatter()
+    isoBasic.formatOptions = [.withInternetDateTime]
+
+    guard let date = isoWithFractionalSeconds.date(from: rawValue) ?? isoBasic.date(from: rawValue) else {
+        return rawValue
+    }
+
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "vi_VN")
+    formatter.dateFormat = "dd/MM/yyyy"
+    return formatter.string(from: date)
+}
+
+private func inventoryLotSortDate(_ rawValue: String?) -> Date? {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return nil
+    }
+
+    let isoWithFractionalSeconds = ISO8601DateFormatter()
+    isoWithFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let isoBasic = ISO8601DateFormatter()
+    isoBasic.formatOptions = [.withInternetDateTime]
+
+    return isoWithFractionalSeconds.date(from: rawValue) ?? isoBasic.date(from: rawValue)
+}
+
+private func inventoryLotSortKey(_ lotId: String?) -> String {
+    lotId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
 }
 
 private extension String {

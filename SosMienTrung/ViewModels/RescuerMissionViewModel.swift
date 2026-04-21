@@ -822,11 +822,7 @@ final class RescuerAssemblyEventsViewModel: ObservableObject {
             }
 
             do {
-                let response = try await RescueTeamService.shared.getMyAssemblyPointEvents(
-                    pageNumber: pageNumber,
-                    pageSize: pageSize
-                )
-                let fetchedEvents = response.items
+                let fetchedEvents = try await RescueTeamService.shared.getMyUpcomingAssemblyPointEvents()
                 events = fetchedEvents
 
                 let backendCheckedOutEventIds = Set(

@@ -204,6 +204,10 @@ struct MissionSupply: Codable, Identifiable {
     let availableDeliveryReusableUnits: [MissionSupplyReusableUnit]?
     let deliveredLotAllocations: [MissionSupplyLotAllocation]?
     let deliveredReusableUnits: [MissionSupplyReusableUnit]?
+    let expectedReturnLotAllocations: [MissionSupplyLotAllocation]?
+    let expectedReturnUnits: [MissionSupplyReusableUnit]?
+    let returnedLotAllocations: [MissionSupplyLotAllocation]?
+    let returnedReusableUnits: [MissionSupplyReusableUnit]?
 
     var id: String {
         "\(itemId ?? -1)-\(itemName ?? "supply")-\(quantity)"

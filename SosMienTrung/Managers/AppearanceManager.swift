@@ -50,7 +50,8 @@ let presetColors: [PresetColor] = [
 ]
 
 // MARK: - Appearance Manager (Simplified)
-class AppearanceManager: ObservableObject {
+@MainActor
+final class AppearanceManager: ObservableObject {
     static let shared = AppearanceManager()
 
     @Published var batterySavingMode: Bool {
@@ -101,6 +102,22 @@ class AppearanceManager: ObservableObject {
         let savedTheme = AppTheme(rawValue: themeRaw) ?? .system
         self.isDarkTheme = (savedTheme == .dark)
         self.isLightThemeForced = (savedTheme == .light)
+    }
+
+    func apply(theme: AppTheme, batterySavingMode: Bool) {
+        if self.batterySavingMode != batterySavingMode {
+            self.batterySavingMode = batterySavingMode
+        }
+
+        let shouldUseDarkTheme = theme == .dark
+        if isDarkTheme != shouldUseDarkTheme {
+            isDarkTheme = shouldUseDarkTheme
+        }
+
+        let shouldForceLightTheme = theme == .light
+        if isLightThemeForced != shouldForceLightTheme {
+            isLightThemeForced = shouldForceLightTheme
+        }
     }
 
     func resetToDefaults() {

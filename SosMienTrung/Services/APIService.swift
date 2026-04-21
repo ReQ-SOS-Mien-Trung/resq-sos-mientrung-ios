@@ -7,6 +7,12 @@ import Foundation
 final class APIService {
     static let shared = APIService()
 
+    struct SOSUploadResult {
+        let isSuccess: Bool
+        let statusCode: Int?
+        let errorMessage: String?
+    }
+
     private let baseURL: String
     private let session: URLSession
     private let authExecutor = AuthenticatedRequestExecutor.shared
@@ -38,12 +44,46 @@ final class APIService {
         return encoder
     }
 
+    private static func extractBackendErrorMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+
+        if let decoded = APIErrorResponse.decode(from: data), decoded.message.isEmpty == false {
+            return decoded.message
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "error", "detail", "title"] {
+                if let value = object[key] as? String {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty == false {
+                        return trimmed
+                    }
+                }
+            }
+        }
+
+        if let text = String(data: data, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty == false {
+                return trimmed
+            }
+        }
+
+        return nil
+    }
+
     // MARK: - POST /emergency/sos-requests
     /// - Parameter relayingFor: userId gốc của người tạo SOS (khi thiết bị này chỉ relay)
     func uploadSOS(packet: SOSPacket, relayingFor originalUserId: String? = nil) async -> Bool {
+        let result = await uploadSOSResult(packet: packet, relayingFor: originalUserId)
+        return result.isSuccess
+    }
+
+    /// Phiên bản trả về chi tiết lỗi backend để hiển thị trên UI khi cần.
+    func uploadSOSResult(packet: SOSPacket, relayingFor originalUserId: String? = nil) async -> SOSUploadResult {
         guard let url = URL(string: "\(baseURL)/emergency/sos-requests") else {
             print("[API] ✗ Invalid URL: \(baseURL)/emergency/sos-requests")
-            return false
+            return SOSUploadResult(isSuccess: false, statusCode: nil, errorMessage: "Invalid SOS endpoint URL")
         }
 
         var request = URLRequest(url: url)
@@ -77,21 +117,37 @@ final class APIService {
 
             if (200...299).contains(statusCode) {
                 print("[API] ✅ SOS uploaded (HTTP \(statusCode))")
-                return true
+                return SOSUploadResult(isSuccess: true, statusCode: statusCode, errorMessage: nil)
             } else {
-                let body = String(data: data, encoding: .utf8) ?? ""
-                print("[API] ✗ HTTP \(statusCode): \(body)")
-                return false
+                let backendMessage = Self.extractBackendErrorMessage(from: data)
+                if let backendMessage {
+                    print("[API] ✗ HTTP \(statusCode): \(backendMessage)")
+                } else {
+                    print("[API] ✗ HTTP \(statusCode): <empty body>")
+                }
+                return SOSUploadResult(
+                    isSuccess: false,
+                    statusCode: statusCode,
+                    errorMessage: backendMessage
+                )
             }
         } catch {
             print("[API] ✗ \(error.localizedDescription)")
-            return false
+            return SOSUploadResult(
+                isSuccess: false,
+                statusCode: nil,
+                errorMessage: error.localizedDescription
+            )
         }
     }
 
     // MARK: - Convenience: upload từ SOSPacketEnhanced
     func uploadSOS(enhanced packet: SOSPacketEnhanced, relayingFor originalUserId: String? = nil) async -> Bool {
         await uploadSOS(packet: packet.toBasicPacket(), relayingFor: originalUserId)
+    }
+
+    func uploadSOSResult(enhanced packet: SOSPacketEnhanced, relayingFor originalUserId: String? = nil) async -> SOSUploadResult {
+        await uploadSOSResult(packet: packet.toBasicPacket(), relayingFor: originalUserId)
     }
 
     // Completion-based version (legacy support)

@@ -797,10 +797,22 @@ private enum SOSQuickFillSample {
     static let childId = "child_1"
     static let elderlyId = "elderly_1"
 
-    static let additionalDescription = """
-    Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!
-    Thông tin y tế nền: Khoa (Bệnh nền: Tim mạch, Tiểu đường, Bệnh thận; Dị ứng: Dị ứng thuốc; Thiết bị hỗ trợ: Bình oxy; Tiền sử chấn thương / phẫu thuật: Đã từng gãy xương; Yêu cầu đặc biệt: Cần người dìu)
-    """
+    static let additionalDescription = "Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!"
+
+    static let medicalContextItems: [SavedRelativeProfileNoteItem] = [
+        SavedRelativeProfileNoteItem(
+            id: childId,
+            displayName: "Khoa",
+            personType: .child,
+            summaryLines: [
+                "Bệnh nền: Tim mạch, Tiểu đường, Bệnh thận",
+                "Dị ứng: Dị ứng thuốc",
+                "Thiết bị hỗ trợ: Bình oxy",
+                "Tiền sử chấn thương / phẫu thuật: Đã từng gãy xương",
+                "Yêu cầu đặc biệt: Cần người dìu"
+            ]
+        )
+    ]
 
     static func makeReliefData(peopleCount: PeopleCount) -> ReliefData {
         ReliefData(
@@ -1106,6 +1118,7 @@ final class SOSFormData: ObservableObject {
     
     // Step 3: Mô tả thêm
     @Published var additionalDescription: String = ""
+    @Published var supplementalMedicalContextItems: [SavedRelativeProfileNoteItem] = []
     
     // Quick preset applied
     @Published var appliedPreset: QuickPreset?
@@ -1374,6 +1387,22 @@ final class SOSFormData: ObservableObject {
         }
     }
 
+    var medicalContextNoteItems: [SavedRelativeProfileNoteItem] {
+        let selectedProfileMedicalItems = selectedRelativeSnapshots.compactMap { snapshot -> SavedRelativeProfileNoteItem? in
+            let summaryLines = packetMedicalContextLines(for: snapshot)
+            guard !summaryLines.isEmpty else { return nil }
+
+            return SavedRelativeProfileNoteItem(
+                id: snapshot.personId,
+                displayName: person(for: snapshot.personId)?.displayName ?? snapshot.displayName,
+                personType: snapshot.personType,
+                summaryLines: summaryLines
+            )
+        }
+
+        return selectedProfileMedicalItems + supplementalMedicalContextItems
+    }
+
     var savedProfileContextMessage: String? {
         let lines = savedProfileNoteItems.compactMap { item -> String? in
             guard !item.summaryLines.isEmpty else { return nil }
@@ -1384,11 +1413,11 @@ final class SOSFormData: ObservableObject {
         return "Hồ sơ đã lưu: \(lines.joined(separator: " | "))"
     }
 
-    var savedProfileMedicalContextMessage: String? {
-        let lines = selectedRelativeSnapshots.compactMap { snapshot -> String? in
-            let summaryLines = packetMedicalContextLines(for: snapshot)
+    var medicalContextMessage: String? {
+        let lines = medicalContextNoteItems.compactMap { item -> String? in
+            let summaryLines = item.summaryLines
             guard !summaryLines.isEmpty else { return nil }
-            let displayName = person(for: snapshot.personId)?.displayName ?? snapshot.displayName
+            let displayName = person(for: item.id)?.displayName ?? item.displayName
             return "\(displayName) (\(summaryLines.joined(separator: "; ")))"
         }
 
@@ -1398,15 +1427,15 @@ final class SOSFormData: ObservableObject {
 
     var mergedAdditionalDescription: String? {
         let userNote = additionalDescription.nilIfBlank
-        let savedProfileNote = savedProfileMedicalContextMessage.nilIfBlank
+        let medicalContextNote = medicalContextMessage.nilIfBlank
 
-        switch (userNote, savedProfileNote) {
-        case let (.some(userNote), .some(savedProfileNote)):
-            return "\(userNote)\n\(savedProfileNote)"
+        switch (userNote, medicalContextNote) {
+        case let (.some(userNote), .some(medicalContextNote)):
+            return "\(userNote)\n\(medicalContextNote)"
         case let (.some(userNote), .none):
             return userNote
-        case let (.none, .some(savedProfileNote)):
-            return savedProfileNote
+        case let (.none, .some(medicalContextNote)):
+            return medicalContextNote
         case (.none, .none):
             return nil
         }
@@ -1648,6 +1677,7 @@ final class SOSFormData: ObservableObject {
         reliefData = ReliefData()
         rescueData = RescueData()
         additionalDescription = ""
+        supplementalMedicalContextItems = []
         appliedPreset = nil
         sharedPeople = []
         sharedPeopleCount = PeopleCount()
@@ -1749,6 +1779,7 @@ final class SOSFormData: ObservableObject {
 
         setSharedPeopleCountSilently(savedRelativeProfileBaseCount)
         syncPeopleCount()
+        supplementalMedicalContextItems = []
         prefillSpecialDietFromSavedProfiles()
         prefillClothingInfoFromSavedProfiles()
     }
@@ -1819,6 +1850,7 @@ final class SOSFormData: ObservableObject {
         reliefData.peopleCount = sharedPeopleCount
         rescueData.peopleCount = sharedPeopleCount
         rescueData.people = newPeople
+        supplementalMedicalContextItems = supplementalMedicalContextItems.filter { validIds.contains($0.id) }
         rescueData.syncToValidPeople(validIds: validIds)
         reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
     }
@@ -2085,7 +2117,7 @@ final class SOSFormData: ObservableObject {
 
     func applyQuickFillSample() {
         appliedPreset = nil
-        reportingTarget = .other
+        reportingTarget = .self
         reportingTargetSelectionMade = true
         personSourceMode = .manual
         selectedRelativeSnapshots = []
@@ -2102,6 +2134,7 @@ final class SOSFormData: ObservableObject {
 
         selectedTypes = [.rescue, .relief]
         additionalDescription = SOSQuickFillSample.additionalDescription
+        supplementalMedicalContextItems = SOSQuickFillSample.medicalContextItems
 
         setSharedPeopleCountSilently(
             PeopleCount(
@@ -2125,9 +2158,8 @@ final class SOSFormData: ObservableObject {
         let validIds = Set(sharedPeople.map(\.id))
         reliefData.syncToValidPeople(validIds: validIds, maxPeopleCount: sharedPeopleCount.total)
         rescueData.syncToValidPeople(validIds: validIds)
-
-        completedSteps = Set(SOSWizardStep.allCases.filter { $0 != .review })
-        currentStep = .review
+        completedSteps = []
+        currentStep = .reportingMode
     }
     
     /// Convert to SOSPacket message format

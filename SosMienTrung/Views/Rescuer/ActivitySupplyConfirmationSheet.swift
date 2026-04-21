@@ -44,13 +44,6 @@ struct PickupConfirmationSheet: View {
                                 value: description
                             )
                         }
-
-                        IncidentInlineNotice(
-                            icon: "info.circle.fill",
-                            text: hasBufferedItems
-                                ? "Chỉ nhập số vật phẩm dự trù thực tế đã dùng. Nếu không dùng vật phẩm dự trù, để 0 và xác nhận."
-                                : "Bước này không có vật phẩm dự trù. Bạn chỉ cần xác nhận để hệ thống trừ đúng số lượng kế hoạch."
-                        )
                     }
                 }
 
@@ -71,6 +64,14 @@ struct PickupConfirmationSheet: View {
                                     title: "Vật phẩm dự trù",
                                     value: quantityText(drafts[index].bufferAvailable, unit: drafts[index].unit),
                                     tone: DS.Colors.warning
+                                )
+                            }
+
+                            if drafts[index].lotAllocations.isEmpty == false {
+                                supplyLotSummarySection(
+                                    title: "Chi tiết lô tiếp nhận",
+                                    allocations: drafts[index].lotAllocations,
+                                    unit: drafts[index].unit
                                 )
                             }
 
@@ -528,12 +529,183 @@ struct DeliveryConfirmationSheet: View {
     }
 }
 
+struct ReturnSuppliesConfirmationSheet: View {
+    let activity: Activity
+    let isSubmitting: Bool
+    let onSubmit: (UIImage?) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var drafts: [ReturnSupplyDraft]
+    @State private var proofImage: UIImage?
+    @State private var isSubmittingLocal = false
+
+    init(
+        activity: Activity,
+        isSubmitting: Bool,
+        onSubmit: @escaping (UIImage?) async -> Bool
+    ) {
+        self.activity = activity
+        self.isSubmitting = isSubmitting
+        self.onSubmit = onSubmit
+        _drafts = State(initialValue: (activity.suppliesToCollect ?? []).map(ReturnSupplyDraft.init))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                IncidentFormSection(
+                    title: "Xác nhận hoàn trả vật phẩm"
+                ) {
+                    VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                        if let depotName = activity.depotName, depotName.isEmpty == false {
+                            IncidentContextRow(
+                                icon: "shippingbox.fill",
+                                title: "Kho tiếp tế",
+                                value: depotName
+                            )
+                        }
+
+                        if let description = activity.description, description.isEmpty == false {
+                            IncidentContextRow(
+                                icon: "list.bullet.rectangle",
+                                title: "Công việc",
+                                value: description
+                            )
+                        }
+
+                        IncidentInlineNotice(
+                            icon: "arrow.uturn.backward.circle.fill",
+                            text: "Hệ thống hiển thị chi tiết các lô cần hoàn trả để đội đối chiếu trước khi xác nhận.",
+                            tone: DS.Colors.info
+                        )
+                    }
+                }
+
+                ForEach(drafts.indices, id: \.self) { index in
+                    IncidentFormSection(
+                        title: drafts[index].itemName,
+                        subtitle: returnCardSubtitle(for: drafts[index])
+                    ) {
+                        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                            HStack(spacing: DS.Spacing.sm) {
+                                metricChip(
+                                    title: "Kế hoạch",
+                                    value: quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit),
+                                    tone: DS.Colors.info
+                                )
+
+                                metricChip(
+                                    title: "Theo lô",
+                                    value: "\(drafts[index].lotCount) lô",
+                                    tone: DS.Colors.warning
+                                )
+                            }
+
+                            if drafts[index].primaryLots.isEmpty {
+                                IncidentInlineNotice(
+                                    icon: "shippingbox",
+                                    text: "Vật phẩm này chưa có thông tin lô hoàn trả chi tiết.",
+                                    tone: DS.Colors.warning
+                                )
+                            } else {
+                                supplyLotSummarySection(
+                                    title: drafts[index].primaryLotsTitle,
+                                    allocations: drafts[index].primaryLots,
+                                    unit: drafts[index].unit
+                                )
+                            }
+
+                            if let referenceTitle = drafts[index].referenceLotsTitle,
+                               drafts[index].referenceLots.isEmpty == false {
+                                supplyLotSummarySection(
+                                    title: referenceTitle,
+                                    allocations: drafts[index].referenceLots,
+                                    unit: drafts[index].unit
+                                )
+                            }
+                        }
+                    }
+                }
+
+                ActivityProofCaptureSection(
+                    proofImage: $proofImage,
+                    subtitle: "Bạn có thể chụp ảnh tại kho để lưu minh chứng hoàn trả vật phẩm."
+                )
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.md)
+            .padding(.bottom, DS.Spacing.xl)
+        }
+        .background(DS.Colors.background)
+        .navigationTitle("Xác nhận hoàn trả")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Đóng") {
+                    dismiss()
+                }
+                .disabled(isSubmissionLocked)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: DS.Spacing.sm) {
+                if hasMissingLotDetails {
+                    IncidentInlineNotice(
+                        icon: "exclamationmark.triangle.fill",
+                        text: "Một số vật phẩm chưa có thông tin lô chi tiết từ hệ thống. Bạn vẫn có thể xác nhận hoàn trả.",
+                        tone: DS.Colors.warning
+                    )
+                }
+
+                IncidentSubmitButton(
+                    title: "Xác nhận đã hoàn trả",
+                    isEnabled: true,
+                    isLoading: isSubmissionLocked
+                ) {
+                    guard isSubmissionLocked == false else { return }
+                    isSubmittingLocal = true
+
+                    Task { @MainActor in
+                        let didSucceed = await onSubmit(proofImage)
+                        if didSucceed {
+                            dismiss()
+                        } else {
+                            isSubmittingLocal = false
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, DS.Spacing.sm)
+            .padding(.bottom, DS.Spacing.md)
+            .background(.ultraThinMaterial)
+        }
+    }
+
+    private var hasMissingLotDetails: Bool {
+        drafts.contains { $0.primaryLots.isEmpty }
+    }
+
+    private var isSubmissionLocked: Bool {
+        isSubmitting || isSubmittingLocal
+    }
+
+    private func returnCardSubtitle(for draft: ReturnSupplyDraft) -> String {
+        if draft.lotCount > 0 {
+            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Theo dõi \(draft.lotCount) lô"
+        }
+
+        return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit))"
+    }
+}
+
 private struct PickupBufferDraft: Identifiable {
     let itemId: Int
     let itemName: String
     let unit: String?
     let plannedQuantity: Int
     let bufferAvailable: Int
+    let lotAllocations: [MissionSupplyLotAllocation]
     var usedBufferText: String
     var reason: String
 
@@ -545,8 +717,18 @@ private struct PickupBufferDraft: Identifiable {
         unit = supply.unit
         plannedQuantity = supply.quantity
         bufferAvailable = supply.bufferQuantity ?? 0
+        lotAllocations = PickupBufferDraft.normalizedLotAllocations(from: supply)
         usedBufferText = String(supply.bufferUsedQuantity ?? 0)
         reason = supply.bufferUsedReason ?? ""
+    }
+
+    private static func normalizedLotAllocations(from supply: MissionSupply) -> [MissionSupplyLotAllocation] {
+        let pickupLots = normalizedDisplayableLotAllocations(supply.pickupLotAllocations)
+        if pickupLots.isEmpty == false {
+            return pickupLots
+        }
+
+        return normalizedDisplayableLotAllocations(supply.plannedPickupLotAllocations)
     }
 }
 
@@ -625,6 +807,208 @@ private struct DeliveryDraft: Identifiable {
             return false
         }
     }
+}
+
+private struct ReturnSupplyDraft: Identifiable {
+    let itemId: Int
+    let itemName: String
+    let unit: String?
+    let plannedQuantity: Int
+    let primaryLotsTitle: String
+    let primaryLots: [MissionSupplyLotAllocation]
+    let referenceLotsTitle: String?
+    let referenceLots: [MissionSupplyLotAllocation]
+
+    var id: String { "\(itemId)" }
+    var lotCount: Int { primaryLots.count }
+
+    init(supply: MissionSupply) {
+        itemId = supply.itemId ?? -1
+        itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm"
+        unit = supply.unit
+        plannedQuantity = supply.quantity
+
+        let expectedLots = normalizedDisplayableLotAllocations(supply.expectedReturnLotAllocations)
+        let returnedLots = normalizedDisplayableLotAllocations(supply.returnedLotAllocations)
+        let deliveredLots = normalizedDisplayableLotAllocations(supply.deliveredLotAllocations)
+        let availableLots = normalizedDisplayableLotAllocations(supply.availableDeliveryLotAllocations)
+
+        if returnedLots.isEmpty == false {
+            primaryLotsTitle = "Lô đã hoàn trả"
+            primaryLots = returnedLots
+            referenceLotsTitle = expectedLots.isEmpty == false ? "Lô dự kiến ban đầu" : nil
+            referenceLots = expectedLots
+        } else if expectedLots.isEmpty == false {
+            primaryLotsTitle = "Lô dự kiến hoàn trả"
+            primaryLots = expectedLots
+            referenceLotsTitle = nil
+            referenceLots = []
+        } else if deliveredLots.isEmpty == false {
+            primaryLotsTitle = "Lô đang giữ để hoàn trả"
+            primaryLots = deliveredLots
+            referenceLotsTitle = nil
+            referenceLots = []
+        } else {
+            primaryLotsTitle = "Lô liên quan"
+            primaryLots = availableLots
+            referenceLotsTitle = nil
+            referenceLots = []
+        }
+    }
+}
+
+private func supplyLotSummarySection(
+    title: String,
+    allocations: [MissionSupplyLotAllocation],
+    unit: String?
+) -> some View {
+    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(DS.Colors.textSecondary)
+
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            ForEach(Array(allocations.enumerated()), id: \.offset) { _, allocation in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Lô \(lotIdDisplay(allocation.lotId))")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
+
+                    HStack(spacing: DS.Spacing.xs) {
+                        lotInfoChip(
+                            title: "SL",
+                            value: lotQuantityDisplay(allocation.quantityTaken, unit: unit),
+                            tone: DS.Colors.info
+                        )
+
+                        lotInfoChip(
+                            title: "HSD",
+                            value: lotExpiryDisplay(allocation.expiredDate),
+                            tone: DS.Colors.warning
+                        )
+                    }
+                }
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.Colors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, DS.Spacing.sm)
+    .padding(.vertical, 10)
+    .background(DS.Colors.info.opacity(0.07))
+    .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(DS.Colors.info.opacity(0.24), lineWidth: 1)
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+}
+
+private func lotInfoChip(title: String, value: String, tone: Color) -> some View {
+    HStack(spacing: 6) {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(DS.Colors.textSecondary)
+
+        Text(value)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(DS.Colors.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(tone.opacity(0.12))
+    .overlay(
+        Capsule(style: .continuous)
+            .stroke(tone.opacity(0.3), lineWidth: 1)
+    )
+    .clipShape(Capsule(style: .continuous))
+}
+
+private func normalizedDisplayableLotAllocations(
+    _ allocations: [MissionSupplyLotAllocation]?
+) -> [MissionSupplyLotAllocation] {
+    let filteredAllocations = (allocations ?? []).filter(\.hasDisplayableValue)
+    return filteredAllocations.sorted { lhs, rhs in
+        let leftDate = lotSortDate(lhs.expiredDate)
+        let rightDate = lotSortDate(rhs.expiredDate)
+
+        switch (leftDate, rightDate) {
+        case let (left?, right?):
+            if left != right {
+                return left < right
+            }
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            break
+        }
+
+        return lotSortKey(lhs.lotId) < lotSortKey(rhs.lotId)
+    }
+}
+
+private func lotIdDisplay(_ lotId: String?) -> String {
+    lotId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "?"
+}
+
+private func lotQuantityDisplay(_ quantity: Int?, unit: String?) -> String {
+    guard let quantity else { return "?" }
+
+    if let unit, unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+        return "\(quantity) \(unit)"
+    }
+
+    return "\(quantity)"
+}
+
+private func lotExpiryDisplay(_ rawValue: String?) -> String {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return "?"
+    }
+
+    let isoWithFractionalSeconds = ISO8601DateFormatter()
+    isoWithFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let isoBasic = ISO8601DateFormatter()
+    isoBasic.formatOptions = [.withInternetDateTime]
+
+    guard let date = isoWithFractionalSeconds.date(from: rawValue) ?? isoBasic.date(from: rawValue) else {
+        return rawValue
+    }
+
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "vi_VN")
+    formatter.dateFormat = "dd/MM/yyyy"
+    return formatter.string(from: date)
+}
+
+private func lotSortDate(_ rawValue: String?) -> Date? {
+    guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
+        return nil
+    }
+
+    let isoWithFractionalSeconds = ISO8601DateFormatter()
+    isoWithFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let isoBasic = ISO8601DateFormatter()
+    isoBasic.formatOptions = [.withInternetDateTime]
+
+    return isoWithFractionalSeconds.date(from: rawValue) ?? isoBasic.date(from: rawValue)
+}
+
+private func lotSortKey(_ lotId: String?) -> String {
+    lotId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
 }
 
 private func metricChip(title: String, value: String, tone: Color) -> some View {

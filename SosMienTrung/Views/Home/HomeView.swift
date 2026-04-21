@@ -266,45 +266,47 @@ struct HomeView: View {
 
     // MARK: - Main Grid (Maps & Rescue)
     private var mainGridSection: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: DS.Spacing.sm),
-            GridItem(.flexible(), spacing: DS.Spacing.sm)
-        ], spacing: DS.Spacing.sm) {
-            ResQGridButton(
-                icon: "house.and.flag.fill",
-                title: "Bản đồ\nlánh nạn",
-                accentColor: DS.Colors.warning
-            ) {
-                showAssemblyPointMap = true
-            }
-
-            if canCreateSosRequest {
-                ResQGridButton(
-                    icon: "figure.wave.circle.fill",
-                    title: "Chờ cứu\n(Nạn nhân)",
-                    accentColor: DS.Colors.danger
-                ) {
-                    showVictimStandby = true
-                }
-            }
-
-            if canUseRescuerTracking {
-                ResQGridButton(
-                    icon: "antenna.radiowaves.left.and.right",
-                    title: "Cứu hộ\n(Cứu hộ viên)",
-                    accentColor: DS.Colors.accent
-                ) {
-                    showRescuersView = true
-                }
-            }
-
+        VStack(spacing: DS.Spacing.sm) {
             if canAccessRescuerWorkspace {
                 ResQGridButton(
                     icon: "checklist",
                     title: "Nhiệm vụ\n& Xác nhận có mặt",
-                    accentColor: DS.Colors.warning
+                    accentColor: DS.Colors.success
                 ) {
                     showRescuerDashboard = true
+                }
+            }
+
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: DS.Spacing.sm),
+                GridItem(.flexible(), spacing: DS.Spacing.sm)
+            ], spacing: DS.Spacing.sm) {
+                ResQGridButton(
+                    icon: "house.and.flag.fill",
+                    title: "Bản đồ\nlánh nạn",
+                    accentColor: DS.Colors.warning
+                ) {
+                    showAssemblyPointMap = true
+                }
+
+                if canUseRescuerTracking {
+                    ResQGridButton(
+                        icon: "antenna.radiowaves.left.and.right",
+                        title: "Cứu hộ\n(Cứu hộ viên)",
+                        accentColor: DS.Colors.accent
+                    ) {
+                        showRescuersView = true
+                    }
+                }
+
+                if canCreateSosRequest {
+                    ResQGridButton(
+                        icon: "figure.wave.circle.fill",
+                        title: "Chờ cứu\n(Nạn nhân)",
+                        accentColor: DS.Colors.danger
+                    ) {
+                        showVictimStandby = true
+                    }
                 }
             }
         }
@@ -328,7 +330,7 @@ struct HomeView: View {
             ResQGridButton(
                 icon: "brain.head.profile",
                 title: "AI\nTrợ lý",
-                accentColor: DS.Colors.success
+                accentColor: DS.Colors.assistant
             ) {
                 showChatBot = true
             }

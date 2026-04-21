@@ -12,6 +12,7 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     @Published var connectedUsers: Set<UUID> = []
     @Published var connectedUsersList: [User] = []  // List of known users with profiles
     @Published private(set) var isIdentityDisabled: Bool = false  // True if identity was transferred
+    @Published private(set) var lastSOSUploadErrorMessage: String?
 
     let locationManager = LocationManager()
     private var userProfiles: [UUID: User] = [:]  // Cache user profiles
@@ -415,6 +416,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             return false
         }
 
+        await MainActor.run {
+            self.lastSOSUploadErrorMessage = nil
+        }
+
         // Dùng Bridgefy userId nếu có, fallback sang device UUID
         let sender = bridgefy?.currentUserId?.uuidString
             ?? UIDevice.current.identifierForVendor?.uuidString
@@ -450,10 +455,24 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         // Thử gửi thẳng lên server nếu có mạng
         var serverReached = false
+        var backendErrorMessage: String?
         if NetworkMonitor.shared.isConnected {
             print("🌐 [SOS] Network available – uploading to server...")
-            serverReached = await APIService.shared.uploadSOS(enhanced: enhancedPacket)
-            print(serverReached ? "✅ [SOS] Server upload success" : "⚠️ [SOS] Server upload failed, falling back to mesh")
+            let uploadResult = await APIService.shared.uploadSOSResult(enhanced: enhancedPacket)
+            serverReached = uploadResult.isSuccess
+            backendErrorMessage = uploadResult.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if serverReached {
+                print("✅ [SOS] Server upload success")
+            } else if let backendErrorMessage, backendErrorMessage.isEmpty == false {
+                print("⚠️ [SOS] Server upload failed: \(backendErrorMessage)")
+            } else {
+                print("⚠️ [SOS] Server upload failed, falling back to mesh")
+            }
+
+            await MainActor.run {
+                self.lastSOSUploadErrorMessage = backendErrorMessage
+            }
         } else {
             print("📴 [SOS] No network – sending via mesh only")
         }
@@ -470,10 +489,16 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             }
         } else if NetworkMonitor.shared.isConnected {
             // Có mạng nhưng upload thất bại → gateway sẽ retry
+            let retryNote: String
+            if let backendErrorMessage, backendErrorMessage.isEmpty == false {
+                retryNote = "Upload thất bại: \(backendErrorMessage). Đang thử lại"
+            } else {
+                retryNote = "Upload thất bại, đang thử lại"
+            }
             await MainActor.run {
                 SOSStorageManager.shared.addSendEvent(
                     id: packetId,
-                    event: SOSSendEvent(type: .pendingRetry, note: "Upload thất bại, đang thử lại")
+                    event: SOSSendEvent(type: .pendingRetry, note: retryNote)
                 )
             }
         } else {

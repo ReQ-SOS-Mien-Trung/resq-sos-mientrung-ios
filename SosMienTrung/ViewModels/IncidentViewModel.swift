@@ -16,6 +16,7 @@ final class IncidentViewModel: ObservableObject {
     ) {
         isSubmitting = true
         errorMessage = nil
+        successMessage = nil
         Task {
             do {
                 let response = try await IncidentService.shared.reportMissionTeamIncident(
@@ -48,6 +49,7 @@ final class IncidentViewModel: ObservableObject {
     ) {
         isSubmitting = true
         errorMessage = nil
+        successMessage = nil
         Task {
             do {
                 _ = try await IncidentService.shared.reportTeamActivityIncident(
@@ -81,6 +83,8 @@ final class IncidentViewModel: ObservableObject {
     }
 
     func updateStatus(incidentId: Int, status: String, hasInjuredMember: Bool? = nil) {
+        errorMessage = nil
+        successMessage = nil
         Task {
             do {
                 let req = UpdateIncidentStatusRequest(

@@ -19,6 +19,8 @@ struct SOSWizardView: View {
     @State private var showSuccess = false
     @State private var sentToServer = false
     @State private var showLocationRequiredAlert = false
+    @State private var showBackendErrorAlert = false
+    @State private var backendErrorMessage = ""
     @State private var showTermsSheet = false
     @State private var showRelativeProfilePicker = false
     
@@ -91,6 +93,11 @@ struct SOSWizardView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Chưa có toạ độ hợp lệ. Vui lòng đợi GPS hoặc nhập địa chỉ để tra cứu vị trí.")
+            }
+            .alert("Gửi SOS chưa thành công", isPresented: $showBackendErrorAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(backendErrorMessage)
             }
             .onAppear {
                 // Enable battery monitoring sớm để có thời gian cập nhật
@@ -306,6 +313,19 @@ struct SOSWizardView: View {
             await MainActor.run {
                 isSending = false
                 sentToServer = serverReached
+
+                let backendMessage = bridgefyManager.lastSOSUploadErrorMessage?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if serverReached == false,
+                   networkMonitor.isConnected,
+                   let backendMessage,
+                   backendMessage.isEmpty == false {
+                    backendErrorMessage = "\(backendMessage)\nYêu cầu đã được lưu và hệ thống sẽ tự thử gửi lại."
+                    showBackendErrorAlert = true
+                    return
+                }
+
                 showSuccess = true
             }
         }

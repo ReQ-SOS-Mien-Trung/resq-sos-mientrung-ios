@@ -55,6 +55,16 @@ final class AppNavigationCoordinator: ObservableObject {
 
     private init() { }
 
+    func resetToHome(clearPresentedDestinations: Bool = true) {
+        selectedTab = 0
+        pendingFullScreenAfterSheetDismiss = nil
+
+        guard clearPresentedDestinations else { return }
+
+        activeSheet = nil
+        activeFullScreen = nil
+    }
+
     func openNotifications() {
         presentSheet(.notifications)
     }

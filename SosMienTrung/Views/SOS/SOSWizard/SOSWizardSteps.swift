@@ -111,8 +111,9 @@ private struct SOSReportingTargetOptionCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: target.systemImage)
-                        .font(.title2)
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundColor(isSelected ? DS.Colors.accent : DS.Colors.textSecondary)
+                        .frame(width: 28, height: 28, alignment: .top)
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(target.optionLabel)
@@ -124,16 +125,19 @@ private struct SOSReportingTargetOptionCard: View {
                             .foregroundColor(DS.Colors.text)
 
                         Text(target.description)
-                            .font(DS.Typography.subheadline)
+                            .font(DS.Typography.body)
                             .foregroundColor(DS.Colors.textSecondary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
 
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundColor(isSelected ? DS.Colors.accent : DS.Colors.textMuted)
+                        .frame(width: 28, height: 28, alignment: .top)
                 }
             }
             .padding()
@@ -194,7 +198,7 @@ struct Step0AutoInfoView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 VStack(spacing: 8) {
                     Image(systemName: "person.text.rectangle.fill")
                         .font(.system(size: 48))
@@ -209,11 +213,11 @@ struct Step0AutoInfoView: View {
                         .foregroundColor(DS.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.top, 20)
+                .padding(.top, 12)
 
-                VStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
+                VStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("Phương thức gửi SOS")
                                 .font(.subheadline.bold())
                                 .foregroundColor(DS.Colors.text)
@@ -311,11 +315,11 @@ struct Step0AutoInfoView: View {
                             }
                         }
                     }
-                    .padding()
+                    .padding(DS.Spacing.sm)
                     .background(DS.Colors.surface)
                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
 
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Apple Maps")
                             .font(.subheadline.bold())
                             .foregroundColor(DS.Colors.text)
@@ -334,7 +338,7 @@ struct Step0AutoInfoView: View {
                             .font(.caption)
                             .foregroundColor(DS.Colors.textSecondary)
 
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             Button {
                                 Task { await geocodeAddress() }
                             } label: {
@@ -409,7 +413,7 @@ struct Step0AutoInfoView: View {
                                 Task { await selectCoordinateOnMap(coordinate) }
                             }
                         )
-                        .frame(height: 260)
+                        .frame(height: 220)
                         .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
 
                         Text("Nhấn giữ trên bản đồ để ghim vị trí cần cứu.")
@@ -438,7 +442,7 @@ struct Step0AutoInfoView: View {
                                 .foregroundColor(.red)
                         }
                     }
-                    .padding()
+                    .padding(DS.Spacing.sm)
                     .background(DS.Colors.surface)
                     .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
 
@@ -447,7 +451,7 @@ struct Step0AutoInfoView: View {
                             icon: networkMonitor.isConnected ? "wifi" : "wifi.slash",
                             iconColor: networkMonitor.isConnected ? .green : .red,
                             title: "Trạng thái mạng",
-                            value: networkMonitor.isConnected ? "🟢 Online" : "🔴 Offline (Mesh)"
+                            value: networkMonitor.isConnected ? "Online" : "Offline (Mesh)"
                         )
                     }
 
@@ -528,7 +532,7 @@ struct Step0AutoInfoView: View {
                 }
                 .padding(.horizontal)
 
-                Spacer(minLength: 100)
+                Spacer(minLength: 48)
             }
         }
         .onAppear {
@@ -2655,10 +2659,8 @@ struct Step3AdditionalInfoView: View {
     @ObservedObject var formData: SOSFormData
     @FocusState private var isTextEditorFocused: Bool
 
-    private var savedMedicalSnapshots: [SelectedRelativeSnapshot] {
-        formData.selectedRelativeSnapshots.filter { snapshot in
-            !formData.packetMedicalContextLines(for: snapshot).isEmpty
-        }
+    private var medicalContextItems: [SavedRelativeProfileNoteItem] {
+        formData.medicalContextNoteItems
     }
     
     var body: some View {
@@ -2701,13 +2703,13 @@ struct Step3AdditionalInfoView: View {
                             alignment: .topLeading
                         )
                     
-                    Text("Chỉ nhập thêm ghi chú tình huống hiện tại. Thông tin y tế nền từ hồ sơ đã lưu sẽ được gửi kèm riêng.")
+                    Text("Chỉ nhập thêm ghi chú tình huống hiện tại. Thông tin y tế nền sẽ được gửi kèm riêng.")
                         .font(DS.Typography.caption)
                         .foregroundColor(DS.Colors.textMuted)
                 }
                 .padding(.horizontal)
 
-                if !savedMedicalSnapshots.isEmpty {
+                if !medicalContextItems.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack(spacing: 10) {
                             Image(systemName: "cross.case.fill")
@@ -2720,10 +2722,10 @@ struct Step3AdditionalInfoView: View {
                         }
 
                         VStack(spacing: 12) {
-                            ForEach(savedMedicalSnapshots) { snapshot in
-                                let lines = formData.packetMedicalContextLines(for: snapshot)
+                            ForEach(medicalContextItems) { item in
+                                let lines = item.summaryLines
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text(formData.person(for: snapshot.personId)?.displayName ?? snapshot.displayName)
+                                    Text(formData.person(for: item.id)?.displayName ?? item.displayName)
                                         .font(.subheadline.bold())
                                         .foregroundColor(DS.Colors.text)
 
@@ -2903,6 +2905,37 @@ struct Step4ReviewView: View {
                         Divider()
                             .background(DS.Colors.surface)
                         ReviewRow(icon: "note.text", title: "Ghi chú", value: formData.additionalDescription)
+                    }
+
+                    if !formData.medicalContextNoteItems.isEmpty {
+                        Divider()
+                            .background(DS.Colors.surface)
+
+                        Label("Thông tin y tế nền sẽ gửi kèm", systemImage: "cross.case.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.red)
+
+                        VStack(spacing: 10) {
+                            ForEach(formData.medicalContextNoteItems) { item in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(formData.person(for: item.id)?.displayName ?? item.displayName)
+                                        .font(.subheadline.bold())
+                                        .foregroundColor(DS.Colors.text)
+
+                                    ForEach(item.summaryLines, id: \.self) { line in
+                                        Text(line)
+                                            .font(DS.Typography.caption)
+                                            .foregroundColor(DS.Colors.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Color.red.opacity(0.06))
+                                .cornerRadius(DS.Radius.md)
+                            }
+                        }
                     }
                     
                     // Time

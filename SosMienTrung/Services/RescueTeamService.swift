@@ -375,18 +375,9 @@ final class RescueTeamService {
         }
     }
 
-    // MARK: - GET /personnel/assembly-point/events/my
-    func getMyAssemblyPointEvents(pageNumber: Int = 1, pageSize: Int = 10) async throws -> AssemblyPointEventsPage {
-        guard var components = URLComponents(string: "\(baseURL)/personnel/assembly-point/events/my") else {
-            throw RescueTeamServiceError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "pageNumber", value: String(pageNumber)),
-            URLQueryItem(name: "pageSize", value: String(pageSize))
-        ]
-
-        guard let url = components.url else {
+    // MARK: - GET /personnel/assembly-point/events/my/upcoming
+    func getMyUpcomingAssemblyPointEvents() async throws -> [AssemblyPointEvent] {
+        guard let url = URL(string: "\(baseURL)/personnel/assembly-point/events/my/upcoming") else {
             throw RescueTeamServiceError.invalidURL
         }
 
@@ -409,7 +400,7 @@ final class RescueTeamService {
             }
 
             do {
-                return try JSONDecoder().decode(AssemblyPointEventsPage.self, from: data)
+                return try JSONDecoder().decode([AssemblyPointEvent].self, from: data)
             } catch {
                 throw RescueTeamServiceError.decodingError(error)
             }
