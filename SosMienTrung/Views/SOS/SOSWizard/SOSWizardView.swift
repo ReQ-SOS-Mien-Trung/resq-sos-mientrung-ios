@@ -102,6 +102,8 @@ struct SOSWizardView: View {
             .onAppear {
                 // Enable battery monitoring sớm để có thời gian cập nhật
                 UIDevice.current.isBatteryMonitoringEnabled = true
+                let relativeProfileStore = RelativeProfileStore.shared
+                relativeProfileStore.refreshFromServerIfPossible(force: relativeProfileStore.profiles.isEmpty)
                 setupAutoInfo()
                 // Bắt đầu cập nhật vị trí liên tục
                 locationManager.startContinuousUpdates()

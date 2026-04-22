@@ -17,9 +17,62 @@ enum MissionServiceError: LocalizedError {
 final class MissionService {
     static let shared = MissionService()
 
+    private struct RouteCacheEntry {
+        let data: Data
+        let expiresAt: Date
+    }
+
+    private actor RouteResponseCache {
+        private var entries: [String: RouteCacheEntry] = [:]
+        private var cooldowns: [String: Date] = [:]
+
+        func cachedData(for key: String, now: Date = Date()) -> Data? {
+            cleanup(now: now)
+            guard let entry = entries[key], entry.expiresAt > now else {
+                entries[key] = nil
+                return nil
+            }
+
+            return entry.data
+        }
+
+        func store(_ data: Data, for key: String, ttl: TimeInterval, now: Date = Date()) {
+            guard ttl > 0 else { return }
+            entries[key] = RouteCacheEntry(data: data, expiresAt: now.addingTimeInterval(ttl))
+        }
+
+        func setCooldown(for key: String, duration: TimeInterval, now: Date = Date()) {
+            guard duration > 0 else { return }
+            cooldowns[key] = now.addingTimeInterval(duration)
+        }
+
+        func clearCooldown(for key: String) {
+            cooldowns[key] = nil
+        }
+
+        func cooldownRemaining(for key: String, now: Date = Date()) -> TimeInterval? {
+            cleanup(now: now)
+            guard let cooldownUntil = cooldowns[key], cooldownUntil > now else {
+                cooldowns[key] = nil
+                return nil
+            }
+
+            return cooldownUntil.timeIntervalSince(now)
+        }
+
+        private func cleanup(now: Date) {
+            entries = entries.filter { $0.value.expiresAt > now }
+            cooldowns = cooldowns.filter { $0.value > now }
+        }
+    }
+
+    private static let routeCacheTTL: TimeInterval = 30
+    private static let routeRateLimitCooldown: TimeInterval = 20
+
     private let baseURL: String
     private let session: URLSession
     private let authExecutor = AuthenticatedRequestExecutor.shared
+    private let routeResponseCache = RouteResponseCache()
 
     private init() {
         self.baseURL = AppConfig.baseURLString
@@ -33,6 +86,120 @@ final class MissionService {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
+    }
+
+    private static func isRouteRateLimitError(_ error: Error) -> Bool {
+        guard let serviceError = error as? MissionServiceError else {
+            return false
+        }
+
+        if case .httpStatus(let statusCode, let message) = serviceError {
+            if statusCode == 429 {
+                return true
+            }
+
+            let normalizedMessage = (message ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return normalizedMessage.contains("over_rate_limit")
+                || normalizedMessage.contains("rate limit")
+        }
+
+        return false
+    }
+
+    private static func routeRateLimitMessage(seconds: Int) -> String {
+        "Đang giới hạn tần suất tải lộ trình để tránh vượt hạn mức Goong. Vui lòng thử lại sau khoảng \(seconds) giây."
+    }
+
+    private func normalizedRouteCoordinate(_ value: Double) -> String {
+        let rounded = (value * 10_000).rounded() / 10_000
+        return String(format: "%.4f", rounded)
+    }
+
+    private func activityRouteCacheKey(
+        missionId: Int,
+        activityId: Int,
+        originLat: Double,
+        originLng: Double,
+        vehicle: String
+    ) -> String {
+        [
+            "activity",
+            String(missionId),
+            String(activityId),
+            vehicle.lowercased(),
+            normalizedRouteCoordinate(originLat),
+            normalizedRouteCoordinate(originLng)
+        ].joined(separator: "|")
+    }
+
+    private func missionTeamRouteCacheKey(
+        missionId: Int,
+        missionTeamId: Int,
+        originLat: Double,
+        originLng: Double,
+        vehicle: String
+    ) -> String {
+        [
+            "team",
+            String(missionId),
+            String(missionTeamId),
+            vehicle.lowercased(),
+            normalizedRouteCoordinate(originLat),
+            normalizedRouteCoordinate(originLng)
+        ].joined(separator: "|")
+    }
+
+    private func decodeMissionTeamRoute(
+        data: Data,
+        missionId: Int,
+        missionTeamId: Int,
+        originLat: Double,
+        originLng: Double,
+        vehicle: String
+    ) throws -> MissionTeamRoute {
+        if let decoded = try? JSONDecoder().decode(MissionTeamRoute.self, from: data) {
+            return decoded
+        }
+
+        if let decodedRoutes = try? JSONDecoder().decode([ActivityRoute].self, from: data) {
+            return MissionTeamRoute(
+                missionId: missionId,
+                missionTeamId: missionTeamId,
+                originLatitude: originLat,
+                originLongitude: originLng,
+                vehicle: vehicle,
+                route: nil,
+                activityRoutes: decodedRoutes
+            )
+        }
+
+        if let decodedSingleRoute = try? JSONDecoder().decode(ActivityRoute.self, from: data) {
+            return MissionTeamRoute(
+                missionId: missionId,
+                missionTeamId: missionTeamId,
+                originLatitude: originLat,
+                originLongitude: originLng,
+                vehicle: vehicle,
+                route: nil,
+                activityRoutes: [decodedSingleRoute]
+            )
+        }
+
+        if let decodedSummary = try? JSONDecoder().decode(ActivityRouteSummary.self, from: data) {
+            return MissionTeamRoute(
+                missionId: missionId,
+                missionTeamId: missionTeamId,
+                originLatitude: originLat,
+                originLongitude: originLng,
+                vehicle: vehicle,
+                route: decodedSummary,
+                activityRoutes: []
+            )
+        }
+
+        throw MissionServiceError.invalidResponse
     }
 
     private func authorizedRequest(url: URL, method: String = "GET") -> URLRequest {
@@ -217,12 +384,47 @@ final class MissionService {
     }
 
     // MARK: - GET /operations/missions/{missionId}/activities/{activityId}/route
-    func getActivityRoute(missionId: Int, activityId: Int, originLat: Double, originLng: Double, vehicle: String = "car") async throws -> ActivityRoute {
+    func getActivityRoute(
+        missionId: Int,
+        activityId: Int,
+        originLat: Double,
+        originLng: Double,
+        vehicle: String = "car",
+        bypassCache: Bool = false
+    ) async throws -> ActivityRoute {
+        let cacheKey = activityRouteCacheKey(
+            missionId: missionId,
+            activityId: activityId,
+            originLat: originLat,
+            originLng: originLng,
+            vehicle: vehicle
+        )
+
+        if let cooldownRemaining = await routeResponseCache.cooldownRemaining(for: cacheKey) {
+            let waitSeconds = max(1, Int(cooldownRemaining.rounded(.up)))
+            throw MissionServiceError.httpStatus(429, Self.routeRateLimitMessage(seconds: waitSeconds))
+        }
+
+        if bypassCache == false,
+           let cachedData = await routeResponseCache.cachedData(for: cacheKey) {
+            return try JSONDecoder().decode(ActivityRoute.self, from: cachedData)
+        }
+
         let urlStr = "\(baseURL)/operations/missions/\(missionId)/activities/\(activityId)/route?originLat=\(originLat)&originLng=\(originLng)&vehicle=\(vehicle)"
         guard let url = URL(string: urlStr) else { throw URLError(.badURL) }
         print("[MissionService] → GET \(url.absoluteString)")
-        let data = try await send(authorizedRequest(url: url))
-        return try JSONDecoder().decode(ActivityRoute.self, from: data)
+
+        do {
+            let data = try await send(authorizedRequest(url: url))
+            await routeResponseCache.store(data, for: cacheKey, ttl: Self.routeCacheTTL)
+            await routeResponseCache.clearCooldown(for: cacheKey)
+            return try JSONDecoder().decode(ActivityRoute.self, from: data)
+        } catch {
+            if Self.isRouteRateLimitError(error) {
+                await routeResponseCache.setCooldown(for: cacheKey, duration: Self.routeRateLimitCooldown)
+            }
+            throw error
+        }
     }
 
     // MARK: - GET /operations/missions/{missionId}/teams/{missionTeamId}/route
@@ -231,8 +433,34 @@ final class MissionService {
         missionTeamId: Int,
         originLat: Double,
         originLng: Double,
-        vehicle: String = "car"
+        vehicle: String = "car",
+        bypassCache: Bool = false
     ) async throws -> MissionTeamRoute {
+        let cacheKey = missionTeamRouteCacheKey(
+            missionId: missionId,
+            missionTeamId: missionTeamId,
+            originLat: originLat,
+            originLng: originLng,
+            vehicle: vehicle
+        )
+
+        if let cooldownRemaining = await routeResponseCache.cooldownRemaining(for: cacheKey) {
+            let waitSeconds = max(1, Int(cooldownRemaining.rounded(.up)))
+            throw MissionServiceError.httpStatus(429, Self.routeRateLimitMessage(seconds: waitSeconds))
+        }
+
+        if bypassCache == false,
+           let cachedData = await routeResponseCache.cachedData(for: cacheKey) {
+            return try decodeMissionTeamRoute(
+                data: cachedData,
+                missionId: missionId,
+                missionTeamId: missionTeamId,
+                originLat: originLat,
+                originLng: originLng,
+                vehicle: vehicle
+            )
+        }
+
         var components = URLComponents(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/route")
         components?.queryItems = [
             URLQueryItem(name: "originLat", value: String(originLat)),
@@ -243,49 +471,25 @@ final class MissionService {
         guard let url = components?.url else { throw URLError(.badURL) }
         print("[MissionService] → GET \(url.absoluteString)")
 
-        let data = try await send(authorizedRequest(url: url))
+        do {
+            let data = try await send(authorizedRequest(url: url))
+            await routeResponseCache.store(data, for: cacheKey, ttl: Self.routeCacheTTL)
+            await routeResponseCache.clearCooldown(for: cacheKey)
 
-        if let decoded = try? JSONDecoder().decode(MissionTeamRoute.self, from: data) {
-            return decoded
-        }
-
-        if let decodedRoutes = try? JSONDecoder().decode([ActivityRoute].self, from: data) {
-            return MissionTeamRoute(
+            return try decodeMissionTeamRoute(
+                data: data,
                 missionId: missionId,
                 missionTeamId: missionTeamId,
-                originLatitude: originLat,
-                originLongitude: originLng,
-                vehicle: vehicle,
-                route: nil,
-                activityRoutes: decodedRoutes
+                originLat: originLat,
+                originLng: originLng,
+                vehicle: vehicle
             )
+        } catch {
+            if Self.isRouteRateLimitError(error) {
+                await routeResponseCache.setCooldown(for: cacheKey, duration: Self.routeRateLimitCooldown)
+            }
+            throw error
         }
-
-        if let decodedSingleRoute = try? JSONDecoder().decode(ActivityRoute.self, from: data) {
-            return MissionTeamRoute(
-                missionId: missionId,
-                missionTeamId: missionTeamId,
-                originLatitude: originLat,
-                originLongitude: originLng,
-                vehicle: vehicle,
-                route: nil,
-                activityRoutes: [decodedSingleRoute]
-            )
-        }
-
-        if let decodedSummary = try? JSONDecoder().decode(ActivityRouteSummary.self, from: data) {
-            return MissionTeamRoute(
-                missionId: missionId,
-                missionTeamId: missionTeamId,
-                originLatitude: originLat,
-                originLongitude: originLng,
-                vehicle: vehicle,
-                route: decodedSummary,
-                activityRoutes: []
-            )
-        }
-
-        throw MissionServiceError.invalidResponse
     }
 
     // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/complete-execution

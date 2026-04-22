@@ -674,6 +674,11 @@ struct MissionTeamReportView: View {
             if key.isEmpty || value.isEmpty {
                 continue
             }
+
+            guard shouldShowResultExtraAsHighlight(key: key, value: value) else {
+                continue
+            }
+
             entries.append((key, value))
         }
 
@@ -705,6 +710,27 @@ struct MissionTeamReportView: View {
                 tint: metric.tint
             )
         }
+    }
+
+    private func shouldShowResultExtraAsHighlight(key: String, value: String) -> Bool {
+        let compactKeys: Set<String> = [
+            "hodahotro",
+            "thoigianphanungphut",
+            "sosdaxuly",
+            "songuoisotan",
+            "tongvatphamdaphat",
+            "tongvatphamdagiao",
+            "tongvatphamhoantra"
+        ]
+
+        let normalizedKey = key.normalizedStatusKey
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard compactKeys.contains(normalizedKey) else {
+            return false
+        }
+
+        return trimmedValue.count <= 18 && trimmedValue.contains(";") == false
     }
 
     private func metricPresentation(for key: String) -> (title: String, detail: String, icon: String, tint: Color) {
@@ -769,8 +795,12 @@ struct MissionTeamReportView: View {
                 statusIcon(symbol: icon, tint: tint)
                 Spacer()
                 Text(value)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(.system(size: value.count > 8 ? 18 : 24, weight: .black, design: .rounded))
                     .foregroundColor(DS.Colors.text)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+                    .multilineTextAlignment(.trailing)
+                    .allowsTightening(true)
             }
 
             Text(title)

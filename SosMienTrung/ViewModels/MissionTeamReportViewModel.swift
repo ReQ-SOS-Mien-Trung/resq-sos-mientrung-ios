@@ -193,55 +193,69 @@ final class MissionTeamReportViewModel: ObservableObject {
         successMessage = nil
 
         let timestamp = MissionTeamReportDemoData.timestampLabel()
-        let activityTotal = max(activities.count, 1)
-        let rescuedCount = max(activityTotal * 2, 2)
-        let treatedCount = max(activityTotal, 1)
-        let referredCount = activityTotal >= 3 ? 1 : 0
-
-        teamSummary = "Đội đã hoàn thành nhiệm vụ và bàn giao hiện trường an toàn. Dữ liệu này được điền nhanh để demo luồng báo cáo."
-        teamNote = "Mẫu demo tạo lúc \(timestamp). Vui lòng chỉnh lại nội dung thực tế trước khi gửi báo cáo chính thức."
-
-        teamStructuredPayload = MissionReportStructuredPayloadForm(
-            issueFlags: MissionReportIssueFlagsForm(
-                blockedRoad: activityTotal >= 3,
-                flooding: true,
-                landslide: activityTotal >= 4,
-                powerOutage: true,
-                communicationLoss: false,
-                unsafeArea: true,
-                medicalOverload: false
-            ),
-            issueExtras: [
-                MissionReportKeyValueEntry(key: "thoiTiet", value: "Mưa vừa, tầm nhìn hạn chế"),
-                MissionReportKeyValueEntry(key: "khuVuc", value: "Điểm tập kết trung tâm")
-            ],
-            resultMetrics: MissionReportResultMetricsForm(
-                rescued: "\(rescuedCount)",
-                treated: "\(treatedCount)",
-                referred: "\(referredCount)",
-                missing: "0",
-                fatalities: "0"
-            ),
-            resultExtras: [
-                MissionReportKeyValueEntry(key: "hoDaHoTro", value: "\(max(rescuedCount / 2, 1))"),
-                MissionReportKeyValueEntry(key: "thoiGianPhanUngPhut", value: "18")
-            ],
-            evidenceEntries: [
-                MissionReportEvidenceEntry(
-                    type: "note",
-                    url: "",
-                    note: "Dữ liệu mẫu phục vụ demo nhanh biểu mẫu báo cáo đội cứu hộ."
-                )
-            ]
+        let scenario = MissionTeamReportDemoData.scenario(
+            forMissionId: missionId,
+            activityIds: activities.map(\.missionActivityId),
+            timestamp: timestamp
         )
+
+        if let scenario {
+            teamSummary = scenario.teamSummary
+            teamNote = scenario.teamNote
+            teamStructuredPayload = scenario.teamPayload
+        } else {
+            let activityTotal = max(activities.count, 1)
+            let rescuedCount = max(activityTotal * 2, 2)
+            let treatedCount = max(activityTotal, 1)
+            let referredCount = activityTotal >= 3 ? 1 : 0
+
+            teamSummary = "Đội đã hoàn thành nhiệm vụ và bàn giao hiện trường an toàn. Dữ liệu này được điền nhanh để demo luồng báo cáo."
+            teamNote = "Mẫu demo tạo lúc \(timestamp). Vui lòng chỉnh lại nội dung thực tế trước khi gửi báo cáo chính thức."
+
+            teamStructuredPayload = MissionReportStructuredPayloadForm(
+                issueFlags: MissionReportIssueFlagsForm(
+                    blockedRoad: activityTotal >= 3,
+                    flooding: true,
+                    landslide: activityTotal >= 4,
+                    powerOutage: true,
+                    communicationLoss: false,
+                    unsafeArea: true,
+                    medicalOverload: false
+                ),
+                issueExtras: [
+                    MissionReportKeyValueEntry(key: "thoiTiet", value: "Mưa vừa, tầm nhìn hạn chế"),
+                    MissionReportKeyValueEntry(key: "khuVuc", value: "Điểm tập kết trung tâm")
+                ],
+                resultMetrics: MissionReportResultMetricsForm(
+                    rescued: "\(rescuedCount)",
+                    treated: "\(treatedCount)",
+                    referred: "\(referredCount)",
+                    missing: "0",
+                    fatalities: "0"
+                ),
+                resultExtras: [
+                    MissionReportKeyValueEntry(key: "hoDaHoTro", value: "\(max(rescuedCount / 2, 1))"),
+                    MissionReportKeyValueEntry(key: "thoiGianPhanUngPhut", value: "18")
+                ],
+                evidenceEntries: [
+                    MissionReportEvidenceEntry(
+                        type: "note",
+                        url: "",
+                        note: "Dữ liệu mẫu phục vụ demo nhanh biểu mẫu báo cáo đội cứu hộ."
+                    )
+                ]
+            )
+        }
 
         activities = activities.enumerated().map { index, activity in
             var updated = activity
             let step = index + 1
+            let activityDemo = scenario?.activities[activity.missionActivityId]
 
             updated.executionStatus = demoExecutionStatus(for: activity)
-            updated.summary = "Bước \(step) đã hoàn tất theo phương án điều phối, đội đã xác nhận kết quả tại hiện trường."
-            updated.structuredPayload = demoActivityPayload(step: step)
+            updated.summary = activityDemo?.summary
+                ?? "Bước \(step) đã hoàn tất theo phương án điều phối, đội đã xác nhận kết quả tại hiện trường."
+            updated.structuredPayload = activityDemo?.payload ?? demoActivityPayload(step: step)
             updated.issuesJson = ""
             updated.resultJson = ""
             updated.evidenceJson = ""
@@ -912,12 +926,296 @@ private enum MissionTeamReportValidationError: LocalizedError {
     }
 }
 
+private struct MissionTeamReportDemoScenario {
+    let teamSummary: String
+    let teamNote: String
+    let teamPayload: MissionReportStructuredPayloadForm
+    let activities: [Int: MissionTeamReportDemoActivity]
+}
+
+private struct MissionTeamReportDemoActivity {
+    let summary: String
+    let payload: MissionReportStructuredPayloadForm
+}
+
 private enum MissionTeamReportDemoData {
     static func timestampLabel() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "vi_VN")
         formatter.dateFormat = "HH:mm dd/MM/yyyy"
         return formatter.string(from: Date())
+    }
+
+    static func scenario(
+        forMissionId missionId: Int,
+        activityIds: [Int],
+        timestamp: String
+    ) -> MissionTeamReportDemoScenario? {
+        guard isHueMixedRouteDemoMission(missionId: missionId, activityIds: activityIds) else {
+            return nil
+        }
+
+        return hueMixedRouteScenario(timestamp: timestamp)
+    }
+
+    private static func isHueMixedRouteDemoMission(missionId: Int, activityIds: [Int]) -> Bool {
+        let hueRouteActivityIds = Set(421...430)
+        let matchingActivityCount = Set(activityIds).intersection(hueRouteActivityIds).count
+
+        return missionId == 101 || matchingActivityCount >= 6
+    }
+
+    private static func hueMixedRouteScenario(timestamp: String) -> MissionTeamReportDemoScenario {
+        MissionTeamReportDemoScenario(
+            teamSummary: "Đội Hường đã xử lý mission mixed #101 tại cụm #111: tiếp nhận vật phẩm ở kho Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế, phân phát cho SOS #361 và SOS #7, cứu hộ/y tế cho nhóm ưu tiên, sơ tán 7 người về điểm an toàn, trả 3 nước dừa và áo phao LIFEJACKET-D01-003 về kho. Bước quay về điểm tập kết là chặng cuối của đội.",
+            teamNote: "Dữ liệu demo tạo lúc \(timestamp). Nội dung bám theo mission #101 ngày 22/04/2026: Đội Hường hoàn tất các bước cứu trợ, cứu hộ, y tế, sơ tán và hoàn trả vật phẩm trước khi quay về Sân vận động Tự Do để bàn giao.",
+            teamPayload: MissionReportStructuredPayloadForm(
+                issueFlags: MissionReportIssueFlagsForm(
+                    blockedRoad: true,
+                    flooding: true,
+                    landslide: false,
+                    powerOutage: false,
+                    communicationLoss: false,
+                    unsafeArea: true,
+                    medicalOverload: false
+                ),
+                issueExtras: [
+                    MissionReportKeyValueEntry(key: "missionId", value: "101"),
+                    MissionReportKeyValueEntry(key: "clusterId", value: "111"),
+                    MissionReportKeyValueEntry(key: "doiThucHien", value: "Đội Hường"),
+                    MissionReportKeyValueEntry(key: "khuVuc", value: "TP. Huế - SOS #361 và SOS #7"),
+                    MissionReportKeyValueEntry(key: "khoVatPham", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế, 46 Đống Đa"),
+                    MissionReportKeyValueEntry(key: "diemTapKet", value: "Sân vận động Tự Do (Thừa Thiên Huế)"),
+                    MissionReportKeyValueEntry(key: "canhBao", value: "Nước lên nhanh; SOS #361 có người gãy xương, mất nhiệt và trẻ lạc người thân")
+                ],
+                resultMetrics: metrics(rescued: 7, treated: 5, referred: 1),
+                resultExtras: [
+                    MissionReportKeyValueEntry(key: "sosDaXuLy", value: "361, 7"),
+                    MissionReportKeyValueEntry(key: "vatPhamDaNhan", value: "Nước dừa x14; Nước khoáng 500ml x14; Nước tinh khiết x14; Viên lọc nước x14; Áo phao LIFEJACKET-D01-003 x1"),
+                    MissionReportKeyValueEntry(key: "vatPhamDaGiao", value: "53 đơn vị tiêu hao (SOS #361: 24; SOS #7: 29)"),
+                    MissionReportKeyValueEntry(key: "vatPhamHoanTra", value: "Nước dừa đóng hộp x3; Áo phao cứu sinh LIFEJACKET-D01-003 x1"),
+                    MissionReportKeyValueEntry(key: "trangThaiCuoi", value: "Đã cứu hộ, y tế, sơ tán và hoàn trả vật phẩm; còn bước quay về điểm tập kết")
+                ],
+                evidenceEntries: [
+                    MissionReportEvidenceEntry(
+                        type: "note",
+                        url: "",
+                        note: "Báo cáo demo tổng hợp từ mission #101: hoàn thành cứu trợ SOS #361/#7, bàn giao y tế, sơ tán nhóm 7 người và hoàn trả vật phẩm dư."
+                    )
+                ]
+            ),
+            activities: [
+                421: activity(
+                    summary: "Đội Hường tiếp nhận vật phẩm tại kho Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế: nước dừa x14, nước khoáng 500ml x14, nước tinh khiết x14, viên lọc nước khẩn cấp x14 và áo phao LIFEJACKET-D01-003 x1. Đã kiểm tra lô/hạn dùng và sẵn sàng phân phát.",
+                    issueFlags: MissionReportIssueFlagsForm(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "kho", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế"),
+                        MissionReportKeyValueEntry(key: "diaChi", value: "46 Đống Đa, TP. Huế"),
+                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-04-22T05:30:25Z")
+                    ],
+                    resultMetrics: metrics(),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "vatPhamTieuHaoDaNhan", value: "56"),
+                        MissionReportKeyValueEntry(key: "thietBiReusableDaNhan", value: "Áo phao LIFEJACKET-D01-003")
+                    ],
+                    evidenceNote: "Ảnh/biên nhận kho có thể đính kèm cho bước tiếp nhận vật phẩm."
+                ),
+                422: activity(
+                    summary: "Đã phân phát ưu tiên cho SOS #361 trước khi cứu hộ: mỗi loại 6 đơn vị gồm nước dừa, nước khoáng 500ml, nước tinh khiết và viên lọc nước khẩn cấp. Tổng giao 24 đơn vị, còn 8 đơn vị mỗi loại để xử lý SOS #7.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
+                        MissionReportKeyValueEntry(key: "toaDo", value: "16.469621, 107.592778"),
+                        MissionReportKeyValueEntry(key: "uuTien", value: "Giao nhanh trước khi xử lý ca gãy xương, trẻ lạc người thân và người già mất nhiệt")
+                    ],
+                    resultMetrics: metrics(),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "tongVatPhamDaGiao", value: "24"),
+                        MissionReportKeyValueEntry(key: "chiTiet", value: "4 mặt hàng x6 đơn vị")
+                    ],
+                    evidenceNote: "Ghi nhận bàn giao vật phẩm cho SOS #361."
+                ),
+                423: activity(
+                    summary: "Đội tiếp cận SOS #361 và hỗ trợ 3 nạn nhân ưu tiên: Khoa bị gãy xương/không thể di chuyển/mất phương hướng, Thảo là trẻ em lạc người thân, Người già 1 có nguy cơ mất nhiệt. Khu vực đã được kiểm soát để chuyển sang sơ cứu.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
+                        MissionReportKeyValueEntry(key: "nanNhanUuTien", value: "Khoa; Thảo; Người già 1"),
+                        MissionReportKeyValueEntry(key: "nguyCo", value: "Gãy xương, hạ thân nhiệt, trẻ lạc người thân")
+                    ],
+                    resultMetrics: metrics(rescued: 3),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "nguoiLon", value: "1"),
+                        MissionReportKeyValueEntry(key: "treEm", value: "1"),
+                        MissionReportKeyValueEntry(key: "nguoiGia", value: "1")
+                    ],
+                    evidenceNote: "Ghi nhận tiếp cận và phân loại nhanh nhóm nạn nhân SOS #361."
+                ),
+                424: activity(
+                    summary: "Đã cố định gãy xương cho Khoa, xử trí nguy cơ hạ thân nhiệt, kiểm tra bệnh nền/người già và ổn định trẻ Thảo trước khi di chuyển. Khoa cần bàn giao y tế để theo dõi gãy xương và tình trạng lú lẫn.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
+                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Cố định gãy xương; giữ ấm; ổn định trẻ em; kiểm tra dấu hiệu sinh tồn"),
+                        MissionReportKeyValueEntry(key: "caCanBanGiao", value: "Khoa")
+                    ],
+                    resultMetrics: metrics(treated: 3, referred: 1),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "benhNhanTheoDoi", value: "Khoa - gãy xương/mất phương hướng"),
+                        MissionReportKeyValueEntry(key: "treEmOnDinh", value: "Thảo")
+                    ],
+                    evidenceNote: "Ghi nhận xử trí y tế tại SOS #361 trước khi sơ tán."
+                ),
+                425: activity(
+                    summary: "Đã phân phát phần vật phẩm còn lại cho SOS #7: nước khoáng 500ml x8, nước tinh khiết x8, viên lọc nước khẩn cấp x8 và nước dừa x5. Thiếu 3 nước dừa so với kế hoạch do nhu cầu thực nhận thấp hơn sau đánh giá tại hiện trường; 3 đơn vị này được giữ nguyên và hoàn trả kho ở bước 9.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "7"),
+                        MissionReportKeyValueEntry(key: "toaDo", value: "16.471658, 107.595076"),
+                        MissionReportKeyValueEntry(key: "lyDoGiaoThieu", value: "3 nước dừa không sử dụng tại SOS #7, hoàn trả kho ở bước 9")
+                    ],
+                    resultMetrics: metrics(),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "tongVatPhamDaGiao", value: "29"),
+                        MissionReportKeyValueEntry(key: "nuocDuaDaGiao", value: "5"),
+                        MissionReportKeyValueEntry(key: "nuocDuaHoanTra", value: "3"),
+                        MissionReportKeyValueEntry(key: "matHangGiaoDu", value: "Nước khoáng x8; Nước tinh khiết x8; Viên lọc nước x8")
+                    ],
+                    evidenceNote: "Ghi nhận bàn giao vật phẩm SOS #7 và lý do giao thiếu nước dừa."
+                ),
+                426: activity(
+                    summary: "Đội tiếp cận SOS #7, hỗ trợ nhóm nạn nhân khi nước đang lên nhanh, ưu tiên người già không thể di chuyển và người bị thương nhẹ. Nhóm được đưa ra khỏi vị trí nguy hiểm để chuẩn bị sơ cứu và sơ tán.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "7"),
+                        MissionReportKeyValueEntry(key: "nguyCo", value: "Nước lên nhanh; có người già hạn chế di chuyển và người bị thương nhẹ")
+                    ],
+                    resultMetrics: metrics(rescued: 4),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "nhomSos7HoTro", value: "4"),
+                        MissionReportKeyValueEntry(key: "uuTien", value: "Người già không thể di chuyển")
+                    ],
+                    evidenceNote: "Ghi nhận tiếp cận và di chuyển nhóm SOS #7 khỏi khu vực nguy hiểm."
+                ),
+                427: activity(
+                    summary: "Đã sơ cứu người bị thương nhẹ tại SOS #7 và kiểm tra dấu hiệu sinh tồn của người già trước khi sơ tán. Không ghi nhận ca tử vong hoặc mất tích; nhóm đủ điều kiện di chuyển về điểm an toàn.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "7"),
+                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Sơ cứu vết thương nhẹ; kiểm tra dấu hiệu sinh tồn người già")
+                    ],
+                    resultMetrics: metrics(treated: 2),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "nguoiBiThuongNhe", value: "1"),
+                        MissionReportKeyValueEntry(key: "nguoiGiaKiemTra", value: "1")
+                    ],
+                    evidenceNote: "Ghi nhận sơ cứu và đánh giá ổn định trước sơ tán SOS #7."
+                ),
+                428: activity(
+                    summary: "Đội sơ tán toàn bộ nhóm 7 người về điểm an toàn, bàn giao ca y tế cần theo dõi và ghi nhận nhu cầu cứu trợ bổ sung để tạo mission RELIEF riêng.",
+                    issueFlags: routeIssueFlags(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "diemAnToan", value: "16.4706395, 107.593927"),
+                        MissionReportKeyValueEntry(key: "banGiaoYTe", value: "Có"),
+                        MissionReportKeyValueEntry(key: "deXuatTachRelief", value: "Có")
+                    ],
+                    resultMetrics: metrics(rescued: 7, referred: 1),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "soNguoiSoTan", value: "7"),
+                        MissionReportKeyValueEntry(key: "nhuCauReliefRieng", value: "Ghi nhận sau sơ tán")
+                    ],
+                    evidenceNote: "Ghi nhận bàn giao nhóm 7 người tại điểm an toàn."
+                ),
+                429: activity(
+                    summary: "Đã trả vật phẩm còn lại về kho: nước dừa đóng hộp x3 và áo phao cứu sinh LIFEJACKET-D01-003 x1. Tình trạng áo phao còn Good, tồn kho tiêu hao/reusable đã được cập nhật theo bàn giao.",
+                    issueFlags: MissionReportIssueFlagsForm(),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "khoNhanLai", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế"),
+                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-04-22T05:39:31Z")
+                    ],
+                    resultMetrics: metrics(),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "nuocDuaHoanTra", value: "3"),
+                        MissionReportKeyValueEntry(key: "aoPhaoHoanTra", value: "LIFEJACKET-D01-003"),
+                        MissionReportKeyValueEntry(key: "tinhTrangAoPhao", value: "Good")
+                    ],
+                    evidenceNote: "Ghi nhận hoàn trả vật phẩm tiêu hao còn lại và thiết bị reusable."
+                ),
+                430: activity(
+                    summary: "Đội Hường quay về điểm tập kết Sân vận động Tự Do (Thừa Thiên Huế), hoàn tất bàn giao thông tin hiện trường, trạng thái vật phẩm và các ca cần theo dõi. Đây là bước cuối để đóng mission sau khi đội cập nhật vị trí tại điểm tập kết.",
+                    issueFlags: MissionReportIssueFlagsForm(
+                        blockedRoad: true,
+                        flooding: true,
+                        landslide: false,
+                        powerOutage: false,
+                        communicationLoss: false,
+                        unsafeArea: false,
+                        medicalOverload: false
+                    ),
+                    issueExtras: [
+                        MissionReportKeyValueEntry(key: "diemTapKet", value: "Sân vận động Tự Do (Thừa Thiên Huế)"),
+                        MissionReportKeyValueEntry(key: "toaDoDiemTapKet", value: "16.46751083681696, 107.59761456770599"),
+                        MissionReportKeyValueEntry(key: "trangThai", value: "Chặng cuối quay về điểm tập kết")
+                    ],
+                    resultMetrics: metrics(),
+                    resultExtras: [
+                        MissionReportKeyValueEntry(key: "banGiaoThongTinHienTruong", value: "Có"),
+                        MissionReportKeyValueEntry(key: "banGiaoTrangThaiVatPham", value: "Có")
+                    ],
+                    evidenceNote: "Ghi nhận bàn giao cuối tại điểm tập kết của đội."
+                )
+            ]
+        )
+    }
+
+    private static func activity(
+        summary: String,
+        issueFlags: MissionReportIssueFlagsForm,
+        issueExtras: [MissionReportKeyValueEntry],
+        resultMetrics: MissionReportResultMetricsForm,
+        resultExtras: [MissionReportKeyValueEntry],
+        evidenceNote: String
+    ) -> MissionTeamReportDemoActivity {
+        MissionTeamReportDemoActivity(
+            summary: summary,
+            payload: MissionReportStructuredPayloadForm(
+                issueFlags: issueFlags,
+                issueExtras: issueExtras,
+                resultMetrics: resultMetrics,
+                resultExtras: resultExtras,
+                evidenceEntries: [
+                    MissionReportEvidenceEntry(type: "note", url: "", note: evidenceNote)
+                ]
+            )
+        )
+    }
+
+    private static func metrics(
+        rescued: Int = 0,
+        treated: Int = 0,
+        referred: Int = 0,
+        missing: Int = 0,
+        fatalities: Int = 0
+    ) -> MissionReportResultMetricsForm {
+        MissionReportResultMetricsForm(
+            rescued: "\(rescued)",
+            treated: "\(treated)",
+            referred: "\(referred)",
+            missing: "\(missing)",
+            fatalities: "\(fatalities)"
+        )
+    }
+
+    private static func routeIssueFlags() -> MissionReportIssueFlagsForm {
+        MissionReportIssueFlagsForm(
+            blockedRoad: true,
+            flooding: true,
+            landslide: false,
+            powerOutage: false,
+            communicationLoss: false,
+            unsafeArea: true,
+            medicalOverload: false
+        )
     }
 }
 

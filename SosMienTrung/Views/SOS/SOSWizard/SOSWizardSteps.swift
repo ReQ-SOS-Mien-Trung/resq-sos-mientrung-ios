@@ -174,6 +174,7 @@ struct Step0AutoInfoView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
     )
     @State private var hasInitializedMapRegion = false
+    @State private var lastFocusedManualLocation: SOSManualLocation?
     @State private var isApplyingResolvedAddress = false
     @State private var showRelativeProfilePicker = false
 
@@ -280,7 +281,9 @@ struct Step0AutoInfoView: View {
                                 .disabled(relativeProfileStore.profiles.isEmpty)
 
                                 if relativeProfileStore.profiles.isEmpty {
-                                    Text("Chưa có hồ sơ người thân. Thêm trong Cài đặt để chọn nhanh khi gửi SOS.")
+                                    Text(relativeProfileStore.isSyncing
+                                        ? "Đang đồng bộ hồ sơ người thân. Danh sách sẽ hiện khi tải xong."
+                                        : "Chưa có hồ sơ người thân. Thêm trong Cài đặt để chọn nhanh khi gửi SOS.")
                                         .font(.caption)
                                         .foregroundColor(DS.Colors.textSecondary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -409,6 +412,7 @@ struct Step0AutoInfoView: View {
                         AppleMapsLocationPicker(
                             region: $mapRegion,
                             selectedCoordinate: selectedCoordinate,
+                            showsUserLocation: formData.manualLocation == nil,
                             onCoordinateSelected: { coordinate in
                                 Task { await selectCoordinateOnMap(coordinate) }
                             }
@@ -539,6 +543,9 @@ struct Step0AutoInfoView: View {
             refreshBatteryLevel()
             syncInitialMapRegionIfNeeded()
         }
+        .onChange(of: formData.manualLocation) { newLocation in
+            syncMapRegionForManualLocationIfNeeded(newLocation)
+        }
         .sheet(isPresented: $showRelativeProfilePicker) {
             RelativeProfilePickerSheet(initialSelectedProfileIds: formData.selectedRelativeProfileIds) { profiles in
                 formData.applySelectedRelativeProfiles(profiles)
@@ -588,6 +595,10 @@ struct Step0AutoInfoView: View {
     }
 
     private var relativeProfileButtonTitle: String {
+        if relativeProfileStore.isSyncing && relativeProfileStore.profiles.isEmpty {
+            return "Đang đồng bộ hồ sơ..."
+        }
+
         if relativeProfileStore.profiles.isEmpty {
             return "Chọn từ hồ sơ đã lưu"
         }
@@ -707,10 +718,25 @@ struct Step0AutoInfoView: View {
     private func syncInitialMapRegionIfNeeded() {
         guard !hasInitializedMapRegion, let coordinate = selectedCoordinate else { return }
         hasInitializedMapRegion = true
+        lastFocusedManualLocation = formData.manualLocation
         mapRegion = MKCoordinateRegion(
             center: coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
         )
+    }
+
+    private func syncMapRegionForManualLocationIfNeeded(_ location: SOSManualLocation?) {
+        guard let location else {
+            lastFocusedManualLocation = nil
+            return
+        }
+
+        guard location != lastFocusedManualLocation else {
+            return
+        }
+
+        recenterMap(on: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude))
+        lastFocusedManualLocation = location
     }
 
     private func recenterMap(on coordinate: CLLocationCoordinate2D) {
@@ -725,6 +751,7 @@ struct Step0AutoInfoView: View {
 private struct AppleMapsLocationPicker: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
     let selectedCoordinate: CLLocationCoordinate2D?
+    let showsUserLocation: Bool
     let onCoordinateSelected: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -734,7 +761,7 @@ private struct AppleMapsLocationPicker: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView(frame: .zero)
         mapView.delegate = context.coordinator
-        mapView.showsUserLocation = true
+        mapView.showsUserLocation = showsUserLocation
         mapView.showsCompass = true
         mapView.showsScale = true
         mapView.setRegion(region, animated: false)
@@ -750,6 +777,7 @@ private struct AppleMapsLocationPicker: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
+        mapView.showsUserLocation = showsUserLocation
 
         if regionNeedsUpdate(current: mapView.region, target: region) {
             mapView.setRegion(region, animated: context.coordinator.didRenderOnce)
@@ -949,7 +977,9 @@ struct Step1SelectTypeView: View {
                                 .disabled(relativeProfileStore.profiles.isEmpty || onChangeSavedProfiles == nil)
 
                                 if relativeProfileStore.profiles.isEmpty {
-                                    Text("Chưa có hồ sơ người thân. Thêm trong Cài đặt để chọn nhanh khi gửi SOS ở cả hai chế độ.")
+                                    Text(relativeProfileStore.isSyncing
+                                        ? "Đang đồng bộ hồ sơ người thân. Danh sách sẽ hiện khi tải xong."
+                                        : "Chưa có hồ sơ người thân. Thêm trong Cài đặt để chọn nhanh khi gửi SOS ở cả hai chế độ.")
                                         .font(.caption)
                                         .foregroundColor(DS.Colors.textSecondary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -979,6 +1009,10 @@ struct Step1SelectTypeView: View {
     }
 
     private var relativeProfileButtonTitle: String {
+        if relativeProfileStore.isSyncing && relativeProfileStore.profiles.isEmpty {
+            return "Đang đồng bộ hồ sơ..."
+        }
+
         if relativeProfileStore.profiles.isEmpty {
             return "Chọn từ hồ sơ đã lưu"
         }

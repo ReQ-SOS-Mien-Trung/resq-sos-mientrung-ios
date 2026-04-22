@@ -83,6 +83,7 @@ struct RelativeProfilePickerSheet: View {
             }
             .onAppear {
                 selectedProfileIds = initialSelectedProfileIds
+                store.refreshFromServerIfPossible()
             }
         }
     }

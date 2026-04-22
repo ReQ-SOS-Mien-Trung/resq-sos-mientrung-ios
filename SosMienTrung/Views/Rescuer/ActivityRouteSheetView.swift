@@ -316,7 +316,7 @@ struct ActivityRouteSheetView: View {
     }
 
     private var refreshKey: String {
-        "\(activity.id)|\(selectedVehicle)|\(currentDeviceCoordinateKey)|\(fallbackOriginCoordinate?.latitude ?? 0)|\(fallbackOriginCoordinate?.longitude ?? 0)"
+        "\(activity.id)|\(selectedVehicle)|\(fallbackOriginCoordinate?.latitude ?? 0)|\(fallbackOriginCoordinate?.longitude ?? 0)"
     }
 
     private var originLookupKey: String {
@@ -387,7 +387,8 @@ struct ActivityRouteSheetView: View {
                 activityId: activity.id,
                 originLat: origin.latitude,
                 originLng: origin.longitude,
-                vehicle: selectedVehicle
+                vehicle: selectedVehicle,
+                bypassCache: forceRefresh
             )
 
             route = fetchedRoute

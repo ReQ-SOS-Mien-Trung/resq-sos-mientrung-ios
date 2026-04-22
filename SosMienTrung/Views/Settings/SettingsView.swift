@@ -11,6 +11,32 @@ import UIKit
 import CoreLocation
 import PhotosUI
 
+private func normalizedAvatarURL(from rawValue: String) -> URL? {
+    let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedValue.isEmpty else { return nil }
+
+    if let directURL = URL(string: trimmedValue), directURL.scheme != nil {
+        return directURL
+    }
+
+    if let encodedValue = trimmedValue.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+       let encodedURL = URL(string: encodedValue),
+       encodedURL.scheme != nil {
+        return encodedURL
+    }
+
+    let httpsValue = "https://\(trimmedValue)"
+    if let httpsURL = URL(string: httpsValue) {
+        return httpsURL
+    }
+
+    if let encodedHttpsValue = httpsValue.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+        return URL(string: encodedHttpsValue)
+    }
+
+    return nil
+}
+
 // MARK: - App Theme Enum
 enum AppTheme: String, CaseIterable {
     case system = "Hệ thống"
@@ -114,6 +140,7 @@ struct SettingsView: View {
     @State private var showIdentityInfo = false
     @State private var showLogoutConfirmation = false
     @State private var isLoggingOut = false
+    @State private var isRefreshingCurrentUser = false
     @StateObject private var authSession = AuthSessionStore.shared
 
     var body: some View {
@@ -243,6 +270,9 @@ struct SettingsView: View {
         } message: {
             Text("Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?")
         }
+        .task {
+            await refreshCurrentUserIfNeededForAvatar()
+        }
     }
 
     // MARK: - Logout Action
@@ -250,6 +280,27 @@ struct SettingsView: View {
         isLoggingOut = true
         AuthService.shared.logout { _ in
             isLoggingOut = false
+        }
+    }
+
+    @MainActor
+    private func refreshCurrentUserIfNeededForAvatar() async {
+        guard authSession.hasAuthenticatedSession else { return }
+        guard !isRefreshingCurrentUser else { return }
+
+        let currentAvatar = userProfile.currentUser?.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard currentAvatar.isEmpty else { return }
+
+        isRefreshingCurrentUser = true
+        defer { isRefreshingCurrentUser = false }
+
+        do {
+            let response = try await AuthService.shared.fetchCurrentUser()
+            AuthSessionStore.shared.apply(currentUser: response)
+            let fallbackPhone = userProfile.currentUser?.phoneNumber ?? authSession.session?.username ?? authSession.session?.email
+            userProfile.apply(currentUser: response, fallbackPhone: fallbackPhone)
+        } catch {
+            print("[SettingsView] Failed to refresh current user: \(error.localizedDescription)")
         }
     }
 
@@ -344,7 +395,7 @@ struct SettingsView: View {
               !rawURL.isEmpty else {
             return nil
         }
-        return URL(string: rawURL)
+        return normalizedAvatarURL(from: rawURL)
     }
 
     private var profileAvatarFallbackView: some View {
@@ -794,7 +845,7 @@ struct EditProfileView: View {
     private var avatarPreviewURL: URL? {
         let trimmedURL = avatarUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else { return nil }
-        return URL(string: trimmedURL)
+        return normalizedAvatarURL(from: trimmedURL)
     }
 
     private var hasAvatar: Bool {

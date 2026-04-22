@@ -144,7 +144,7 @@ struct MissionInventoryView: View {
                     inventoryKey: "\(itemName)|\(unit ?? "")",
                     itemName: itemName,
                     imageUrl: inventoryImageURL(from: supply.imageUrl),
-                    quantity: inventoryQuantity(for: supply, in: activity, stage: stage),
+                    quantity: inventoryQuantity(for: supply, stage: stage),
                     unit: unit,
                     activityId: activity.id,
                     activityTitle: activity.title,
@@ -527,20 +527,83 @@ struct MissionInventoryView: View {
 
     private func inventoryQuantity(
         for supply: MissionSupply,
-        in activity: Activity,
         stage: MissionInventoryStage
     ) -> Int {
         let plannedQuantity = max(supply.quantity, 0)
+        let carriedQuantity = inventoryCarriedQuantity(for: supply)
 
-        guard activity.isDeliverSuppliesActivity, stage == .delivered else {
+        switch stage {
+        case .plannedPickup, .pickingUp, .pickedUp, .readyForDelivery, .delivering, .plannedUse, .inUse:
+            return carriedQuantity
+        case .delivered, .used:
+            let deliveredQuantity = max(
+                max(supply.actualDeliveredQuantity ?? 0, 0),
+                inventoryLotQuantity(supply.deliveredLotAllocations),
+                inventoryReusableQuantity(supply.deliveredReusableUnits)
+            )
+
+            if deliveredQuantity > 0 {
+                return deliveredQuantity
+            }
+
+            return plannedQuantity
+        case .readyForReturn, .returning:
+            let returnQuantity = max(
+                inventoryLotQuantity(supply.expectedReturnLotAllocations),
+                inventoryLotQuantity(supply.availableDeliveryLotAllocations),
+                inventoryReusableQuantity(supply.expectedReturnUnits),
+                inventoryReusableQuantity(supply.availableDeliveryReusableUnits)
+            )
+
+            return returnQuantity > 0 ? returnQuantity : carriedQuantity
+        case .returned:
+            let returnedQuantity = max(
+                inventoryLotQuantity(supply.returnedLotAllocations),
+                inventoryLotQuantity(supply.expectedReturnLotAllocations),
+                inventoryReusableQuantity(supply.returnedReusableUnits),
+                inventoryReusableQuantity(supply.expectedReturnUnits)
+            )
+
+            return returnedQuantity > 0 ? returnedQuantity : plannedQuantity
+        case .released:
             return plannedQuantity
         }
+    }
 
-        guard let actualDeliveredQuantity = supply.actualDeliveredQuantity else {
-            return plannedQuantity
+    private func inventoryCarriedQuantity(for supply: MissionSupply) -> Int {
+        let plannedQuantity = max(supply.quantity, 0)
+        let bufferQuantity: Int
+        if let bufferUsedQuantity = supply.bufferUsedQuantity {
+            bufferQuantity = max(bufferUsedQuantity, 0)
+        } else {
+            bufferQuantity = max(supply.bufferQuantity ?? 0, 0)
         }
 
-        return max(actualDeliveredQuantity, 0)
+        return max(
+            plannedQuantity + bufferQuantity,
+            inventoryLotQuantity(supply.availableDeliveryLotAllocations),
+            inventoryLotQuantity(supply.pickupLotAllocations),
+            inventoryLotQuantity(supply.plannedPickupLotAllocations),
+            inventoryReusableQuantity(supply.availableDeliveryReusableUnits),
+            inventoryReusableQuantity(supply.pickedReusableUnits),
+            inventoryReusableQuantity(supply.plannedPickupReusableUnits)
+        )
+    }
+
+    private func inventoryLotQuantity(_ allocations: [MissionSupplyLotAllocation]?) -> Int {
+        (allocations ?? []).reduce(0) { partialResult, allocation in
+            partialResult + max(0, allocation.quantityTaken ?? 0)
+        }
+    }
+
+    private func inventoryReusableQuantity(_ units: [MissionSupplyReusableUnit]?) -> Int {
+        (units ?? []).filter { unit in
+            if let reusableItemId = unit.reusableItemId {
+                return reusableItemId > 0
+            }
+
+            return false
+        }.count
     }
 
     private func inventoryLotAllocations(

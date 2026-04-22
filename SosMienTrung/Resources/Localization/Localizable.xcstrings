@@ -2455,6 +2455,9 @@
         }
       }
     },
+    "Đang đồng bộ hồ sơ người thân. Danh sách sẽ hiện khi tải xong." : {
+
+    },
     "Đang kết nối..." : {
       "localizations" : {
         "vi" : {
@@ -4228,6 +4231,12 @@
         }
       }
     },
+    "Hỗ trợ cho %lld người" : {
+
+    },
+    "Hoàn tất" : {
+
+    },
     "Hồ sơ người thân" : {
       "localizations" : {
         "vi" : {
@@ -4249,9 +4258,6 @@
         }
       }
     },
-    "Hỗ trợ cho %lld người" : {
-
-    },
     "hoặc" : {
       "localizations" : {
         "vi" : {
@@ -4271,9 +4277,6 @@
           }
         }
       }
-    },
-    "Hoàn tất" : {
-
     },
     "Hoàn thành bước" : {
       "comment" : "A title for the screen that allows users to complete an activity.",

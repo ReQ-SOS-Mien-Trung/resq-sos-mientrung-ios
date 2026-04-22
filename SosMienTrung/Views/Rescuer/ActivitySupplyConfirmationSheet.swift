@@ -62,7 +62,7 @@ struct PickupConfirmationSheet: View {
 
                                 metricChip(
                                     title: "Vật phẩm dự trù",
-                                    value: quantityText(drafts[index].bufferAvailable, unit: drafts[index].unit),
+                                    value: quantityText(drafts[index].bufferQuantityToReceive, unit: drafts[index].unit),
                                     tone: DS.Colors.warning
                                 )
                             }
@@ -75,43 +75,18 @@ struct PickupConfirmationSheet: View {
                                 )
                             }
 
-                            if drafts[index].bufferAvailable > 0 {
-                                HStack(spacing: DS.Spacing.xs) {
-                                    quickActionChip(
-                                        title: "Không dùng dự trù",
-                                        isSelected: parsedBufferQuantity(at: index) == 0
-                                    ) {
-                                        drafts[index].usedBufferText = "0"
-                                        drafts[index].reason = ""
-                                    }
-
-                                    quickActionChip(
-                                        title: "Dùng hết dự trù",
-                                        isSelected: parsedBufferQuantity(at: index) == drafts[index].bufferAvailable
-                                    ) {
-                                        drafts[index].usedBufferText = String(drafts[index].bufferAvailable)
-                                    }
-                                }
-
-                                IncidentTextInputField(
-                                    title: "Vật phẩm dự trù đã dùng",
-                                    placeholder: "0",
-                                    text: bindingForPickupQuantity(at: index),
-                                    keyboardType: .numberPad
+                            if drafts[index].bufferQuantityToReceive > 0 {
+                                metricChip(
+                                    title: "Tổng tiếp nhận",
+                                    value: quantityText(drafts[index].totalPickupQuantity, unit: drafts[index].unit),
+                                    tone: DS.Colors.accent
                                 )
 
-                                if let validationMessage = pickupValidationMessage(for: drafts[index]) {
-                                    validationText(validationMessage)
-                                }
-
-                                if parsedBufferQuantity(at: index) > 0 {
-                                    IncidentTextInputField(
-                                        title: "Lý do dùng vật phẩm dự trù",
-                                        placeholder: "Ví dụ: tăng số hộ dân thực tế, phát sinh thêm nhu cầu tại hiện trường...",
-                                        text: bindingForPickupReason(at: index),
-                                        axis: .vertical
-                                    )
-                                }
+                                IncidentInlineNotice(
+                                    icon: "checkmark.seal.fill",
+                                    text: "Đội cứu hộ sẽ tiếp nhận toàn bộ phần dự trù khi xác nhận.",
+                                    tone: DS.Colors.warning
+                                )
                             } else {
                                 IncidentInlineNotice(
                                     icon: "checkmark.circle.fill",
@@ -178,11 +153,11 @@ struct PickupConfirmationSheet: View {
     }
 
     private var hasBufferedItems: Bool {
-        drafts.contains { $0.bufferAvailable > 0 }
+        drafts.contains { $0.bufferQuantityToReceive > 0 }
     }
 
     private var canSubmit: Bool {
-        drafts.allSatisfy { pickupValidationMessage(for: $0) == nil }
+        true
     }
 
     private var isSubmissionLocked: Bool {
@@ -191,72 +166,33 @@ struct PickupConfirmationSheet: View {
 
     private var submitPayload: [MissionPickupBufferUsageRequest] {
         drafts.compactMap { draft in
-            guard draft.bufferAvailable > 0, let used = parsedBufferQuantity(for: draft), used > 0 else {
+            let bufferQuantity = draft.bufferQuantityToReceive
+            guard bufferQuantity > 0 else {
                 return nil
             }
 
             return MissionPickupBufferUsageRequest(
                 itemId: draft.itemId,
-                bufferQuantityUsed: used,
-                bufferUsedReason: draft.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+                bufferQuantityUsed: bufferQuantity,
+                bufferUsedReason: automaticBufferReceiptReason
             )
         }
     }
 
     private var submitSummaryText: String {
-        let usedBufferTotal = submitPayload.reduce(0) { $0 + $1.bufferQuantityUsed }
-        if usedBufferTotal > 0 {
-            return "Hệ thống sẽ ghi nhận \(usedBufferTotal) đơn vị vật phẩm dự trù đã dùng trước khi hoàn tất bước tiếp nhận."
-        }
-
-        return "Chưa dùng vật phẩm dự trù. Hệ thống sẽ chỉ trừ số lượng theo kế hoạch."
+        "Hệ thống sẽ trừ toàn bộ vật phẩm dự trù cùng với số lượng kế hoạch."
     }
 
     private func pickupCardSubtitle(for draft: PickupBufferDraft) -> String {
-        if draft.bufferAvailable > 0 {
-            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Có thể dùng thêm tối đa \(quantityText(draft.bufferAvailable, unit: draft.unit)) vật phẩm dự trù"
+        if draft.bufferQuantityToReceive > 0 {
+            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Dự trù \(quantityText(draft.bufferQuantityToReceive, unit: draft.unit)) • Tổng \(quantityText(draft.totalPickupQuantity, unit: draft.unit))"
         }
 
         return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit))"
     }
 
-    private func bindingForPickupQuantity(at index: Int) -> Binding<String> {
-        Binding(
-            get: { drafts[index].usedBufferText },
-            set: { drafts[index].usedBufferText = sanitizedIntegerInput($0) }
-        )
-    }
-
-    private func bindingForPickupReason(at index: Int) -> Binding<String> {
-        Binding(
-            get: { drafts[index].reason },
-            set: { drafts[index].reason = $0 }
-        )
-    }
-
-    private func parsedBufferQuantity(at index: Int) -> Int {
-        parsedBufferQuantity(for: drafts[index]) ?? 0
-    }
-
-    private func parsedBufferQuantity(for draft: PickupBufferDraft) -> Int? {
-        Int(draft.usedBufferText.isEmpty ? "0" : draft.usedBufferText)
-    }
-
-    private func pickupValidationMessage(for draft: PickupBufferDraft) -> String? {
-        guard draft.bufferAvailable > 0 else { return nil }
-        guard let usedBuffer = parsedBufferQuantity(for: draft) else {
-            return "Vui lòng nhập số nguyên hợp lệ."
-        }
-        if usedBuffer < 0 {
-            return "Số lượng vật phẩm dự trù không được nhỏ hơn 0."
-        }
-        if usedBuffer > draft.bufferAvailable {
-            return "Số lượng vật phẩm dự trù đã dùng không được vượt quá mức dự trù."
-        }
-        if usedBuffer > 0 && draft.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Cần nhập lý do khi có dùng vật phẩm dự trù."
-        }
-        return nil
+    private var automaticBufferReceiptReason: String {
+        "Đội cứu hộ tiếp nhận toàn bộ vật phẩm dự trù theo kế hoạch."
     }
 }
 
@@ -288,12 +224,34 @@ struct DeliveryConfirmationSheet: View {
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
                         title: drafts[index].itemName,
-                        subtitle: "Kế hoạch \(quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit))"
+                        subtitle: deliveryCardSubtitle(for: drafts[index])
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                            if drafts[index].bufferQuantityToDeliver > 0 {
+                                HStack(spacing: DS.Spacing.sm) {
+                                    metricChip(
+                                        title: "Kế hoạch",
+                                        value: quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit),
+                                        tone: DS.Colors.info
+                                    )
+
+                                    metricChip(
+                                        title: "Dự trù đã nhận",
+                                        value: quantityText(drafts[index].bufferQuantityToDeliver, unit: drafts[index].unit),
+                                        tone: DS.Colors.warning
+                                    )
+                                }
+
+                                metricChip(
+                                    title: "Tối đa có thể phát",
+                                    value: quantityText(drafts[index].deliverableQuantity, unit: drafts[index].unit),
+                                    tone: DS.Colors.accent
+                                )
+                            }
+
                             IncidentTextInputField(
                                 title: "Số lượng đã giao thực tế",
-                                placeholder: String(drafts[index].plannedQuantity),
+                                placeholder: String(drafts[index].deliverableQuantity),
                                 text: bindingForDeliveryQuantity(at: index),
                                 keyboardType: .numberPad
                             )
@@ -306,7 +264,7 @@ struct DeliveryConfirmationSheet: View {
                                 IncidentInlineNotice(
                                     icon: "chart.bar.doc.horizontal",
                                     text: deltaDescription,
-                                    tone: parsedActualQuantity(at: index) < drafts[index].plannedQuantity ? DS.Colors.warning : DS.Colors.info
+                                    tone: deliveryDeltaTone(for: drafts[index], actualQuantity: parsedActualQuantity(at: index))
                                 )
                             }
                         }
@@ -316,8 +274,8 @@ struct DeliveryConfirmationSheet: View {
                 IncidentFormSection(
                     title: hasDiscrepancy ? "Ghi chú chênh lệch" : "Ghi chú phân phát",
                     subtitle: hasDiscrepancy
-                        ? "Có thể ghi lý do giao thiếu ngay tại đây; nếu để trống thì bước báo cáo đội sẽ yêu cầu bổ sung."
-                        : "Có thể để trống nếu đội đã phân phát đúng theo kế hoạch."
+                        ? "Có thể ghi lý do còn vật phẩm chưa phát hết; nếu để trống thì bước báo cáo đội sẽ yêu cầu bổ sung."
+                        : "Có thể để trống nếu đội đã phân phát đúng số lượng đang giữ."
                 ) {
                     IncidentTextInputField(
                         title: "Ghi chú",
@@ -408,7 +366,7 @@ struct DeliveryConfirmationSheet: View {
     private var hasDiscrepancy: Bool {
         drafts.contains { draft in
             guard let actualQuantity = parsedActualQuantity(for: draft) else { return false }
-            return actualQuantity != draft.plannedQuantity
+            return actualQuantity != draft.deliverableQuantity
         }
     }
 
@@ -434,8 +392,8 @@ struct DeliveryConfirmationSheet: View {
         if actualQuantity < 0 {
             return "Số lượng thực tế không được nhỏ hơn 0."
         }
-        if actualQuantity > draft.plannedQuantity {
-            return "Số lượng thực tế không được lớn hơn kế hoạch."
+        if actualQuantity > draft.deliverableQuantity {
+            return "Số lượng thực tế không được lớn hơn số lượng đội đang giữ."
         }
         if draft.hasLotTracking && draft.hasReusableTracking {
             return "Vật phẩm này có dữ liệu giao theo cả lô và reusable unit. Vui lòng tải lại nhiệm vụ."
@@ -458,13 +416,34 @@ struct DeliveryConfirmationSheet: View {
     private func deliveryDeltaDescription(for draft: DeliveryDraft) -> String? {
         guard let actualQuantity = parsedActualQuantity(for: draft) else { return nil }
         let delta = actualQuantity - draft.plannedQuantity
-        if delta == 0 {
+        if delta == 0, actualQuantity == draft.deliverableQuantity {
             return nil
         }
         if delta < 0 {
             return "Còn thiếu \(quantityText(abs(delta), unit: draft.unit)) so với kế hoạch."
         }
-        return "Nhiều hơn kế hoạch \(quantityText(delta, unit: draft.unit))."
+        if delta > 0 {
+            return "Đã phát thêm \(quantityText(delta, unit: draft.unit)) từ vật phẩm dự trù."
+        }
+
+        let remaining = draft.deliverableQuantity - actualQuantity
+        if remaining > 0 {
+            return "Còn \(quantityText(remaining, unit: draft.unit)) vật phẩm dự trù chưa phân phát."
+        }
+
+        return nil
+    }
+
+    private func deliveryDeltaTone(for draft: DeliveryDraft, actualQuantity: Int) -> Color {
+        actualQuantity < draft.deliverableQuantity ? DS.Colors.warning : DS.Colors.info
+    }
+
+    private func deliveryCardSubtitle(for draft: DeliveryDraft) -> String {
+        if draft.bufferQuantityToDeliver > 0 {
+            return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit)) • Dự trù \(quantityText(draft.bufferQuantityToDeliver, unit: draft.unit)) • Tối đa \(quantityText(draft.deliverableQuantity, unit: draft.unit))"
+        }
+
+        return "Kế hoạch \(quantityText(draft.plannedQuantity, unit: draft.unit))"
     }
 
     private func builtLotAllocations(
@@ -706,10 +685,10 @@ private struct PickupBufferDraft: Identifiable {
     let plannedQuantity: Int
     let bufferAvailable: Int
     let lotAllocations: [MissionSupplyLotAllocation]
-    var usedBufferText: String
-    var reason: String
 
     var id: String { "\(itemId)" }
+    var bufferQuantityToReceive: Int { max(0, bufferAvailable) }
+    var totalPickupQuantity: Int { plannedQuantity + bufferQuantityToReceive }
 
     init(supply: MissionSupply) {
         itemId = supply.itemId ?? -1
@@ -718,8 +697,6 @@ private struct PickupBufferDraft: Identifiable {
         plannedQuantity = supply.quantity
         bufferAvailable = supply.bufferQuantity ?? 0
         lotAllocations = PickupBufferDraft.normalizedLotAllocations(from: supply)
-        usedBufferText = String(supply.bufferUsedQuantity ?? 0)
-        reason = supply.bufferUsedReason ?? ""
     }
 
     private static func normalizedLotAllocations(from supply: MissionSupply) -> [MissionSupplyLotAllocation] {
@@ -737,11 +714,13 @@ private struct DeliveryDraft: Identifiable {
     let itemName: String
     let unit: String?
     let plannedQuantity: Int
+    let deliverableQuantity: Int
     let deliveryLotAllocations: [MissionSupplyLotAllocation]
     let deliveryReusableUnits: [MissionSupplyReusableUnit]
     var actualQuantityText: String
 
     var id: String { "\(itemId)" }
+    var bufferQuantityToDeliver: Int { max(0, deliverableQuantity - plannedQuantity) }
 
     var hasLotTracking: Bool { deliveryLotAllocations.isEmpty == false }
     var hasReusableTracking: Bool { deliveryReusableUnits.isEmpty == false }
@@ -756,10 +735,40 @@ private struct DeliveryDraft: Identifiable {
         itemId = supply.itemId ?? -1
         itemName = supply.itemName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Vật phẩm"
         unit = supply.unit
-        plannedQuantity = supply.quantity
-        deliveryLotAllocations = DeliveryDraft.normalizedLotAllocations(from: supply)
-        deliveryReusableUnits = DeliveryDraft.normalizedReusableUnits(from: supply)
-        actualQuantityText = String(supply.actualDeliveredQuantity ?? supply.quantity)
+        let resolvedPlannedQuantity = max(supply.quantity, 0)
+        let normalizedLotAllocations = DeliveryDraft.normalizedLotAllocations(from: supply)
+        let normalizedReusableUnits = DeliveryDraft.normalizedReusableUnits(from: supply)
+        let resolvedDeliverableQuantity = DeliveryDraft.deliverableQuantity(
+            plannedQuantity: resolvedPlannedQuantity,
+            supply: supply,
+            lotAllocations: normalizedLotAllocations,
+            reusableUnits: normalizedReusableUnits
+        )
+        plannedQuantity = resolvedPlannedQuantity
+        deliveryLotAllocations = normalizedLotAllocations
+        deliveryReusableUnits = normalizedReusableUnits
+        deliverableQuantity = resolvedDeliverableQuantity
+        actualQuantityText = String(supply.actualDeliveredQuantity ?? resolvedDeliverableQuantity)
+    }
+
+    private static func deliverableQuantity(
+        plannedQuantity: Int,
+        supply: MissionSupply,
+        lotAllocations: [MissionSupplyLotAllocation],
+        reusableUnits: [MissionSupplyReusableUnit]
+    ) -> Int {
+        let bufferQuantity: Int
+        if let bufferUsedQuantity = supply.bufferUsedQuantity {
+            bufferQuantity = max(bufferUsedQuantity, 0)
+        } else {
+            bufferQuantity = max(supply.bufferQuantity ?? 0, 0)
+        }
+
+        let lotQuantity = lotAllocations.reduce(0) { partialResult, lot in
+            partialResult + max(0, lot.quantityTaken ?? 0)
+        }
+
+        return max(plannedQuantity + bufferQuantity, lotQuantity, reusableUnits.count)
     }
 
     private static func normalizedLotAllocations(from supply: MissionSupply) -> [MissionSupplyLotAllocation] {

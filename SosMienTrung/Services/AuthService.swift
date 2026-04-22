@@ -204,7 +204,23 @@ struct CurrentUserResponse: Codable {
         isEmailVerified = Self.decodeBool(from: container, keys: ["isEmailVerified", "emailVerified", "is_email_verified"]) ?? false
         isOnboarded = Self.decodeBool(from: container, keys: ["isOnboarded", "onboarded", "is_onboarded"]) ?? false
         isEligibleRescuer = Self.decodeBool(from: container, keys: ["isEligibleRescuer", "eligibleRescuer", "is_eligible_rescuer"]) ?? false
-        avatarUrl = Self.decodeString(from: container, keys: ["avatarUrl", "avatarURL", "avatar", "photoUrl", "photoURL"])
+        avatarUrl = Self.decodeString(
+            from: container,
+            keys: [
+                "avatarUrl",
+                "avatarURL",
+                "avatar_url",
+                "avatar",
+                "photoUrl",
+                "photoURL",
+                "photo_url",
+                "imageUrl",
+                "imageURL",
+                "image_url",
+                "profileImageUrl",
+                "profile_image_url"
+            ]
+        )
         permissions = Self.decodeStringArray(from: container, keys: ["permissions"])
     }
 

@@ -714,6 +714,22 @@ final class RelativeProfileStore: ObservableObject {
         }
     }
 
+    func refreshFromServerIfPossible(force: Bool = false) {
+        guard let userId = currentUserId(),
+              !userId.isEmpty,
+              isServerSyncEnabled,
+              canSyncToServer,
+              isSyncing == false else {
+            return
+        }
+
+        guard force || hasLoadedRemoteSnapshot == false || profiles.isEmpty else {
+            return
+        }
+
+        scheduleServerBootstrap(for: userId)
+    }
+
     private func persist() {
         guard let userId = currentUserId(),
               !userId.isEmpty else {

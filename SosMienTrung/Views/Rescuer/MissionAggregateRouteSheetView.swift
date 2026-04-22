@@ -572,7 +572,8 @@ struct MissionAggregateRouteSheetView: View {
                 missionTeamId: missionTeamId,
                 originLat: origin.latitude,
                 originLng: origin.longitude,
-                vehicle: selectedVehicle
+                vehicle: selectedVehicle,
+                bypassCache: forceRefresh
             )
 
             if let apiStatus = fetchedRoute.status,
