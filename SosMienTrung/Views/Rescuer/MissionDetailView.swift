@@ -486,7 +486,7 @@ struct MissionDetailView: View {
                             handleActivityStatusChange(status, for: activity, within: list)
                         },
                         allowsCompletionActions: canEditActivity(activity)
-                            && missionActivityActionIsUnlocked(activity, within: currentTeamActivities)
+                            && missionActivityActionIsUnlocked(activity, within: allMissionActivities)
                             && !vm.hasPendingSync(missionId: activeMission.id, activityId: activity.id),
                         onNavigateTap: canOpenDirections(for: activity) ? {
                             routePreviewActivity = activity
@@ -953,7 +953,7 @@ struct MissionDetailView: View {
 
     private func isActivityCompletedForReport(_ activity: Activity) -> Bool {
         switch normalizedStatus(activity.status) {
-        case "succeed", "completed", "reported":
+        case "succeed", "completed", "reported", "failed", "cancelled":
             return true
         default:
             return false

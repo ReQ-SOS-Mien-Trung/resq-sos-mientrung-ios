@@ -879,7 +879,7 @@ func missionActivityActionIsUnlocked(_ activity: Activity, within list: [Activit
         return true
     }
 
-    return previousSteps.allSatisfy { $0.activityStatus == .succeed }
+    return previousSteps.allSatisfy { $0.activityStatus == .succeed || $0.activityStatus == .failed || $0.activityStatus == .cancelled }
 }
 
 // MARK: - Mission Update Request
