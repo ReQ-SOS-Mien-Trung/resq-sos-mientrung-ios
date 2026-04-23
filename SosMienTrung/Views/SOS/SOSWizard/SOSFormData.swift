@@ -794,7 +794,7 @@ private enum SOSQuickFillSample {
     static let elderlyId = "elderly_1"
     static let demoLatitude = 16.469621
     static let demoLongitude = 107.592778
-    static let demoAddress = "Demo: 16.469621, 107.592778"
+    static let demoAddress = "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"
 
     static let additionalDescription = "Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!"
 

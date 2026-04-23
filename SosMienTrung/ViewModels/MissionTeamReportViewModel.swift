@@ -255,7 +255,7 @@ final class MissionTeamReportViewModel: ObservableObject {
             updated.executionStatus = demoExecutionStatus(for: activity)
             updated.summary = activityDemo?.summary
                 ?? "Bước \(step) đã hoàn tất theo phương án điều phối, đội đã xác nhận kết quả tại hiện trường."
-            updated.structuredPayload = activityDemo?.payload ?? demoActivityPayload(step: step)
+            updated.structuredPayload = MissionReportStructuredPayloadForm()
             updated.issuesJson = ""
             updated.resultJson = ""
             updated.evidenceJson = ""
@@ -1025,7 +1025,7 @@ private enum MissionTeamReportDemoData {
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
                         MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
-                        MissionReportKeyValueEntry(key: "toaDo", value: "16.469621, 107.592778"),
+                        MissionReportKeyValueEntry(key: "diaChi", value: "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"),
                         MissionReportKeyValueEntry(key: "uuTien", value: "Giao nhanh trước khi xử lý ca gãy xương, trẻ lạc người thân và người già mất nhiệt")
                     ],
                     resultMetrics: metrics(),

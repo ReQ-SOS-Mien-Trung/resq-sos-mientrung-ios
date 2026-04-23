@@ -708,6 +708,18 @@ struct Step0AutoInfoView: View {
         searchService.clearSuggestions()
         geocodeError = nil
         recenterMap(on: coordinate)
+        
+        Task {
+            isResolvingLocation = true
+            do {
+                let address = try await GeocodingService.shared.reverseGeocode(coordinate)
+                updateAddressField(address)
+                formData.resolvedAddress = address
+            } catch {
+                print("Failed to reverse geocode GPS location: \(error)")
+            }
+            isResolvingLocation = false
+        }
     }
 
     private func updateAddressField(_ value: String) {
@@ -1473,10 +1485,6 @@ struct Step2AReliefView: View {
     
     private var clothesFollowUpSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Quần áo", systemImage: "tshirt.fill")
-                .font(DS.Typography.headline)
-                .foregroundColor(.teal)
-            
             SharedPersonSelectionSection(
                 iconName: "tshirt.fill",
                 title: "Ai cần quần áo?",

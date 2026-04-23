@@ -28,18 +28,18 @@ struct MissionTeamReportView: View {
                     resultHighlightsSection
                 }
 
+                overviewSection
+
+                if shouldShowStructuredPayloadSection {
+                    structuredPayloadSection
+                }
+
                 if let restriction = vm.saveDraftRestrictionMessage {
                     warningCard(message: restriction)
                 }
 
                 if vm.canCompleteExecution {
                     completeExecutionSection
-                }
-
-                overviewSection
-
-                if shouldShowStructuredPayloadSection {
-                    structuredPayloadSection
                 }
 
                 activitiesSection
@@ -319,7 +319,7 @@ struct MissionTeamReportView: View {
 
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            sectionHeader(title: "Tổng quan đội", subtitle: overviewSectionSubtitle)
+            sectionHeader(title: "Phần chung của đội", subtitle: overviewSectionSubtitle)
 
             SharpCardView(borderColor: DS.Colors.borderSubtle, backgroundColor: DS.Colors.surface) {
                 VStack(alignment: .leading, spacing: DS.Spacing.md) {
@@ -347,8 +347,10 @@ struct MissionTeamReportView: View {
     private var structuredPayloadSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             sectionHeader(
-                title: "Thông tin hiện trường",
-                subtitle: "Điền trực tiếp theo biểu mẫu, ứng dụng sẽ tự chuyển thành dữ liệu gửi máy chủ"
+                title: "Biểu mẫu tổng hợp chung",
+                subtitle: vm.canEdit
+                    ? "Giữ phần tổng hợp chung của đội ở trên để gom dữ liệu hiện trường và kết quả"
+                    : "Dữ liệu tổng hợp chung của đội đã được ghi nhận"
             )
 
             MissionReportPayloadFormSection(
@@ -356,8 +358,8 @@ struct MissionTeamReportView: View {
                 isEditable: vm.canEdit,
                 title: "Báo cáo tổng hợp của đội",
                 subtitle: vm.canEdit
-                    ? "Nhập sự cố, kết quả và bằng chứng theo mẫu trực quan"
-                    : "Dữ liệu tổng hợp đã được ghi nhận"
+                    ? "Phần này dùng để tổng hợp chung cho toàn đội"
+                    : "Dữ liệu tổng hợp của cả đội đã được ghi nhận"
             )
         }
     }
@@ -365,10 +367,10 @@ struct MissionTeamReportView: View {
     private var activitiesSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             sectionHeader(
-                title: "Chi tiết hoạt động",
+                title: "Báo cáo từng bước",
                 subtitle: vm.canEdit
-                    ? "Bấm mở từng bước để nhập báo cáo, xong có thể ẩn lại cho gọn"
-                    : "Mở từng bước để xem chi tiết đã ghi nhận"
+                    ? "Phần chung giữ ở trên; mỗi bước chỉ cần cập nhật trạng thái thực hiện và tóm tắt kết quả"
+                    : "Phần chung đã được tổng hợp ở trên; mở từng bước để xem trạng thái và tóm tắt đã ghi nhận"
             )
 
             if vm.activities.isEmpty {
@@ -641,8 +643,8 @@ struct MissionTeamReportView: View {
 
     private var overviewSectionSubtitle: String {
         vm.canEdit
-            ? "Tóm tắt kết quả chung và ghi chú vận hành"
-            : "Thông tin tổng hợp đã được ghi nhận từ báo cáo đội"
+            ? "Giữ thông tin tổng hợp chung của toàn đội ở đầu báo cáo"
+            : "Thông tin tổng hợp chung của đội đã được ghi nhận"
     }
 
     private var resultHighlights: [MissionReportHighlightMetric] {
@@ -1066,7 +1068,7 @@ private struct MissionReportActivityCard: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(DS.Colors.textSecondary)
 
-                        Text("Chưa tới bước này. Hoàn thành các bước trước để mở biểu mẫu điền thông tin.")
+                        Text("Chưa tới bước này. Hoàn thành các bước trước để mở báo cáo của bước này.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(DS.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1084,6 +1086,18 @@ private struct MissionReportActivityCard: View {
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.textSecondary)
                     }
+
+                    Text("Phần chung của đội đã nằm ở trên. Ở bước này chỉ cần cập nhật trạng thái thực hiện và tóm tắt kết quả.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, DS.Spacing.sm)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(DS.Colors.background)
+                        )
 
                     if activity.hasDeliveryShortfall {
                         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
@@ -1121,19 +1135,8 @@ private struct MissionReportActivityCard: View {
                         isEditable: isEditable,
                         minHeight: 88
                     )
-
-                    if isEditable || hasStructuredPayload {
-                        MissionReportPayloadFormSection(
-                            payload: $activity.structuredPayload,
-                            isEditable: isEditable,
-                            title: "Dữ liệu hoạt động",
-                            subtitle: isEditable
-                                ? "Điền theo biểu mẫu thay vì nhập dữ liệu kỹ thuật"
-                                : "Chi tiết sự cố, kết quả và bằng chứng"
-                        )
-                    }
                 } else {
-                    Text("Nhấn \"Mở biểu mẫu\" để nhập báo cáo bước này, xong có thể ẩn lại.")
+                    Text("Nhấn \"Mở bước\" để cập nhật trạng thái thực hiện và tóm tắt kết quả cho bước này.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(DS.Colors.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1153,7 +1156,7 @@ private struct MissionReportActivityCard: View {
             return "Đang khóa"
         }
 
-        return isExpanded ? "Ẩn biểu mẫu" : "Mở biểu mẫu"
+        return isExpanded ? "Ẩn bước" : "Mở bước"
     }
 
     private var expandButtonIcon: String {
@@ -1199,10 +1202,6 @@ private struct MissionReportActivityCard: View {
         }
 
         return localizedCode
-    }
-
-    private var hasStructuredPayload: Bool {
-        activity.structuredPayload.hasAnyContent
     }
 
     private var summaryCaption: String? {
