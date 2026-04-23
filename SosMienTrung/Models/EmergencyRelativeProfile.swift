@@ -706,9 +706,17 @@ final class RelativeProfileStore: ObservableObject {
 
         remoteProfilesById = [:]
         hasLoadedRemoteSnapshot = false
+    }
 
-        guard canSyncToServer else { return }
+    func clearServerDataFromCurrentUser() {
+        guard let userId = currentUserId(),
+              !userId.isEmpty,
+              isServerSyncEnabled == false,
+              canSyncToServer else {
+            return
+        }
 
+        syncTask?.cancel()
         syncTask = Task { [weak self] in
             await self?.purgeServerProfiles(for: userId)
         }

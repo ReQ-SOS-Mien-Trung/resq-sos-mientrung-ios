@@ -19,6 +19,7 @@ struct RelativeProfilesView: View {
     @State private var selectedGroup: RelationGroup?
     @State private var editingProfile: EmergencyRelativeProfile?
     @State private var isCreatingProfile = false
+    @State private var showClearServerDataConfirmation = false
 
     private var filteredProfiles: [EmergencyRelativeProfile] {
         store.filteredProfiles(
@@ -41,6 +42,19 @@ struct RelativeProfilesView: View {
                     Text("Lưu trữ & đồng bộ")
                 } footer: {
                     Text(syncFooterText)
+                }
+
+                if store.canSyncToServer && store.isServerSyncEnabled == false {
+                    Section {
+                        Button(role: .destructive) {
+                            showClearServerDataConfirmation = true
+                        } label: {
+                            Text("Xóa dữ liệu trên máy chủ")
+                        }
+                        .disabled(store.isSyncing)
+                    } footer: {
+                        Text("Chỉ xóa bản sao đang lưu trên máy chủ. Hồ sơ trên thiết bị này vẫn được giữ nguyên.")
+                    }
                 }
 
                 Section {
@@ -113,6 +127,19 @@ struct RelativeProfilesView: View {
                 store.save(profile: updatedProfile)
             }
         }
+        .confirmationDialog(
+            "Xóa dữ liệu trên máy chủ?",
+            isPresented: $showClearServerDataConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Xóa trên máy chủ", role: .destructive) {
+                store.clearServerDataFromCurrentUser()
+            }
+
+            Button("Hủy", role: .cancel) {}
+        } message: {
+            Text("Hành động này chỉ xóa hồ sơ người thân đang lưu trên máy chủ. Dữ liệu trên thiết bị này vẫn được giữ nguyên và có thể đồng bộ lại sau.")
+        }
     }
 
     private var serverSyncBinding: Binding<Bool> {
@@ -131,7 +158,7 @@ struct RelativeProfilesView: View {
             return "Ứng dụng sẽ tự cập nhật hồ sơ giữa thiết bị và máy chủ. Mọi thay đổi của bạn sẽ được lưu tự động."
         }
 
-        return "Hồ sơ chỉ lưu trên thiết bị này. Bạn vẫn có thể dùng bình thường khi gửi SOS."
+        return "Hồ sơ vẫn dùng bình thường trên thiết bị này. Nếu trước đó đã đồng bộ, dữ liệu trên máy chủ sẽ được giữ nguyên cho đến khi bạn chọn xóa riêng."
     }
 
     private var listFooterText: String {
