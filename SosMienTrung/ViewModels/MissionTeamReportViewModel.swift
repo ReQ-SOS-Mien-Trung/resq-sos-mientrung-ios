@@ -990,7 +990,7 @@ private enum MissionTeamReportDemoData {
                 ],
                 resultMetrics: metrics(rescued: 7, treated: 5, referred: 1),
                 resultExtras: [
-                    MissionReportKeyValueEntry(key: "sosDaXuLy", value: "361, 7"),
+                    MissionReportKeyValueEntry(key: "sosDaXuLy", value: "2"),
                     MissionReportKeyValueEntry(key: "vatPhamDaNhan", value: "Nước dừa x14; Nước khoáng 500ml x14; Nước tinh khiết x14; Viên lọc nước x14; Áo phao LIFEJACKET-D01-003 x1"),
                     MissionReportKeyValueEntry(key: "vatPhamDaGiao", value: "53 đơn vị tiêu hao (SOS #361: 24; SOS #7: 29)"),
                     MissionReportKeyValueEntry(key: "vatPhamHoanTra", value: "Nước dừa đóng hộp x3; Áo phao cứu sinh LIFEJACKET-D01-003 x1"),

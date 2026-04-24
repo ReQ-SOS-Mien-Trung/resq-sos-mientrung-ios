@@ -747,6 +747,18 @@ struct MissionTeamReportView: View {
             return ("Mất liên lạc", "Trường hợp cần theo dõi", "questionmark.circle", DS.Colors.accent)
         case "fatalities":
             return ("Tử vong", "Số ca tử vong ghi nhận", "exclamationmark.octagon", DS.Colors.accent)
+        case "sosdaxuly":
+            return ("SOS đã xử lý", "Số yêu cầu SOS đội đã hỗ trợ", "checkmark.seal.fill", DS.Colors.success)
+        case "hodahotro":
+            return ("Hộ đã hỗ trợ", "Số hộ gia đình đã tiếp cận", "house.fill", DS.Colors.info)
+        case "thoigianphanungphut":
+            return ("Thời gian phản ứng", "Phút (tính từ khi nhận tin)", "clock.fill", DS.Colors.warning)
+        case "songuoisotan":
+            return ("Số người sơ tán", "Tổng số người đã đưa về điểm an toàn", "figure.walk.arrival", DS.Colors.success)
+        case "tongvatphamdaphat", "tongvatphamdagiao":
+            return ("Vật phẩm đã giao", "Tổng số nhu yếu phẩm đã phân phát", "box.truck.fill", DS.Colors.info)
+        case "tongvatphamhoantra":
+            return ("Vật phẩm hoàn trả", "Số nhu yếu phẩm trả về kho", "arrow.uturn.backward.circle.fill", DS.Colors.warning)
         default:
             return (friendlyMetricTitle(from: key), "Dữ liệu tổng hợp từ máy chủ", "chart.bar.doc.horizontal", DS.Colors.textSecondary)
         }
