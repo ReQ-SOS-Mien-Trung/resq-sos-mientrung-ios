@@ -26,13 +26,29 @@ final class IncidentService {
         var req = authorizedRequest(url: url, method: "POST")
         req.httpBody = try JSONEncoder().encode(payload)
         print("[IncidentService] → POST \(url.absoluteString)")
-        let (data, response) = try await authExecutor.perform(req, using: session)
+        let data: Data
+        let response: HTTPURLResponse
+        do {
+            (data, response) = try await authExecutor.perform(req, using: session)
+        } catch {
+            print("[IncidentService] ✗ Request failed: \(error.localizedDescription)")
+            throw error
+        }
+
         let statusCode = response.statusCode
         guard (200...299).contains(statusCode) else {
             print("[IncidentService] ✗ HTTP \(statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw backendError(statusCode: statusCode, data: data)
         }
-        return try JSONDecoder().decode(IncidentResponse.self, from: data)
+
+        do {
+            let decoded = try JSONDecoder().decode(IncidentResponse.self, from: data)
+            print("[IncidentService] ✓ HTTP \(statusCode): incident #\(decoded.incidentId)")
+            return decoded
+        } catch {
+            print("[IncidentService] ✗ Decode failed: \(error.localizedDescription). Raw: \(String(data: data, encoding: .utf8) ?? "")")
+            throw error
+        }
     }
 
     // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/incident

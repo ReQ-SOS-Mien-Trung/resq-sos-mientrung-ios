@@ -277,6 +277,26 @@ final class RescuerMissionViewModel: ObservableObject {
         }
     }
 
+    func removeTeamMember(userId: String) {
+        guard let teamId = team?.id else { return }
+        errorMessage = nil
+        successMessage = nil
+        beginLoading()
+
+        Task {
+            defer { endLoading() }
+            do {
+                let message = try await RescueTeamService.shared.removeTeamMember(teamId: teamId, userId: userId)
+                successMessage = message ?? "Đã xóa thành viên khỏi đội."
+                team = try await RescueTeamService.shared.getMyTeam()
+            } catch let serviceError as RescueTeamService.RescueTeamServiceError {
+                errorMessage = serviceError.localizedDescription
+            } catch {
+                errorMessage = "Không thể xóa thành viên: \(error.localizedDescription)"
+            }
+        }
+    }
+
     func loadMissions() {
         beginLoading()
         Task {
