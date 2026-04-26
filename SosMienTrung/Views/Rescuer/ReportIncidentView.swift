@@ -8,6 +8,7 @@ struct ReportIncidentView: View {
 
     @State private var showActivityReport = false
     @State private var showMissionReport = false
+    @State private var submittedMessage: String?
 
     private var missionTeamId: Int? {
         mission.missionTeamId
@@ -92,15 +93,32 @@ struct ReportIncidentView: View {
         } message: {
             Text(incidentVM.errorMessage ?? "")
         }
+        .alert("Thông báo", isPresented: Binding(
+            get: { submittedMessage != nil },
+            set: { if !$0 { finishSuccessfulReport() } }
+        )) {
+            Button("OK", role: .cancel) {
+                finishSuccessfulReport()
+            }
+        } message: {
+            Text(submittedMessage ?? "")
+        }
         .onChange(of: incidentVM.successMessage) { message in
-            guard message != nil else { return }
+            guard let message else { return }
 
             showActivityReport = false
             showMissionReport = false
-            incidentVM.loadIncidents(missionId: mission.id)
+            submittedMessage = message
             incidentVM.successMessage = nil
-            onReportSubmitted()
         }
+    }
+
+    private func finishSuccessfulReport() {
+        guard submittedMessage != nil else { return }
+
+        submittedMessage = nil
+        incidentVM.loadIncidents(missionId: mission.id)
+        onReportSubmitted()
     }
 
     private var headerSection: some View {

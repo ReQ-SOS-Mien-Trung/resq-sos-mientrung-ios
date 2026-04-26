@@ -11,6 +11,7 @@ struct ActivityIncidentReportFormView: View {
     @StateObject private var locationManager = LocationManager()
     @State private var draft = ActivityIncidentDraft()
     @State private var recordedAt = Date()
+    @Environment(\.dismiss) private var dismiss
 
     private let gridColumns = [GridItem(.adaptive(minimum: 150), spacing: DS.Spacing.xs)]
 
@@ -108,6 +109,24 @@ struct ActivityIncidentReportFormView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             configureDefaults()
+            locationManager.startContinuousUpdates()
+        }
+        .onDisappear {
+            locationManager.stopContinuousUpdates()
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    fillDemoData()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magicmouse.fill")
+                        Text("Demo")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(DS.Colors.accent)
+                }
+            }
         }
         .onChange(of: draft.needSupportSOS) { _ in
             applyDraftRules()
@@ -126,6 +145,24 @@ struct ActivityIncidentReportFormView: View {
         .onChange(of: draft.evidencePlaceholderNote) { value in
             if value.count > 240 {
                 draft.evidencePlaceholderNote = String(value.prefix(240))
+            }
+        }
+        .alert("Thông báo", isPresented: Binding(
+            get: { incidentVM.errorMessage != nil || incidentVM.successMessage != nil },
+            set: { _ in
+                if incidentVM.successMessage != nil {
+                    dismiss()
+                }
+                incidentVM.errorMessage = nil
+                incidentVM.successMessage = nil
+            }
+        )) {
+            Button("OK") { }
+        } message: {
+            if let error = incidentVM.errorMessage {
+                Text(error)
+            } else if let success = incidentVM.successMessage {
+                Text(success)
             }
         }
     }
@@ -593,25 +630,29 @@ struct ActivityIncidentReportFormView: View {
     }
 
     private func submitIncident() {
-        guard
-            let currentLocation,
-            let request = draft.toRequest(
-                missionId: mission.id,
-                missionTeamId: missionTeamId,
-                missionTitle: mission.title,
-                teamName: teamName,
-                reporterId: authSession.session?.userId,
-                reporterName: reporterName,
-                location: IncidentLocationSnapshot(
-                    latitude: currentLocation.latitude,
-                    longitude: currentLocation.longitude
-                ),
-                selectedActivities: selectedActivities
-            )
-        else {
+        guard let currentLocation else {
+            print("⚠️ [ActivityIncidentReportFormView] submitIncident failed: currentLocation is nil")
+            return
+        }
+        
+        guard let request = draft.toRequest(
+            missionId: mission.id,
+            missionTeamId: missionTeamId,
+            missionTitle: mission.title,
+            teamName: teamName,
+            reporterId: authSession.session?.userId,
+            reporterName: reporterName,
+            location: IncidentLocationSnapshot(
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude
+            ),
+            selectedActivities: selectedActivities
+        ) else {
+            print("⚠️ [ActivityIncidentReportFormView] submitIncident failed: draft.toRequest returned nil. isFormValid=\(isFormValid)")
             return
         }
 
+        print("🚀 [ActivityIncidentReportFormView] Submitting incident report for mission \(mission.id)...")
         incidentVM.reportActivityIncident(
             missionId: mission.id,
             missionTeamId: missionTeamId,
@@ -631,6 +672,36 @@ struct ActivityIncidentReportFormView: View {
         formatter.locale = Locale(identifier: "vi_VN")
         formatter.dateFormat = "HH:mm, dd/MM/yyyy"
         return formatter.string(from: date)
+    }
+
+    private func fillDemoData() {
+        if let firstActivity = reportableActivities.first {
+            draft.selectedActivityIds = [firstActivity.id]
+        } else if let firstRaw = activities.first {
+            draft.selectedActivityIds = [firstRaw.id]
+        }
+        
+        draft.incidentType = .equipmentDamage
+        draft.equipmentType = "Xuồng máy"
+        draft.equipmentDamageSeverity = .unusable
+        draft.hasReplacementEquipment = false
+        
+        draft.canContinueActivity = false
+        draft.needSupportSOS = true
+        draft.supportTypes = [.replacementVehicle]
+        draft.supportPriority = .immediate
+        draft.supportMeetupPoint = "Cạnh trạm y tế xã"
+        
+        draft.needsMemberEvacuation = false
+        
+        draft.affectedResources = [.equipment]
+        
+        draft.totalMembers = "4"
+        draft.availableMembers = "4"
+        draft.lightlyInjuredMembers = "0"
+        draft.unavailableMembers = "0"
+        
+        draft.note = "Xuồng bị thủng không thể tiếp tục di chuyển, cần hỗ trợ phương tiện thay thế."
     }
 
     private func normalizedStatus(_ status: String) -> String {

@@ -73,8 +73,15 @@ struct RescueTeam: Codable, Identifiable {
     let createdAt: String?
     let members: [RescueTeamMember]?
 
+    var activeMembers: [RescueTeamMember]? {
+        members?.filter { member in
+            let status = (member.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return status != "removed" && status != "left" && status != "rejected"
+        }
+    }
+
     var leader: RescueTeamMember? {
-        members?.first(where: \.isLeader)
+        activeMembers?.first(where: \.isLeader)
     }
 }
 

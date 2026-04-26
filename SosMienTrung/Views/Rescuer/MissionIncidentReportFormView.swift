@@ -79,6 +79,20 @@ struct MissionIncidentReportFormView: View {
         .background(DS.Colors.background.ignoresSafeArea())
         .navigationTitle("Sự cố nhiệm vụ")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    fillDemoData()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magicmouse.fill")
+                        Text("Demo")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(DS.Colors.accent)
+                }
+            }
+        }
         .onAppear {
             configureDefaults()
             applyMissionRules()
@@ -599,6 +613,37 @@ struct MissionIncidentReportFormView: View {
         formatter.locale = Locale(identifier: "vi_VN")
         formatter.dateFormat = "HH:mm, dd/MM/yyyy"
         return formatter.string(from: date)
+    }
+
+    private func fillDemoData() {
+        draft.incidentType = .wholeTeamStranded
+        draft.missionDecision = .rescueWholeTeamImmediately
+        
+        let memberCount = mission.teams?.first?.memberCount ?? mission.teams?.first?.members?.count ?? 4
+        draft.totalMembers = String(memberCount)
+        draft.safeMembers = "2"
+        draft.lightlyInjuredMembers = "1"
+        draft.severelyInjuredMembers = "1"
+        draft.immobileMembers = "1"
+        draft.missingContactMembers = "0"
+        
+        draft.needsImmediateEmergencyCare = true
+        draft.emergencyTypes = [.severeBleeding, .fracture]
+        
+        draft.primaryVehicleType = .boat
+        draft.vehicleStatus = .unusable
+        draft.retreatCapability = .urgentRescueNeeded
+        
+        draft.hazards = [.strongCurrent, .landslide]
+        
+        draft.needsRescueSOS = true
+        draft.rescueSupportTypes = [.emergencyMedicalTeam, .rescuerExtractionTeam]
+        draft.rescuePriority = .immediate
+        draft.evacuationPriority = .injuredFirst
+        
+        draft.note = "Đội bị kẹt giữa dòng nước xiết, có thành viên bị thương nặng cần cấp cứu ngay lập tức."
+        
+        draft.enforceRules(defaultUnfinishedActivityCount: unresolvedActivitiesCount)
     }
 
     private func normalizedStatus(_ status: String) -> String {

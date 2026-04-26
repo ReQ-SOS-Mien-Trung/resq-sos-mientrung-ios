@@ -232,6 +232,7 @@ struct RescuerDashboardView: View {
     @State private var isMembersExpanded = false
     @State private var showAssemblyEventsSheet = false
     @State private var showLeaveTeamConfirmation = false
+    @State private var memberToDelete: RescueTeamMember?
 
     init(locationManager: LocationManager = .shared) {
         _vm = StateObject(wrappedValue: RescuerMissionViewModel(locationManager: locationManager))
@@ -253,7 +254,7 @@ struct RescuerDashboardView: View {
     }
 
     private var currentMember: RescueTeamMember? {
-        guard let members = vm.team?.members, members.isEmpty == false else { return nil }
+        guard let members = vm.team?.activeMembers, members.isEmpty == false else { return nil }
 
         let normalizedUserId = normalizedIdentity(currentUserId)
         if normalizedUserId.isEmpty == false,
@@ -410,6 +411,20 @@ struct RescuerDashboardView: View {
             } message: {
                 Text("Bạn sẽ rời khỏi đội cứu hộ hiện tại. Điều phối viên có thể phân đội lại cho bạn khi cần.")
             }
+            .alert("Xóa thành viên?", isPresented: Binding(
+                get: { memberToDelete != nil },
+                set: { if !$0 { memberToDelete = nil } }
+            )) {
+                Button("Hủy", role: .cancel) { memberToDelete = nil }
+                Button("Xóa", role: .destructive) {
+                    if let userId = memberToDelete?.userId {
+                        vm.removeTeamMember(userId: userId)
+                    }
+                    memberToDelete = nil
+                }
+            } message: {
+                Text("Bạn có chắc chắn muốn xóa \(memberToDelete?.fullName ?? "người này") khỏi đội không?")
+            }
             .alert("Lỗi xác nhận có mặt", isPresented: Binding(
                 get: { assemblyVM.errorMessage != nil },
                 set: { if !$0 { assemblyVM.errorMessage = nil } }
@@ -524,7 +539,7 @@ struct RescuerDashboardView: View {
                     .foregroundColor(DS.Colors.text)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    if let members = team.members, !members.isEmpty {
+                    if let members = team.activeMembers, !members.isEmpty {
                         Text("\(members.count) thành viên")
                             .font(DS.Typography.caption)
                             .foregroundColor(DS.Colors.textSecondary)
@@ -537,7 +552,7 @@ struct RescuerDashboardView: View {
                     }
                 }
 
-                if let members = team.members, !members.isEmpty {
+                if let members = team.activeMembers, !members.isEmpty {
                     memberDropdown(members: members)
                 }
 
@@ -877,33 +892,46 @@ struct RescuerDashboardView: View {
                     ForEach(sortedMembers) { member in
                         let isCurrentUserMember = isCurrentUser(member)
 
-                        HStack(spacing: DS.Spacing.xs) {
-                            TeamMemberAvatarView(member: member)
-
-                            Text(member.fullName)
-                                .font(DS.Typography.caption)
-                                .foregroundColor(DS.Colors.text)
-                                .lineLimit(1)
-
-                            Spacer()
-
-                            Text(member.isLeader ? "Đội trưởng" : "Thành viên")
-                                .font(DS.Typography.caption)
-                                .foregroundColor(DS.Colors.textSecondary)
+                        if isCurrentUserLeader && !isCurrentUserMember {
+                            SwipeToDeleteRow(onDelete: {
+                                memberToDelete = member
+                            }) {
+                                memberRow(member: member, isCurrentUserMember: isCurrentUserMember)
+                            }
+                        } else {
+                            memberRow(member: member, isCurrentUserMember: isCurrentUserMember)
                         }
-                        .padding(.horizontal, DS.Spacing.sm)
-                        .padding(.vertical, 6)
-                        .background(isCurrentUserMember ? DS.Colors.accent.opacity(0.06) : DS.Colors.background)
-                        .overlay(
-                            Rectangle().stroke(
-                                isCurrentUserMember ? DS.Colors.accent.opacity(0.5) : DS.Colors.border.opacity(0.8),
-                                lineWidth: DS.Border.thin
-                            )
-                        )
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func memberRow(member: RescueTeamMember, isCurrentUserMember: Bool) -> some View {
+        HStack(spacing: DS.Spacing.xs) {
+            TeamMemberAvatarView(member: member)
+
+            Text(member.fullName)
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.text)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(member.isLeader ? "Đội trưởng" : "Thành viên")
+                .font(DS.Typography.caption)
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, 6)
+        .background(isCurrentUserMember ? DS.Colors.accent.opacity(0.06) : DS.Colors.background)
+        .overlay(
+            Rectangle().stroke(
+                isCurrentUserMember ? DS.Colors.accent.opacity(0.5) : DS.Colors.border.opacity(0.8),
+                lineWidth: DS.Border.thin
+            )
+        )
     }
 
     private var restrictedStateView: some View {
@@ -922,6 +950,69 @@ struct RescuerDashboardView: View {
         .padding(DS.Spacing.md)
         .background(DS.Colors.surface)
         .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.medium))
+    }
+}
+
+private struct SwipeToDeleteRow<Content: View>: View {
+    let content: Content
+    let onDelete: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var isSwiped = false
+    private let buttonWidth: CGFloat = 80
+
+    init(onDelete: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.onDelete = onDelete
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: {
+                withAnimation {
+                    offset = 0
+                    isSwiped = false
+                }
+                onDelete()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .bold))
+                    Text("Xóa")
+                        .font(DS.Typography.caption.bold())
+                }
+                .foregroundColor(.white)
+                .frame(width: buttonWidth)
+                .frame(maxHeight: .infinity)
+                .background(Color.red)
+            }
+            .opacity(offset < 0 ? 1 : 0)
+
+            content
+                .background(DS.Colors.background)
+                .offset(x: offset)
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if value.translation.width < 0 {
+                                offset = isSwiped ? max(-buttonWidth, value.translation.width - buttonWidth) : value.translation.width
+                            } else if isSwiped && value.translation.width > 0 {
+                                offset = min(0, -buttonWidth + value.translation.width)
+                            }
+                        }
+                        .onEnded { value in
+                            withAnimation(.spring()) {
+                                if offset < -buttonWidth / 2 {
+                                    offset = -buttonWidth
+                                    isSwiped = true
+                                } else {
+                                    offset = 0
+                                    isSwiped = false
+                                }
+                            }
+                        }
+                )
+        }
     }
 }
 
