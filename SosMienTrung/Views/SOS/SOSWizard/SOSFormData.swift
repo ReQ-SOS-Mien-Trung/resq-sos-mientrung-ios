@@ -979,6 +979,7 @@ struct RescueData: Codable, Equatable {
     // Người bị thương được chọn
     var hasInjured: Bool = false
     var injuredPersonIds: Set<String> = []
+    var canMove: Bool?
     
     // Thông tin y tế cho từng người bị thương
     var medicalInfoByPerson: [String: PersonMedicalInfo] = [:]
@@ -2176,13 +2177,17 @@ final class SOSFormData: ObservableObject {
                         let issues = medicalInfo.medicalIssues
                             .map(medicalIssueTitle(for:))
                             .joined(separator: ", ")
+                        let issueDescription = [issues.nilIfBlank, medicalInfo.otherDescription.nilIfBlank]
+                            .compactMap { $0 }
+                            .joined(separator: " - ")
+                            .nilIfBlank ?? "Chưa rõ"
                         let nameLabel: String
                         if person.customName.isEmpty {
                             nameLabel = person.displayName
                         } else {
                             nameLabel = "\(person.type.title) \(person.index): \(person.customName)"
                         }
-                        injuredInfo.append("\(nameLabel) - \(issues)")
+                        injuredInfo.append("\(nameLabel) - \(issueDescription)")
                     }
                 }
                 if !injuredInfo.isEmpty {
@@ -2409,8 +2414,17 @@ extension SOSFormData {
                     elderly: sharedPeopleCount.elderly
                 ),
                 hasInjured: needsRescueStep ? rescueData.hasInjured : nil,
-                othersAreStable: needsRescueStep ? rescueData.othersAreStable : nil,
-                canMove: needsRescueStep ? (SOSRuleConfig.normalizeKey(rescueData.situation) != "CANNOT_MOVE") : nil,
+                othersAreStable: {
+                    guard needsRescueStep,
+                          sharedPeopleCount.total > 1,
+                          rescueData.injuredPersonIds.isEmpty == false,
+                          rescueData.injuredPersonIds.count < sharedPeopleCount.total,
+                          rescueData.othersAreStable else {
+                        return nil
+                    }
+                    return true
+                }(),
+                canMove: needsRescueStep ? rescueData.canMove : nil,
                 needMedical: needsRescueStep ? rescueData.hasInjured : nil,
                 otherMedicalDescription: needsRescueStep ? rescueData.otherMedicalDescription.nilIfBlank : nil
             ),
@@ -2538,7 +2552,9 @@ extension SOSFormData {
             let severity: String? = {
                 guard isInjured else { return nil }
                 let personIssues = rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []
-                return personIssues.contains(where: { ruleConfig.isSevereMedicalIssue($0) }) ? "SEVERE" : "MODERATE"
+                let meaningfulIssues = personIssues.filter { $0 != MedicalIssue.other.rawValue }
+                guard meaningfulIssues.isEmpty == false else { return nil }
+                return meaningfulIssues.contains(where: { ruleConfig.isSevereMedicalIssue($0) }) ? "SEVERE" : "MODERATE"
             }()
             let resolvedName = manualSingleVictimName
                 ?? person.displayName.nilIfBlank

@@ -9,6 +9,7 @@ protocol MissionActivityRemoteService {
     func getMyTeamActivities(missionId: Int) async throws -> [Activity]
     func updateActivityStatus(missionId: Int, activityId: Int, status: String, imageUrl: String?) async throws
     func updateMissionStatus(missionId: Int, status: String) async throws
+    func safetyCheckIn(missionId: Int, missionTeamId: Int) async throws -> Bool
 }
 
 protocol NetworkStatusProviding {
@@ -44,6 +45,7 @@ final class RescuerMissionViewModel: ObservableObject {
     @Published private(set) var currentTeamMissionTeamIds: Set<Int> = []
     @Published private(set) var pendingActivityUpdates: [PendingMissionActivityUpdate] = []
     @Published private(set) var activeActivitySubmissionIds: Set<Int> = []
+    @Published private(set) var isSafetyCheckInSubmitting = false
 
     private var loadingCount = 0
     private let missionService: any MissionActivityRemoteService
@@ -476,6 +478,35 @@ final class RescuerMissionViewModel: ObservableObject {
             return true
         } catch {
             errorMessage = L10n.RescuerMission.missionStatusUpdateFailed(error.localizedDescription)
+            return false
+        }
+    }
+
+    func safetyCheckIn(missionId: Int, missionTeamId: Int) async -> Bool {
+        guard networkStatusProvider.isConnected else {
+            errorMessage = L10n.RescuerMission.safetyCheckInRequiresConnection
+            return false
+        }
+
+        guard isSafetyCheckInSubmitting == false else {
+            return false
+        }
+
+        errorMessage = nil
+        successMessage = nil
+        isSafetyCheckInSubmitting = true
+
+        defer {
+            isSafetyCheckInSubmitting = false
+        }
+
+        do {
+            _ = try await missionService.safetyCheckIn(missionId: missionId, missionTeamId: missionTeamId)
+            missions = try await missionService.getMyTeamMissions()
+            successMessage = L10n.RescuerMission.safetyCheckInSucceeded
+            return true
+        } catch {
+            errorMessage = L10n.RescuerMission.safetyCheckInFailed(error.localizedDescription)
             return false
         }
     }

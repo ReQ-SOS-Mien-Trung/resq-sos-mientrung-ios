@@ -48,6 +48,15 @@ struct MissionDetailView: View {
         vm.currentTeamMissionTeamIds.first ?? fallbackViewerMissionTeamId
     }
 
+    private var viewerMissionTeam: MissionTeam? {
+        guard let viewerMissionTeamId else {
+            return activeMission.teams?.first
+        }
+
+        return activeMission.teams?.first(where: { $0.id == viewerMissionTeamId })
+            ?? activeMission.teams?.first
+    }
+
     private var canViewMissionWorkspace: Bool {
         authSession.session?.canViewMissionWorkspace ?? false
     }
@@ -289,6 +298,14 @@ struct MissionDetailView: View {
         } message: {
             Text(vm.errorMessage ?? "")
         }
+        .alert("Thông báo", isPresented: Binding(
+            get: { vm.successMessage != nil },
+            set: { if !$0 { vm.successMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { vm.successMessage = nil }
+        } message: {
+            Text(vm.successMessage ?? "")
+        }
         .onAppear {
             guard canViewMissionWorkspace else { return }
             refreshMissionWorkspace()
@@ -338,6 +355,10 @@ struct MissionDetailView: View {
 
             missionMetaGrid
             progressSummary
+
+            if shouldShowSafetyCheckInPanel, let viewerMissionTeam {
+                safetyCheckInPanel(for: viewerMissionTeam)
+            }
 
             if shouldShowMissionReportButton {
                 missionReportButton
@@ -402,6 +423,141 @@ struct MissionDetailView: View {
             ProgressView(value: activityProgress)
                 .tint(DS.Colors.accent)
         }
+    }
+
+    private var shouldShowSafetyCheckInPanel: Bool {
+        guard canViewMissionWorkspace, viewerMissionTeam != nil else { return false }
+
+        switch normalizedStatus(missionStatus) {
+        case "ongoing", "inprogress":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func safetyCheckInPanel(for team: MissionTeam) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(safetyStatusColor(team.safetyStatus).opacity(0.14))
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: "shield.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(safetyStatusColor(team.safetyStatus))
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text("Báo an toàn")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(DS.Colors.text)
+
+                        StatusBadge(
+                            text: safetyStatusLabel(team.safetyStatus),
+                            color: safetyStatusColor(team.safetyStatus)
+                        )
+                    }
+
+                    Text(safetyTeamName(team))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: DS.Spacing.sm) {
+                safetyInfoChip(
+                    title: "Lần báo gần nhất",
+                    value: formattedDisplayDate(team.safetyLatestCheckInAt) ?? "Chưa có",
+                    icon: "checkmark.seal"
+                )
+
+                safetyInfoChip(
+                    title: "Hạn tiếp theo",
+                    value: formattedDisplayDate(team.safetyTimeoutAt) ?? "Chưa có",
+                    icon: "timer"
+                )
+            }
+
+            if let generatedSosRequestId = team.generatedSosRequestId {
+                Label("SOS tự động #\(generatedSosRequestId)", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(DS.Colors.accent)
+            }
+
+            Button {
+                Task {
+                    let didCheckIn = await vm.safetyCheckIn(
+                        missionId: activeMission.id,
+                        missionTeamId: team.id
+                    )
+
+                    if didCheckIn {
+                        loadMissionDetail()
+                    }
+                }
+            } label: {
+                HStack(spacing: DS.Spacing.sm) {
+                    if vm.isSafetyCheckInSubmitting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+
+                    Text(vm.isSafetyCheckInSubmitting ? "Đang báo an toàn..." : "Đội đang an toàn")
+                        .font(.system(size: 14, weight: .bold))
+
+                    Spacer(minLength: 0)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.Colors.success)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(vm.isSafetyCheckInSubmitting)
+            .opacity(vm.isSafetyCheckInSubmitting ? 0.8 : 1)
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(safetyStatusColor(team.safetyStatus).opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func safetyInfoChip(title: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Text(value)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(DS.Colors.text)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(DS.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+        )
     }
 
     private var pendingSyncBanner: some View {
@@ -704,6 +860,41 @@ struct MissionDetailView: View {
         default:
             return DS.Colors.textSecondary
         }
+    }
+
+    private func safetyStatusLabel(_ status: String?) -> String {
+        switch normalizedStatus(status ?? "") {
+        case "safe":
+            return "An toàn"
+        case "atrisk":
+            return "Nguy cơ"
+        case "soscreated":
+            return "Đã tạo SOS"
+        case "inactive":
+            return "Tạm dừng"
+        default:
+            return "Chưa có"
+        }
+    }
+
+    private func safetyStatusColor(_ status: String?) -> Color {
+        switch normalizedStatus(status ?? "") {
+        case "safe":
+            return DS.Colors.success
+        case "atrisk":
+            return DS.Colors.warning
+        case "soscreated":
+            return DS.Colors.accent
+        case "inactive":
+            return DS.Colors.textTertiary
+        default:
+            return DS.Colors.info
+        }
+    }
+
+    private func safetyTeamName(_ team: MissionTeam) -> String {
+        let name = team.teamName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Đội của bạn" : name
     }
 
     private var shouldShowStartMissionButton: Bool {

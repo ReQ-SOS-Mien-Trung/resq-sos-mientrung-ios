@@ -383,6 +383,19 @@ final class MissionService {
         _ = try await send(req)
     }
 
+    // MARK: - POST /operations/missions/{missionId}/teams/{missionTeamId}/safety-checkin
+    func safetyCheckIn(missionId: Int, missionTeamId: Int) async throws -> Bool {
+        guard let url = URL(string: "\(baseURL)/operations/missions/\(missionId)/teams/\(missionTeamId)/safety-checkin") else {
+            throw URLError(.badURL)
+        }
+
+        let req = authorizedRequest(url: url, method: "POST")
+        print("[MissionService] → POST \(url.absoluteString)")
+
+        let data = try await send(req)
+        return (try? missionDecoder().decode(Bool.self, from: data)) ?? true
+    }
+
     // MARK: - GET /operations/missions/{missionId}/activities/{activityId}/route
     func getActivityRoute(
         missionId: Int,

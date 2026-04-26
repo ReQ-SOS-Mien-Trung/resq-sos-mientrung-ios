@@ -3,8 +3,16 @@ import UserNotifications
 import FirebaseCore
 import FirebaseAuth
 import FirebaseMessaging
+import RecaptchaEnterprise
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    private static let recaptchaSiteKey: String = {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "RecaptchaSiteKey") as? String, !key.isEmpty else {
+            fatalError("RecaptchaSiteKey không tìm thấy trong Info.plist")
+        }
+        return key
+    }()
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -15,16 +23,42 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().delegate = self
         registerForPushNotifications(application)
         requestNotificationAuthorization()
+        initRecaptchaEnterprise()
 
         print("✅ App did finish launching")
         return true
+    }
+
+    private func initRecaptchaEnterprise() {
+        Recaptcha.fetchClient(withSiteKey: Self.recaptchaSiteKey) { client, error in
+            if let error {
+                print("🔴 RecaptchaEnterprise init failed: \(error)")
+                return
+            }
+            guard client != nil else {
+                print("🔴 RecaptchaEnterprise: client is nil")
+                return
+            }
+            Task {
+                do {
+                    try await Auth.auth().initializeRecaptchaConfig()
+                    print("✅ RecaptchaEnterprise client ready")
+                } catch {
+                    print("🔴 initializeRecaptchaConfig failed: \(error)")
+                }
+            }
+        }
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
         print("✅ APNs token received: \(tokenString.prefix(20))...")
 
-        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+        #if DEBUG
+        Auth.auth().setAPNSToken(deviceToken, type: .sandbox)
+        #else
+        Auth.auth().setAPNSToken(deviceToken, type: .prod)
+        #endif
         Messaging.messaging().apnsToken = deviceToken
         fetchFCMToken(reason: "APNs token available")
     }

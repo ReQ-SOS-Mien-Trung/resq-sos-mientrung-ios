@@ -175,6 +175,8 @@ enum L10n {
         static let activityStatusUpdated = L10n.tr("rescuer_mission.activity_status_updated", "Đã cập nhật trạng thái bước thực hiện")
         static let supplyPickupConfirmed = L10n.tr("rescuer_mission.supply_pickup_confirmed", "Đã xác nhận tiếp nhận vật phẩm")
         static let missionStatusUpdated = L10n.tr("rescuer_mission.mission_status_updated", "Đã cập nhật trạng thái nhiệm vụ")
+        static let safetyCheckInSucceeded = L10n.tr("rescuer_mission.safety_check_in_succeeded", "Đã báo đội đang an toàn")
+        static let safetyCheckInRequiresConnection = L10n.tr("rescuer_mission.safety_check_in_requires_connection", "Cần có mạng để báo an toàn cho đội.")
         static let teamAvailable = L10n.tr("rescuer_mission.team_available", "Đội đã sẵn sàng nhận nhiệm vụ")
         static let teamUnavailable = L10n.tr("rescuer_mission.team_unavailable", "Đội đã chuyển sang trạng thái không sẵn sàng")
         static let leaveTeamSucceeded = L10n.tr("rescuer_mission.leave_team_succeeded", "Bạn đã rời đội cứu hộ hiện tại")
@@ -226,6 +228,10 @@ enum L10n {
 
         static func missionStatusUpdateFailed(_ detail: String) -> String {
             L10n.tr("rescuer_mission.mission_status_update_failed", "Không thể cập nhật trạng thái nhiệm vụ: %@", detail)
+        }
+
+        static func safetyCheckInFailed(_ detail: String) -> String {
+            L10n.tr("rescuer_mission.safety_check_in_failed", "Báo an toàn thất bại: %@", detail)
         }
 
         static func cannotLoadAssemblyEvents(_ detail: String) -> String {

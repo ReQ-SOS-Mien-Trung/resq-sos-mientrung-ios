@@ -599,6 +599,10 @@ struct MissionTeam: Codable, Identifiable {
     let longitude: Double?
     let locationUpdatedAt: String?
     let assignedAt: String?
+    let safetyLatestCheckInAt: String?
+    let safetyTimeoutAt: String?
+    let safetyStatus: String?
+    let generatedSosRequestId: Int?
     let members: [MissionTeamMember]?
 
     enum CodingKeys: String, CodingKey {
@@ -615,6 +619,10 @@ struct MissionTeam: Codable, Identifiable {
         case longitude
         case locationUpdatedAt
         case assignedAt
+        case safetyLatestCheckInAt
+        case safetyTimeoutAt
+        case safetyStatus
+        case generatedSosRequestId
         case members
     }
 }

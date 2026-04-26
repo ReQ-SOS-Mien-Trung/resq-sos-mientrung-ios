@@ -31,8 +31,8 @@ struct FirebasePhoneLoginResponse: Codable {
     let lastName: String?
     let roleId: Int?
     let permissions: [String]?
-    let isNewUser: Bool
-    let isOnboarded: Bool
+    let isNewUser: Bool?
+    let isOnboarded: Bool?
 
     var displayName: String? {
         let parts = [lastName, firstName].compactMap { $0 }.filter { !$0.isEmpty }

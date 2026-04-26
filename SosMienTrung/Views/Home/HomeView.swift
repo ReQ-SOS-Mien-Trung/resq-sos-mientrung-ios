@@ -29,6 +29,7 @@ struct HomeView: View {
     @State private var showVictimStandby = false
     @State private var showCoordinatorChat = false
     @State private var showSOSSignal = false
+    @State private var showVoiceSOSAgent = false
 
     @State private var weatherInfo = "TP Hồ Chí Minh - Có Mây"
 
@@ -63,6 +64,9 @@ struct HomeView: View {
                     // MARK: - SOS CTA Button
                     if canCreateSosRequest {
                         sosCTAButton
+                        if VoiceSOSAvailability.shouldShowVoiceSOSButton() {
+                            voiceSOSButton
+                        }
                     }
 
                     // MARK: - Coordinator Chat Button
@@ -99,6 +103,9 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showSOSSignal) {
             SOSSignalView()
+        }
+        .fullScreenCover(isPresented: $showVoiceSOSAgent) {
+            VoiceSOSAgentView(bridgefyManager: bridgefyManager)
         }
         .fullScreenCover(isPresented: $showCoordinatorChat) {
             CoordinatorChatMainView()
@@ -260,6 +267,38 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, DS.Spacing.md)
             .background(DS.Colors.danger)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+        }
+    }
+
+    // MARK: - Voice SOS CTA
+    private var voiceSOSButton: some View {
+        Button {
+            showVoiceSOSAgent = true
+        } label: {
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .frame(width: 24)
+
+                VStack(alignment: .center, spacing: 2) {
+                    Text("SOS Bằng Giọng Nói")
+                        .font(DS.Typography.headline)
+                    Text("Nói chuyện với AI — tự gom thông tin & gửi SOS")
+                        .font(DS.Typography.caption)
+                        .opacity(0.85)
+                }
+                .frame(maxWidth: .infinity)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 24)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Spacing.md)
+            .padding(.horizontal, DS.Spacing.md)
+            .background(DS.Colors.assistant)
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
         }
     }

@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UIKit
 import FirebaseAuth
+import SafariServices
 
 /// Quản lý xác thực OTP qua Firebase Phone Auth
 final class PhoneAuthManager: ObservableObject {
@@ -38,8 +39,9 @@ final class PhoneAuthManager: ObservableObject {
 
         do {
             let provider = PhoneAuthProvider.provider(auth: Auth.auth())
+            let uiDelegate = PhoneAuthUIDelegate()
             let verificationID = try await provider
-                .verifyPhoneNumber(phone, uiDelegate: nil)
+                .verifyPhoneNumber(phone, uiDelegate: uiDelegate)
             self.verificationID = verificationID
             UserDefaults.standard.set(verificationID, forKey: "authVerificationID")
             otpSent = true
@@ -221,5 +223,40 @@ final class PhoneAuthManager: ObservableObject {
             - simulator: \(isSimulator)
             """
         )
+    }
+}
+
+// MARK: - Firebase AuthUIDelegate
+
+/// Cung cấp root view controller cho Firebase để present reCAPTCHA webview khi APNs silent push không khả dụng
+private final class PhoneAuthUIDelegate: NSObject, AuthUIDelegate {
+    func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        guard let root = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
+            completion?()
+            return
+        }
+        var top = root
+        while let presented = top.presentedViewController {
+            top = presented
+        }
+        top.present(viewControllerToPresent, animated: flag, completion: completion)
+    }
+
+    func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        guard let root = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
+            completion?()
+            return
+        }
+        var top = root
+        while let presented = top.presentedViewController {
+            top = presented
+        }
+        top.dismiss(animated: flag, completion: completion)
     }
 }

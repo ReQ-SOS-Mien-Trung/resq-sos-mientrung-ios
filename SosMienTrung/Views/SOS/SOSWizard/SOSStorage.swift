@@ -338,6 +338,7 @@ struct SavedSOS: Codable, Identifiable, Equatable {
         rescueData.peopleCount = peopleCount
         rescueData.people = sharedPeople
         rescueData.hasInjured = incident?.hasInjured ?? victims.contains(where: \.incidentStatus.isInjured)
+        rescueData.canMove = incident?.canMove
         rescueData.otherMedicalDescription = incident?.otherMedicalDescription ?? ""
         rescueData.othersAreStable = incident?.othersAreStable ?? false
 
@@ -749,6 +750,7 @@ struct SavedRescueData: Codable, Equatable {
     var peopleCount: PeopleCount
     var hasInjured: Bool
     var injuredPersonIds: [String]
+    var canMove: Bool?
     var medicalInfoByPerson: [String: PersonMedicalInfo]
     var medicalIssues: [String]
     var otherMedicalDescription: String
@@ -761,6 +763,7 @@ struct SavedRescueData: Codable, Equatable {
         self.peopleCount = rescueData.peopleCount
         self.hasInjured = rescueData.hasInjured
         self.injuredPersonIds = Array(rescueData.injuredPersonIds)
+        self.canMove = rescueData.canMove
         self.medicalInfoByPerson = rescueData.medicalInfoByPerson
         self.medicalIssues = Array(rescueData.medicalIssues)
         self.otherMedicalDescription = rescueData.otherMedicalDescription
@@ -775,6 +778,7 @@ struct SavedRescueData: Codable, Equatable {
         data.peopleCount = peopleCount
         data.hasInjured = hasInjured
         data.injuredPersonIds = Set(injuredPersonIds)
+        data.canMove = canMove
         data.medicalInfoByPerson = medicalInfoByPerson
         data.medicalIssues = Set(medicalIssues)
         data.otherMedicalDescription = otherMedicalDescription

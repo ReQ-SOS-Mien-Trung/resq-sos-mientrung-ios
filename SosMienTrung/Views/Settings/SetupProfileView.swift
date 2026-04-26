@@ -44,7 +44,7 @@ enum VietnamPhoneNumber {
 
 struct SetupProfileView: View {
     @ObservedObject var userProfile = UserProfile.shared
-    @StateObject private var phoneAuth = PhoneAuthManager.shared
+    @ObservedObject private var phoneAuth = PhoneAuthManager.shared
     
     @State private var name = ""
     @State private var phoneNumber = ""

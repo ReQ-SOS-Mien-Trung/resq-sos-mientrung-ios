@@ -63,4 +63,11 @@ struct KeyManager {
         
         return apiKey
     }
+    /// Safely retrieves the Gemini API key from the `Keys.plist` file.
+    static var gemini: String {
+        guard let url = Bundle.main.url(forResource: "Keys", withExtension: "plist") else { return "" }
+        guard let data = try? Data(contentsOf: url) else { return "" }
+        guard let keys = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else { return "" }
+        return keys["GEMINI_API_KEY"] as? String ?? ""
+    }
 }

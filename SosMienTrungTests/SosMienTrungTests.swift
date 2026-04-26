@@ -1165,6 +1165,279 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertEqual(vm.successMessage, L10n.RescuerMission.activityStatusUpdated)
     }
 
+    func testRescuerMissionViewModelSafetyCheckInCallsRemoteService() async throws {
+        let suiteName = "RescuerMissionViewModelSafetyCheckInTests-\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = makeMissionActivitySyncStore(
+            userDefaults: userDefaults,
+            activeUserIdProvider: { "rescuer-safe" }
+        )
+        let service = MockMissionActivityRemoteService()
+        let network = FixedNetworkStatusProvider(isConnected: true)
+        let vm = RescuerMissionViewModel(
+            missionService: service,
+            networkStatusProvider: network,
+            missionActivitySyncStore: store
+        )
+
+        let didCheckIn = await vm.safetyCheckIn(missionId: 12, missionTeamId: 34)
+
+        XCTAssertTrue(didCheckIn)
+        XCTAssertEqual(service.safetyCheckInCalls.count, 1)
+        XCTAssertEqual(service.safetyCheckInCalls.first?.missionId, 12)
+        XCTAssertEqual(service.safetyCheckInCalls.first?.missionTeamId, 34)
+        XCTAssertEqual(vm.successMessage, L10n.RescuerMission.safetyCheckInSucceeded)
+    }
+
+    func testVoiceSOSDraftMapsFreeSpeechExampleToStructuredPacket() async throws {
+        let transcript = "Có 3 người đang gặp nạn Huỳnh Kim Cương, Nguyễn Trọng Phương An và Nguyễn Ngọc Thảo. Cho tôi 1 cái hamburger. Tụi nó vẫn ổn chỉ bị mắc kẹt."
+        let expectedDraft = VoiceSOSDraft(
+            selectedTypes: ["BOTH"],
+            peopleCount: VoiceSOSPeopleCountDraft(adults: 0, children: 0, elderly: 0, total: 3),
+            victims: [
+                VoiceSOSVictimDraft(personId: nil, name: "Huỳnh Kim Cương", personType: nil, index: nil, phone: nil, isInjured: false, medicalIssues: []),
+                VoiceSOSVictimDraft(personId: nil, name: "Nguyễn Trọng Phương An", personType: nil, index: nil, phone: nil, isInjured: false, medicalIssues: []),
+                VoiceSOSVictimDraft(personId: nil, name: "Nguyễn Ngọc Thảo", personType: nil, index: nil, phone: nil, isInjured: false, medicalIssues: [])
+            ],
+            situation: RescueSituation.trapped.rawValue,
+            situationDescription: "Tụi nó vẫn ổn chỉ bị mắc kẹt",
+            hasInjured: false,
+            medicalIssues: [],
+            medicalDescription: nil,
+            othersAreStable: true,
+            canMove: true,
+            groupNeeds: VoiceSOSGroupNeedsDraft(
+                supplies: [SupplyNeed.food.rawValue],
+                otherSupplyDescription: "1 cái hamburger"
+            ),
+            missingFields: [],
+            nextQuestion: nil,
+            readyToSend: true
+        )
+        let provider = FakeVoiceSOSUnderstandingProvider(draft: expectedDraft)
+
+        let draft = try await provider.updateDraft(
+            conversationHistory: [VoiceConversationTurn(role: "user", text: transcript)],
+            currentDraft: .empty
+        )
+        let formData = draft.makeSOSFormData(
+            autoInfo: makeVoiceAutoInfo(),
+            conversationUserTexts: [transcript],
+            applyDefaults: true
+        )
+        let packet = formData.toSOSPacket(
+            originIdOverride: "voice-test-device",
+            timestampOverride: Date(timeIntervalSince1970: 0)
+        )
+
+        XCTAssertEqual(packet.sosType, "BOTH")
+        XCTAssertEqual(packet.structuredData?.incident?.peopleCount.adult, 3)
+        XCTAssertEqual(packet.structuredData?.incident?.situation, RescueSituation.trapped.rawValue)
+        XCTAssertEqual(packet.structuredData?.incident?.hasInjured, false)
+        XCTAssertNil(packet.structuredData?.incident?.othersAreStable)
+        XCTAssertNil(packet.structuredData?.incident?.canMove)
+        XCTAssertEqual(packet.structuredData?.groupNeeds?.supplies, [SupplyNeed.food.rawValue])
+        XCTAssertEqual(packet.structuredData?.groupNeeds?.otherSupplyDescription, "1 cái hamburger")
+        XCTAssertEqual(packet.structuredData?.victims?.map(\.customName), [
+            "Huỳnh Kim Cương",
+            "Nguyễn Trọng Phương An",
+            "Nguyễn Ngọc Thảo"
+        ])
+        XCTAssertTrue(packet.structuredData?.additionalDescription?.contains("[Voice SOS]") == true)
+    }
+
+    func testGeminiVoiceSOSUsesGenerateContentCompatibleModelFirst() {
+        XCTAssertEqual(GeminiVoiceSOSUnderstandingProvider.defaultModelCandidates.first, "gemini-2.5-flash")
+        XCTAssertFalse(
+            GeminiVoiceSOSUnderstandingProvider.defaultModelCandidates.contains("gemini-3.1-flash-live-preview")
+        )
+    }
+
+    func testVoiceSOSDraftDefaultsPeopleCountWhenUserSkipsMissingAnswer() {
+        let transcript = "Mọi người đang bị mắc kẹt."
+        let draft = VoiceSOSDraft(
+            selectedTypes: [SOSType.rescue.rawValue],
+            situation: RescueSituation.trapped.rawValue,
+            missingFields: ["PEOPLE_COUNT"],
+            nextQuestion: "Có bao nhiêu người đang cần hỗ trợ?",
+            readyToSend: false
+        )
+
+        XCTAssertEqual(draft.followUpQuestion, "Có bao nhiêu người đang cần hỗ trợ?")
+
+        let formData = draft.makeSOSFormData(
+            autoInfo: makeVoiceAutoInfo(),
+            conversationUserTexts: [transcript],
+            applyDefaults: true
+        )
+        let packet = formData.toSOSPacket(originIdOverride: "voice-test-device")
+
+        XCTAssertEqual(packet.sosType, "RESCUE")
+        XCTAssertEqual(packet.structuredData?.incident?.peopleCount.adult, 1)
+        XCTAssertEqual(packet.structuredData?.incident?.situation, RescueSituation.trapped.rawValue)
+    }
+
+    func testVoiceSOSDraftUsesMissingNeedsAsDynamicFollowUp() {
+        let draft = VoiceSOSDraft(
+            selectedTypes: [],
+            peopleCount: VoiceSOSPeopleCountDraft(adults: 2, children: 0, elderly: 0, total: 2),
+            missingFields: ["GROUP_NEEDS"],
+            nextQuestion: "Bạn cần cứu hộ, cứu trợ gì ngay bây giờ?",
+            readyToSend: false
+        )
+
+        XCTAssertEqual(draft.followUpQuestion, "Bạn cần cứu hộ, cứu trợ gì ngay bây giờ?")
+        XCTAssertEqual(draft.missingFieldLabels, ["Nhu cầu cứu trợ"])
+    }
+
+    func testVoiceSOSGroundingBlocksHallucinatedSituationAddressAndAutoSend() {
+        let transcript = "Trần Phương An đang bị thương ở tay"
+        let hallucinatedDraft = VoiceSOSDraft(
+            selectedTypes: ["medical"],
+            peopleCount: VoiceSOSPeopleCountDraft(adults: 1, children: 0, elderly: 0, total: 1),
+            victims: [
+                VoiceSOSVictimDraft(
+                    personId: nil,
+                    name: "Trần Phương An",
+                    personType: nil,
+                    index: nil,
+                    phone: nil,
+                    isInjured: true,
+                    medicalIssues: ["gãy tay", "chảy máu"]
+                )
+            ],
+            situation: RescueSituation.collapsed.rawValue,
+            situationDescription: "Nhà Trần Phương An bị sập.",
+            hasInjured: true,
+            medicalIssues: ["gãy tay", "chảy máu"],
+            medicalDescription: nil,
+            othersAreStable: false,
+            canMove: true,
+            groupNeeds: VoiceSOSGroupNeedsDraft(
+                supplies: ["nếu cần"],
+                medicineConditions: ["nếu cần"],
+                medicalNeeds: ["nếu cần"]
+            ),
+            missingFields: [],
+            nextQuestion: "Bạn cần hỗ trợ gì thêm? Các nhu cầu của bạn là gì?",
+            address: "Trần Phương An",
+            readyToSend: true
+        )
+
+        let groundedDraft = hallucinatedDraft.grounded(in: [transcript])
+
+        XCTAssertFalse(groundedDraft.readyToSend)
+        XCTAssertNil(groundedDraft.address)
+        XCTAssertNil(groundedDraft.normalizedSituation)
+        XCTAssertTrue(groundedDraft.groupNeeds.hasContent == false)
+        XCTAssertTrue(groundedDraft.medicalIssues.first?.contains("bị thương ở tay") == true)
+        XCTAssertTrue(groundedDraft.missingFields.contains("LOCATION"))
+        XCTAssertEqual(Set(groundedDraft.selectedTypes), [SOSType.rescue.rawValue])
+
+        let formData = groundedDraft.makeSOSFormData(
+            autoInfo: makeVoiceAutoInfo(),
+            conversationUserTexts: [transcript],
+            applyDefaults: true
+        )
+        let packet = formData.toSOSPacket(originIdOverride: "voice-test-device")
+
+        XCTAssertEqual(packet.sosType, SOSType.rescue.rawValue)
+        XCTAssertNil(packet.structuredData?.incident?.situation)
+        XCTAssertNil(packet.structuredData?.incident?.othersAreStable)
+        XCTAssertNil(packet.structuredData?.incident?.canMove)
+        XCTAssertTrue(packet.structuredData?.incident?.otherMedicalDescription?.contains("bị thương ở tay") == true)
+        XCTAssertNil(packet.structuredData?.groupNeeds)
+        XCTAssertEqual(packet.structuredData?.victims?.first?.incidentStatus.medicalIssues, [MedicalIssue.other.rawValue])
+        XCTAssertNil(packet.structuredData?.victims?.first?.incidentStatus.severity)
+        XCTAssertFalse(packet.msg.contains("Sập công trình"))
+        XCTAssertFalse(packet.msg.contains("Địa chỉ/Vị trí: Trần Phương An"))
+        XCTAssertTrue(packet.msg.contains("bị thương ở tay"))
+    }
+
+    func testVoiceSOSGroundingDropsHallucinatedSuppliesAgeTypesAndKeepsNames() {
+        let transcript = "Thôi thần cố cứu 3 người Huỳnh kim cương Nguyễn Ngọc Thảo và lê bảo châu"
+        let hallucinatedDraft = VoiceSOSDraft(
+            selectedTypes: ["BOTH"],
+            peopleCount: VoiceSOSPeopleCountDraft(
+                adults: 1,
+                children: 2,
+                elderly: 0,
+                total: 3
+            ),
+            victims: [
+                VoiceSOSVictimDraft(personId: "adult_1", name: "Huỳnh kim cương", personType: "ADULT", index: 1, phone: nil, isInjured: false, medicalIssues: []),
+                VoiceSOSVictimDraft(personId: "child_1", name: "Nguyễn Ngọc Thảo", personType: "CHILD", index: 1, phone: nil, isInjured: false, medicalIssues: []),
+                VoiceSOSVictimDraft(personId: "child_2", name: "lê bảo châu", personType: "CHILD", index: 2, phone: nil, isInjured: false, medicalIssues: [])
+            ],
+            situation: RescueSituation.trapped.rawValue,
+            situationDescription: "Ba người đã bị mắc kẹt trong một khu vực nguy hiểm.",
+            hasInjured: false,
+            medicalIssues: [],
+            medicalDescription: nil,
+            othersAreStable: false,
+            canMove: true,
+            groupNeeds: VoiceSOSGroupNeedsDraft(
+                supplies: [SupplyNeed.food.rawValue, SupplyNeed.clothes.rawValue],
+                otherSupplyDescription: "Cần quần áo và thực phẩm.",
+                waterDescription: "Nước uống cần thiết.",
+                foodDescription: "Thực phẩm để cung cấp năng lượng.",
+                clothingDescription: "Quần áo ấm áp và an toàn."
+            ),
+            missingFields: [],
+            nextQuestion: nil,
+            readyToSend: true
+        )
+
+        let groundedDraft = hallucinatedDraft.grounded(in: [transcript])
+        XCTAssertFalse(groundedDraft.readyToSend)
+        XCTAssertTrue(groundedDraft.missingFields.contains("GROUP_NEEDS"))
+        XCTAssertTrue(groundedDraft.missingFields.contains("LOCATION"))
+
+        let formData = groundedDraft.makeSOSFormData(
+            autoInfo: makeVoiceAutoInfo(),
+            conversationUserTexts: [transcript],
+            applyDefaults: true
+        )
+        let packet = formData.toSOSPacket(originIdOverride: "voice-test-device")
+
+        XCTAssertEqual(packet.sosType, SOSType.rescue.rawValue)
+        XCTAssertEqual(packet.structuredData?.incident?.peopleCount.adult, 3)
+        XCTAssertEqual(packet.structuredData?.incident?.peopleCount.child, 0)
+        XCTAssertNil(packet.structuredData?.incident?.situation)
+        XCTAssertNil(packet.structuredData?.groupNeeds?.supplies)
+        XCTAssertNil(packet.structuredData?.groupNeeds?.otherSupplyDescription)
+        XCTAssertEqual(packet.structuredData?.victims?.map(\.customName), [
+            "Huỳnh kim cương",
+            "Nguyễn Ngọc Thảo",
+            "lê bảo châu"
+        ])
+    }
+
+    func testVoiceSOSUnavailableStatusHidesButtonAndBlocksConversationStart() {
+        let unavailable = VoiceSOSAIAvailability.unavailable("AI on-device unavailable")
+
+        XCTAssertFalse(VoiceSOSAvailability.shouldShowVoiceSOSButton(status: unavailable))
+
+        let viewModel = VoiceSOSAgentViewModel(
+            bridgefyManager: BridgefyNetworkManager.shared,
+            understandingProvider: FakeVoiceSOSUnderstandingProvider(draft: .empty),
+            aiAvailability: unavailable,
+            availabilityProvider: { unavailable }
+        )
+        viewModel.isAuthorized = true
+        viewModel.startConversation()
+
+        if case .error(let message) = viewModel.conversationState {
+            XCTAssertEqual(message, "AI on-device unavailable")
+        } else {
+            XCTFail("Voice SOS should not start when on-device AI is unavailable.")
+        }
+    }
+
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
         self.measure {
@@ -1220,6 +1493,7 @@ final class SosMienTrungTests: XCTestCase {
         var activitiesByMission: [Int: [Activity]] = [:]
         var updatedActivityCalls: [(missionId: Int, activityId: Int, status: String, imageUrl: String?)] = []
         var updatedMissionCalls: [(missionId: Int, status: String)] = []
+        var safetyCheckInCalls: [(missionId: Int, missionTeamId: Int)] = []
 
         func getMyTeamMissions() async throws -> [Mission] {
             missionsToReturn
@@ -1240,6 +1514,11 @@ final class SosMienTrungTests: XCTestCase {
         func updateMissionStatus(missionId: Int, status: String) async throws {
             updatedMissionCalls.append((missionId, status))
         }
+
+        func safetyCheckIn(missionId: Int, missionTeamId: Int) async throws -> Bool {
+            safetyCheckInCalls.append((missionId, missionTeamId))
+            return true
+        }
     }
 
     private final class FixedNetworkStatusProvider: NetworkStatusProviding {
@@ -1248,6 +1527,32 @@ final class SosMienTrungTests: XCTestCase {
         init(isConnected: Bool) {
             self.isConnected = isConnected
         }
+    }
+
+    private struct FakeVoiceSOSUnderstandingProvider: VoiceSOSUnderstandingProvider {
+        let draft: VoiceSOSDraft
+
+        func updateDraft(
+            conversationHistory: [VoiceConversationTurn],
+            currentDraft: VoiceSOSDraft
+        ) async throws -> VoiceSOSDraft {
+            draft
+        }
+    }
+
+    private func makeVoiceAutoInfo() -> AutoCollectedInfo {
+        AutoCollectedInfo(
+            deviceId: "voice-test-device",
+            userId: "voice-user-id",
+            userName: "Lê Minh Anh",
+            userPhone: "+84374745872",
+            timestamp: Date(timeIntervalSince1970: 0),
+            latitude: 10.790899552066476,
+            longitude: 106.70475657351173,
+            accuracy: 9.7,
+            isOnline: true,
+            batteryLevel: 85
+        )
     }
 
 }
