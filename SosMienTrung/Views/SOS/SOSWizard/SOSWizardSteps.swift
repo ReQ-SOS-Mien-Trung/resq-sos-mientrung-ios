@@ -1923,8 +1923,14 @@ struct PersonInjuredRow: View {
                             FlowLayout(spacing: 4) {
                                 ForEach(Array(info.medicalIssues), id: \.self) { issue in
                                     HStack(spacing: 4) {
-                                        Image(systemName: MedicalIssue.symbol(for: issue))
-                                            .font(.caption2)
+                                        let icon = MedicalIssue.symbol(for: issue)
+                                        if icon.unicodeScalars.allSatisfy(\.isASCII) {
+                                            Image(systemName: icon)
+                                                .font(.caption2)
+                                        } else {
+                                            Text(icon)
+                                                .font(.caption2)
+                                        }
                                         Text(MedicalIssue.title(for: issue))
                                             .font(.caption2)
                                     }
@@ -2590,9 +2596,14 @@ struct MedicalIssueCheckboxLight: View {
                     .foregroundColor(isSelected ? .red : .gray)
                     .font(.body)
                 
-                Image(systemName: icon)
-                    .font(.body)
-                    .foregroundColor(.red)
+                if icon.unicodeScalars.allSatisfy(\.isASCII) {
+                    Image(systemName: icon)
+                        .font(.body)
+                        .foregroundColor(.red)
+                } else {
+                    Text(icon)
+                        .font(.body)
+                }
                 Text(title)
                     .font(DS.Typography.subheadline)
                     .foregroundColor(.primary)

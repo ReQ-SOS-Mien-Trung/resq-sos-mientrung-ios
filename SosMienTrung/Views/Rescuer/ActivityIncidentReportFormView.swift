@@ -45,7 +45,7 @@ struct ActivityIncidentReportFormView: View {
     }
 
     private var selectedActivities: [Activity] {
-        reportableActivities.filter { draft.selectedActivityIds.contains($0.id) }
+        activities.filter { draft.selectedActivityIds.contains($0.id) }
     }
 
     private var reporterName: String {
@@ -76,7 +76,7 @@ struct ActivityIncidentReportFormView: View {
     }
 
     private var isFormValid: Bool {
-        draft.isValid && currentLocation != nil
+        draft.isValid && currentLocation != nil && !selectedActivities.isEmpty
     }
 
     var body: some View {

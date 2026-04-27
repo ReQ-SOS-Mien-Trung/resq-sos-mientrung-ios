@@ -127,7 +127,7 @@ final class AppNavigationCoordinator: ObservableObject {
             }
             return .sheet(.notifications)
 
-        case "assembly_gathering":
+        case "assembly_gathering", "assembly_event_cancelled":
             if canAccessRescuerWorkspace {
                 return .sheet(.assemblyEvents)
             }

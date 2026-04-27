@@ -92,7 +92,7 @@ enum RescuerStatusBadgeText {
             return L10n.Domain.assemblyGathering
         case "completed", "finished":
             return L10n.Domain.assemblyCompleted
-        case "cancelled":
+        case "cancelled", "assemblyeventcancelled":
             return L10n.Domain.missionCancelled
         default:
             return fallbackLabel(from: status)
@@ -1529,7 +1529,7 @@ private struct AssemblyEventRowView: View {
             return DS.Colors.success
         case .none:
             switch normalizedStatus {
-            case "cancelled":
+            case "cancelled", "assemblyeventcancelled":
                 return DS.Colors.accent
             default:
                 return DS.Colors.textSecondary

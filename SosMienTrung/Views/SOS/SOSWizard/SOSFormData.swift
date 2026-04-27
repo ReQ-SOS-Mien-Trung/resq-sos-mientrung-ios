@@ -2554,7 +2554,7 @@ extension SOSFormData {
                 let personIssues = rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []
                 let meaningfulIssues = personIssues.filter { $0 != MedicalIssue.other.rawValue }
                 guard meaningfulIssues.isEmpty == false else { return nil }
-                return meaningfulIssues.contains(where: { ruleConfig.isSevereMedicalIssue($0) }) ? "SEVERE" : "MODERATE"
+                return meaningfulIssues.contains(where: { ruleConfig.isSevereMedicalIssue($0) }) ? "CRITICAL" : "HIGH"
             }()
             let resolvedName = manualSingleVictimName
                 ?? person.displayName.nilIfBlank

@@ -866,13 +866,18 @@ struct SOSDetailView: View {
                 .foregroundColor(DS.Colors.textSecondary)
             
             // Medical issues
-            if !info.medicalIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(info.medicalIssues), id: \.self) { issue in
+                        let icon = MedicalIssue.symbol(for: issue)
                         HStack(spacing: 4) {
-                            Image(systemName: MedicalIssue.symbol(for: issue))
-                                .font(.caption2)
-                                .foregroundColor(DS.Colors.danger)
+                            if icon.unicodeScalars.allSatisfy(\.isASCII) {
+                                Image(systemName: icon)
+                                    .font(.caption2)
+                                    .foregroundColor(DS.Colors.danger)
+                            } else {
+                                Text(icon)
+                                    .font(.caption2)
+                            }
                             Text(MedicalIssue.title(for: issue))
                                 .font(.caption2)
                                 .foregroundColor(DS.Colors.textSecondary)
@@ -880,7 +885,6 @@ struct SOSDetailView: View {
                         }
                     }
                 }
-            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

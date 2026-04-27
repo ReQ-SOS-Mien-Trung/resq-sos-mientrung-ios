@@ -142,6 +142,10 @@ struct NotificationCenterView: View {
             return "message.fill"
         case "team_assigned", "team_invitation", "coordinator_join", "coordinator_leave":
             return "person.2.fill"
+        case "assembly_gathering":
+            return "calendar.badge.clock"
+        case "assembly_event_cancelled":
+            return "calendar.badge.minus"
         case "supply_request", "supply_request_urgent", "supply_request_high_escalation", "supply_request_urgent_escalation", "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed", "supply_rejected", "supply_request_auto_rejected", "fund_allocation":
             return "shippingbox.fill"
         default:
@@ -151,7 +155,7 @@ struct NotificationCenterView: View {
 
     private func iconColor(for notification: RealtimeNotification) -> Color {
         switch notification.type?.lowercased() {
-        case "flood_alert", "supply_rejected", "supply_request_auto_rejected", "supply_request_urgent", "supply_request_urgent_escalation":
+        case "flood_alert", "supply_rejected", "supply_request_auto_rejected", "supply_request_urgent", "supply_request_urgent_escalation", "assembly_event_cancelled":
             return DS.Colors.danger
         case "supply_accepted", "supply_preparing", "supply_shipped", "supply_completed", "fund_allocation":
             return DS.Colors.success
@@ -168,6 +172,8 @@ struct NotificationCenterView: View {
         switch rawType.lowercased() {
         case "assembly_gathering":
             return "Thông báo triệu tập"
+        case "assembly_event_cancelled":
+            return "Sự kiện triệu tập bị hủy"
         case "assembly_point_assignment":
             return "Cập nhật điểm tập kết"
         case "team_assigned", "team_invitation":
