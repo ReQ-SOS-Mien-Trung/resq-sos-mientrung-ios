@@ -420,42 +420,72 @@ struct ActivityRowView: View {
                 Divider()
                     .overlay(supplyOverviewColor.opacity(0.2))
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text(supplyLotOverviewTitle)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(DS.Colors.textSecondary)
 
                     ForEach(supplyLotOverviewBlocks) { block in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(block.itemLabel)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(DS.Colors.text)
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .center, spacing: 8) {
+                                Text(block.itemLabel)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(DS.Colors.text)
+                                    .lineLimit(1)
 
-                            supplyLotRows(
-                                title: block.primaryTitle,
-                                rows: block.primaryRows,
-                                tone: supplyOverviewColor
-                            )
+                                Spacer()
 
-                            if let referenceTitle = block.referenceTitle,
-                               block.referenceRows.isEmpty == false {
-                                supplyLotRows(
-                                    title: referenceTitle,
-                                    rows: block.referenceRows,
-                                    tone: DS.Colors.info
+                                if isSameLotAllocations(block.actualLots, block.plannedLots) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("Khớp kế hoạch")
+                                            .font(.system(size: 11, weight: .bold))
+                                    }
+                                    .foregroundColor(DS.Colors.success)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(DS.Colors.success.opacity(0.1))
+                                    .clipShape(Capsule())
+                                }
+                            }
+
+                            if isSameLotAllocations(block.actualLots, block.plannedLots) {
+                                lotGrid(
+                                    allocations: block.actualLots,
+                                    unit: block.unit,
+                                    tone: supplyOverviewColor
                                 )
+                            } else {
+                                if block.actualLots.isEmpty == false {
+                                    lotGrid(
+                                        title: block.primaryTitle,
+                                        allocations: block.actualLots,
+                                        unit: block.unit,
+                                        tone: supplyOverviewColor
+                                    )
+                                }
+
+                                if block.plannedLots.isEmpty == false {
+                                    lotGrid(
+                                        title: block.referenceTitle ?? "Dự kiến ban đầu",
+                                        allocations: block.plannedLots,
+                                        unit: block.unit,
+                                        tone: DS.Colors.info
+                                    )
+                                }
                             }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 9)
+                        .padding(12)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(DS.Colors.surface)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(DS.Colors.borderSubtle, lineWidth: 1)
                         )
+                        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
                     }
                 }
             }
@@ -605,10 +635,11 @@ struct ActivityRowView: View {
                 return SupplyLotOverviewBlock(
                     id: supply.id,
                     itemLabel: itemLabel,
+                    unit: unit,
                     primaryTitle: primaryTitle,
-                    primaryRows: lotRows(from: primaryLots, unit: unit, quantityVerb: "lấy"),
+                    actualLots: actualLots,
                     referenceTitle: referenceTitle,
-                    referenceRows: referenceRows
+                    plannedLots: plannedLots
                 )
             }
         case "returnsupplies":
@@ -634,10 +665,11 @@ struct ActivityRowView: View {
                 return SupplyLotOverviewBlock(
                     id: supply.id,
                     itemLabel: itemLabel,
+                    unit: unit,
                     primaryTitle: primaryTitle,
-                    primaryRows: lotRows(from: primaryLots, unit: unit, quantityVerb: "trả"),
+                    actualLots: returnedLots,
                     referenceTitle: referenceTitle,
-                    referenceRows: referenceRows
+                    plannedLots: expectedLots
                 )
             }
         default:
@@ -645,26 +677,84 @@ struct ActivityRowView: View {
         }
     }
 
-    private func supplyLotRows(title: String, rows: [String], tone: Color) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(tone)
+    private func lotGrid(title: String? = nil, allocations: [MissionSupplyLotAllocation], unit: String?, tone: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(tone)
+                    .textCase(.uppercase)
+            }
 
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(alignment: .top, spacing: 7) {
-                    Circle()
-                        .fill(tone.opacity(0.75))
-                        .frame(width: 5, height: 5)
-                        .padding(.top, 5)
+            VStack(spacing: 1) {
+                ForEach(allocations) { allocation in
+                    HStack(spacing: 0) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Lô")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(DS.Colors.textSecondary)
+                            Text(lotIdLabel(allocation.lotId))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(DS.Colors.text)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
 
-                    Text(row)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(DS.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Divider()
+                            .frame(height: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Số lượng")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(DS.Colors.textSecondary)
+                            Text(lotQuantityLabel(allocation.quantityTaken, unit: unit))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(DS.Colors.text)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+
+                        if let expiredDate = allocation.expiredDate {
+                            Divider()
+                                .frame(height: 24)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("HSD")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(DS.Colors.textSecondary)
+                                Text(lotDateLabel(expiredDate))
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(DS.Colors.text)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .background(tone.opacity(0.04))
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(tone.opacity(0.12), lineWidth: 1)
+            )
         }
+    }
+
+    private func isSameLotAllocations(_ actual: [MissionSupplyLotAllocation], _ planned: [MissionSupplyLotAllocation]) -> Bool {
+        guard actual.count == planned.count else { return false }
+
+        let sortedActual = actual.sorted { ($0.lotId ?? "") < ($1.lotId ?? "") }
+        let sortedPlanned = planned.sorted { ($0.lotId ?? "") < ($1.lotId ?? "") }
+
+        for (a, p) in zip(sortedActual, sortedPlanned) {
+            if a.lotId != p.lotId || a.quantityTaken != p.quantityTaken || a.expiredDate != p.expiredDate {
+                return false
+            }
+        }
+
+        return true
     }
 
     private func nonEmptyLotAllocations(_ allocations: [MissionSupplyLotAllocation]?) -> [MissionSupplyLotAllocation] {
@@ -1078,10 +1168,11 @@ private struct ActivityAction: Identifiable {
 private struct SupplyLotOverviewBlock: Identifiable {
     let id: String
     let itemLabel: String
+    let unit: String?
     let primaryTitle: String
-    let primaryRows: [String]
+    let actualLots: [MissionSupplyLotAllocation]
     let referenceTitle: String?
-    let referenceRows: [String]
+    let plannedLots: [MissionSupplyLotAllocation]
 }
 
 private struct ActivityDetailItem: Identifiable {

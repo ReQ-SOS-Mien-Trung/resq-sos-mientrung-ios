@@ -47,8 +47,8 @@ final class APIService {
     private static func extractBackendErrorMessage(from data: Data) -> String? {
         guard !data.isEmpty else { return nil }
 
-        if let decoded = APIErrorResponse.decode(from: data), decoded.message.isEmpty == false {
-            return decoded.message
+        if let decoded = APIErrorResponse.decode(from: data), let msg = decoded.displayMessage, !msg.isEmpty {
+            return msg
         }
 
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

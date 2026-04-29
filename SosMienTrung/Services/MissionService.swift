@@ -215,7 +215,7 @@ final class MissionService {
         guard (200...299).contains(http.statusCode) else {
             let decodedError = APIErrorResponse.decode(from: data)
             let rawBody = String(data: data, encoding: .utf8)
-            let message = decodedError?.message ?? rawBody
+            let message = decodedError?.displayMessage ?? rawBody
 
             print("[MissionService] ✗ HTTP \(http.statusCode): \(message ?? "")")
 

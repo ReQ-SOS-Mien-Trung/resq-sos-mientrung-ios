@@ -482,8 +482,8 @@ final class RescueTeamService {
         guard !data.isEmpty else { return "" }
 
         if let decoded = try? JSONDecoder().decode(APIErrorResponse.self, from: data),
-           decoded.message.isEmpty == false {
-            return decoded.message
+           let msg = decoded.displayMessage, !msg.isEmpty {
+            return msg
         }
 
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

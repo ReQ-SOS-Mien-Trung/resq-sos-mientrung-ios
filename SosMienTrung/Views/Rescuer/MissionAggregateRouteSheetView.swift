@@ -162,41 +162,115 @@ struct MissionAggregateRouteSheetView: View {
     }
 
     private func errorCard(message: String) -> some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(DS.Colors.warning)
-                Text("Không tải được lộ trình tổng hợp")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(DS.Colors.text)
-            }
+        let displayMessage = friendlyErrorMessage(for: message)
+        let isSystemError = message.contains("API_KEY_UNAUTHORIZED") || message.contains("HTTP 500")
 
-            Text(message)
-                .font(DS.Typography.caption)
-                .foregroundColor(DS.Colors.textSecondary)
+        return VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(spacing: 12) {
+                Image(systemName: isSystemError ? "gearshape.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(isSystemError ? DS.Colors.info : DS.Colors.warning)
+                    .frame(width: 44, height: 44)
+                    .background((isSystemError ? DS.Colors.info : DS.Colors.warning).opacity(0.12))
+                    .clipShape(Circle())
 
-            Button("Thử lại") {
-                Task {
-                    await loadAggregateRoute(forceRefresh: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Không tải được lộ trình")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
+
+                    Text(isSystemError ? "Lỗi hệ thống" : "Vấn đề kết nối")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor((isSystemError ? DS.Colors.info : DS.Colors.warning).opacity(0.8))
                 }
             }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(DS.Colors.accent)
-            .clipShape(Capsule())
-            .buttonStyle(.plain)
+
+            Text(displayMessage)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: DS.Spacing.sm) {
+                Button {
+                    Task {
+                        await loadAggregateRoute(forceRefresh: true)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Thử lại")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(DS.Colors.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if isSystemError {
+                    Button {
+                        // Action for reporting error if needed
+                    } label: {
+                        Text("Báo cáo lỗi")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(DS.Colors.borderSubtle.opacity(0.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(DS.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sharpCard(
-            borderColor: DS.Colors.warning.opacity(0.25),
-            borderWidth: DS.Border.thin,
-            shadow: DS.Shadow.none,
-            backgroundColor: DS.Colors.surface,
-            radius: 16
+        .background(DS.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isSystemError ? DS.Colors.info.opacity(0.15) : DS.Colors.warning.opacity(0.15), lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.03), radius: 10, x: 0, y: 4)
+    }
+
+    private func friendlyErrorMessage(for message: String) -> String {
+        let lowercased = message.lowercased()
+
+        if lowercased.contains("api_key_unauthorized") {
+            return "Dịch vụ bản đồ Goong chưa được ủy quyền (sai API Key). Vui lòng thông báo cho quản trị viên để cập nhật lại cấu hình hệ thống."
+        }
+
+        if lowercased.contains("rate limit") || lowercased.contains("429") {
+            return "Hệ thống đang quá tải yêu cầu lộ trình. Vui lòng đợi khoảng 20 giây trước khi nhấn thử lại."
+        }
+
+        if lowercased.contains("zero_results") {
+            return "Không tìm thấy lộ trình khả dụng nối giữa các điểm hoạt động. Có thể do địa hình không hỗ trợ loại phương tiện này."
+        }
+
+        if lowercased.contains("not_found") {
+            return "Không tìm thấy thông tin tọa độ của một hoặc nhiều điểm trong lộ trình."
+        }
+
+        if lowercased.contains("timeout") {
+            return "Kết nối mạng quá chậm, không thể tải dữ liệu lộ trình từ máy chủ."
+        }
+
+        if lowercased.contains("http 403") {
+            return "Bạn không có quyền truy cập dữ liệu lộ trình này hoặc cấu hình API Key đang bị từ chối."
+        }
+
+        // Check if it looks like a raw JSON string that failed to decode
+        if message.contains("{") && message.contains(":") {
+            return "Đã xảy ra lỗi không xác định từ máy chủ khi tính toán lộ trình tổng hợp."
+        }
+
+        return message
     }
 
     private var doneCard: some View {

@@ -45,10 +45,29 @@ struct FirebasePhoneLoginResponse: Codable {
 
 /// Error response from server
 struct APIErrorResponse: Codable, Sendable {
-    let message: String
+    let message: String?
     let code: String?
     let innerError: String?
     let errors: [String: [String]]?
+    
+    /// Nested error structure for some services like Goong
+    struct NestedError: Codable, Sendable {
+        let message: String?
+        let code: String?
+    }
+    let error: NestedError?
+    
+    var displayMessage: String? {
+        if let msg = message, !msg.isEmpty { return msg }
+        if let nestedMsg = error?.message, !nestedMsg.isEmpty { return nestedMsg }
+        return nil
+    }
+
+    var displayCode: String? {
+        if let c = code, !c.isEmpty { return c }
+        if let nestedCode = error?.code, !nestedCode.isEmpty { return nestedCode }
+        return nil
+    }
     
     /// Safe decoding that can be called from any context
     static func decode(from data: Data) -> APIErrorResponse? {
@@ -538,7 +557,7 @@ final class AuthService {
                 if let data = data, !data.isEmpty {
                     let raw = String(data: data, encoding: .utf8) ?? "<binary>"
                     print("[AuthService] ✗ HTTP \(statusCode) body: \(raw)")
-                    errorMessage = APIErrorResponse.decode(from: data)?.message ?? raw
+                    errorMessage = APIErrorResponse.decode(from: data)?.displayMessage ?? raw
                 }
                 DispatchQueue.main.async { completion(.failure(AuthServiceError.httpStatus(statusCode, errorMessage))) }
                 return
@@ -643,7 +662,7 @@ final class AuthService {
             guard (200...299).contains(statusCode) else {
                 var errorMessage: String? = nil
                 if !data.isEmpty {
-                    errorMessage = APIErrorResponse.decode(from: data)?.message
+                    errorMessage = APIErrorResponse.decode(from: data)?.displayMessage
                         ?? String(data: data, encoding: .utf8)
                 }
                 throw AuthServiceError.httpStatus(statusCode, errorMessage)

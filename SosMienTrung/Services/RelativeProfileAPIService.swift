@@ -209,7 +209,7 @@ final class RelativeProfileAPIService {
         )
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = APIErrorResponse.decode(from: data)?.message
+            let message = APIErrorResponse.decode(from: data)?.displayMessage
                 ?? String(data: data, encoding: .utf8)
                 ?? ""
             throw RelativeProfileAPIError.httpError(httpResponse.statusCode, message)
