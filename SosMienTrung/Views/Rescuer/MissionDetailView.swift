@@ -97,7 +97,9 @@ struct MissionDetailView: View {
                         subtitle: activitySectionSubtitle
                     )
 
-                    activityScopePicker
+                    if participatingTeamNames.count > 1 {
+                        activityScopePicker
+                    }
 
                     if pendingActivitySyncCount > 0 {
                         pendingSyncBanner
@@ -1125,6 +1127,11 @@ struct MissionDetailView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if vm.belongsToCurrentTeam(activity, fallbackMissionTeamId: fallbackViewerMissionTeamId) {
+            // Khi đang ở tab "Đội của bạn", không cần hiện nhãn "Đội của bạn" nữa
+            if activityScopeFilter == .myTeam {
+                return nil
+            }
+
             if let teamName, teamName.isEmpty == false {
                 return "Đội của bạn: \(teamName)"
             }

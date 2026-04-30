@@ -796,19 +796,19 @@ private enum SOSQuickFillSample {
     static let demoLongitude = 107.592778
     static let demoAddress = "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"
 
-    static let additionalDescription = "Bà già Chu đang bị mất nhiệt. Cần cứu gấp!!!!!!!!!!!!!!"
+    static let additionalDescription = "Nước dâng cao hung, ông Khoa già đang bị lạnh run, mệt lả. Cứu gấp với mấy anh ơi!"
 
     static let medicalContextItems: [SavedRelativeProfileNoteItem] = [
         SavedRelativeProfileNoteItem(
-            id: childId,
+            id: elderlyId,
             displayName: "Khoa",
-            personType: .child,
+            personType: .elderly,
             summaryLines: [
-                "Bệnh nền: Tim mạch, Tiểu đường, Bệnh thận",
-                "Dị ứng: Dị ứng thuốc",
+                "Bệnh nền: Huyết áp cao, Tiểu đường, Hen suyễn, Suy giảm miễn dịch",
+                "Dị ứng: Dị ứng côn trùng",
                 "Thiết bị hỗ trợ: Bình oxy",
                 "Tiền sử chấn thương / phẫu thuật: Đã từng gãy xương",
-                "Yêu cầu đặc biệt: Cần người dìu"
+                "Nhóm máu: A-"
             ]
         )
     ]
@@ -852,16 +852,16 @@ private enum SOSQuickFillSample {
             peopleCount: peopleCount,
             people: people,
             hasInjured: true,
-            injuredPersonIds: [childId],
+            injuredPersonIds: [elderlyId],
             medicalInfoByPerson: [
-                childId: PersonMedicalInfo(
-                    personId: childId,
+                elderlyId: PersonMedicalInfo(
+                    personId: elderlyId,
                     medicalIssues: [
                         MedicalIssue.fracture.rawValue,
-                        MedicalIssue.unconscious.rawValue,
-                        MedicalIssue.lostParent.rawValue,
-                        MedicalIssue.cannotMove.rawValue,
-                        MedicalIssue.bleeding.rawValue
+                        MedicalIssue.chronicDisease.rawValue,
+                        MedicalIssue.needsMedicalDevice.rawValue,
+                        MedicalIssue.breathingDifficulty.rawValue,
+                        MedicalIssue.cannotMove.rawValue
                     ],
                     otherDescription: ""
                 )

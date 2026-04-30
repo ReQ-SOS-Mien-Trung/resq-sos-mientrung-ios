@@ -36,23 +36,23 @@ struct ActivityProofCaptureSection: View {
                 }
 
                 if canSelectImageSource {
-                    HStack(spacing: DS.Spacing.xs) {
+                    VStack(spacing: DS.Spacing.xs) {
                         Button {
                             showImageSourceSheet = true
                         } label: {
-                            Label(
-                                proofImage == nil ? "Chọn ảnh minh chứng" : "Đổi ảnh minh chứng",
-                                systemImage: "photo.on.rectangle"
-                            )
-                            .font(.system(size: 13, weight: .semibold))
+                            HStack {
+                                Image(systemName: "photo.on.rectangle")
+                                Text(proofImage == nil ? "Chọn ảnh minh chứng" : "Đổi ảnh minh chứng")
+                            }
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(DS.Colors.info)
-                            .padding(.horizontal, DS.Spacing.sm)
-                            .padding(.vertical, 10)
-                            .background(DS.Colors.info.opacity(0.1))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DS.Colors.info.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(DS.Colors.info.opacity(0.22), lineWidth: 1)
+                                    .stroke(DS.Colors.info.opacity(0.25), lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
@@ -61,22 +61,26 @@ struct ActivityProofCaptureSection: View {
                             Button {
                                 self.proofImage = nil
                             } label: {
-                                Label("Gỡ ảnh", systemImage: "trash")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(DS.Colors.accent)
-                                    .padding(.horizontal, DS.Spacing.sm)
-                                    .padding(.vertical, 10)
-                                    .background(DS.Colors.accent.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .stroke(DS.Colors.accent.opacity(0.22), lineWidth: 1)
-                                    )
+                                HStack {
+                                    Image(systemName: "trash")
+                                    Text("Gỡ ảnh đã chọn")
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(DS.Colors.accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(DS.Colors.accent.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(DS.Colors.accent.opacity(0.25), lineWidth: 1)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                } else {
+                }
+ else {
                     IncidentInlineNotice(
                         icon: "photo",
                         text: "Thiết bị hiện không hỗ trợ camera hoặc thư viện ảnh. Bạn vẫn có thể hoàn thành bước mà không đính kèm ảnh.",

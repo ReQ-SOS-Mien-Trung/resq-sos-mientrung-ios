@@ -1036,11 +1036,11 @@ private enum MissionTeamReportDemoData {
                     evidenceNote: "Ghi nhận bàn giao vật phẩm cho SOS #361."
                 ),
                 423: activity(
-                    summary: "Đội tiếp cận SOS #361 và hỗ trợ 3 nạn nhân ưu tiên: Khoa bị gãy xương/không thể di chuyển/mất phương hướng, Thảo là trẻ em lạc người thân, Người già 1 có nguy cơ mất nhiệt. Khu vực đã được kiểm soát để chuyển sang sơ cứu.",
+                    summary: "Đội tiếp cận SOS #361 và hỗ trợ 3 nạn nhân ưu tiên: ông Khoa bị gãy xương/không thể di chuyển/mất phương hướng, Thảo là trẻ em lạc người thân, Người già 1 có nguy cơ mất nhiệt. Khu vực đã được kiểm soát để chuyển sang sơ cứu.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
                         MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
-                        MissionReportKeyValueEntry(key: "nanNhanUuTien", value: "Khoa; Thảo; Người già 1"),
+                        MissionReportKeyValueEntry(key: "nanNhanUuTien", value: "ông Khoa; Thảo; Người già 1"),
                         MissionReportKeyValueEntry(key: "nguyCo", value: "Gãy xương, hạ thân nhiệt, trẻ lạc người thân")
                     ],
                     resultMetrics: metrics(rescued: 3),
@@ -1052,16 +1052,16 @@ private enum MissionTeamReportDemoData {
                     evidenceNote: "Ghi nhận tiếp cận và phân loại nhanh nhóm nạn nhân SOS #361."
                 ),
                 424: activity(
-                    summary: "Đã cố định gãy xương cho Khoa, xử trí nguy cơ hạ thân nhiệt, kiểm tra bệnh nền/người già và ổn định trẻ Thảo trước khi di chuyển. Khoa cần bàn giao y tế để theo dõi gãy xương và tình trạng lú lẫn.",
+                    summary: "Đã cố định gãy xương cho ông Khoa, xử trí nguy cơ hạ thân nhiệt, kiểm tra bệnh nền/người già và ổn định trẻ Thảo trước khi di chuyển. ông Khoa cần bàn giao y tế để theo dõi gãy xương và tình trạng lú lẫn.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
                         MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
                         MissionReportKeyValueEntry(key: "canThiepYTe", value: "Cố định gãy xương; giữ ấm; ổn định trẻ em; kiểm tra dấu hiệu sinh tồn"),
-                        MissionReportKeyValueEntry(key: "caCanBanGiao", value: "Khoa")
+                        MissionReportKeyValueEntry(key: "caCanBanGiao", value: "ông Khoa")
                     ],
                     resultMetrics: metrics(treated: 3, referred: 1),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "benhNhanTheoDoi", value: "Khoa - gãy xương/mất phương hướng"),
+                        MissionReportKeyValueEntry(key: "benhNhanTheoDoi", value: "ông Khoa - gãy xương/mất phương hướng"),
                         MissionReportKeyValueEntry(key: "treEmOnDinh", value: "Thảo")
                     ],
                     evidenceNote: "Ghi nhận xử trí y tế tại SOS #361 trước khi sơ tán."

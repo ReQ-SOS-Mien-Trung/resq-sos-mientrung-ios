@@ -354,7 +354,6 @@ struct ActivityRowView: View {
 
     private var subtitleText: String? {
         let parts = [
-            localizedPriorityText(activity.priority).map { "Ưu tiên \($0)" },
             assignmentLabel
         ].compactMap { $0 }
 

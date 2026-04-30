@@ -99,7 +99,7 @@ struct PickupConfirmationSheet: View {
 
                 ActivityProofCaptureSection(
                     proofImage: $proofImage,
-                    subtitle: "Bạn có thể chụp ảnh nhanh tại kho để làm minh chứng tiếp nhận vật phẩm."
+                    subtitle: "Chụp lại các vật phẩm đã nhận để xác minh kho đã giao đủ"
                 )
             }
             .padding(.horizontal, DS.Spacing.md)
