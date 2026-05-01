@@ -99,6 +99,10 @@ struct ActivityRowView: View {
                 supplyOverviewSection
             }
 
+            if shouldShowVictimsSection, let victims = activity.targetVictims, victims.isEmpty == false {
+                victimOverviewSection(victims)
+            }
+
             HStack(alignment: .center, spacing: DS.Spacing.sm) {
                 activityStatusBadge
 
@@ -352,10 +356,16 @@ struct ActivityRowView: View {
         return cleaned.isEmpty ? activity.title : cleaned
     }
 
+
     private var subtitleText: String? {
-        let parts = [
-            assignmentLabel
-        ].compactMap { $0 }
+        var parts: [String] = []
+        if let assignment = assignmentLabel {
+            parts.append(assignment)
+        }
+        
+        if shouldShowVictimsSection, let victimSummary = activity.targetVictimSummary {
+            parts.append(victimSummary)
+        }
 
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
@@ -800,19 +810,19 @@ struct ActivityRowView: View {
         return "\(quantity)"
     }
 
-    private func lotDateLabel(_ raw: String?) -> String {
-        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), raw.isEmpty == false else {
+    private func lotDateLabel(_ rawValue: String?) -> String {
+        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), rawValue.isEmpty == false else {
             return "?"
         }
 
-        let isoFull = ISO8601DateFormatter()
-        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoWithFractionalSeconds = ISO8601DateFormatter()
+        isoWithFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         let isoBasic = ISO8601DateFormatter()
         isoBasic.formatOptions = [.withInternetDateTime]
 
-        guard let date = isoFull.date(from: raw) ?? isoBasic.date(from: raw) else {
-            return raw
+        guard let date = isoWithFractionalSeconds.date(from: rawValue) ?? isoBasic.date(from: rawValue) else {
+            return rawValue
         }
 
         let formatter = DateFormatter()
@@ -821,8 +831,160 @@ struct ActivityRowView: View {
         return formatter.string(from: date)
     }
 
+    // MARK: - Victim Overview
+    private func victimOverviewSection(_ victims: [TargetVictim]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                Text("Đối tượng hỗ trợ")
+                    .font(.system(size: 13, weight: .bold))
+                
+                Spacer()
+                
+                Text("\(victims.count) người")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+            .foregroundColor(DS.Colors.accent)
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(victims) { victim in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(DS.Colors.accent.opacity(0.1))
+                                    .frame(width: 36, height: 36)
+                                
+                                Image(systemName: victim.personType?.symbolName ?? "person.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(DS.Colors.accent)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .center, spacing: 6) {
+                                    Text(victim.displayName ?? "Nạn nhân")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(DS.Colors.text)
+                                    
+                                    if let severity = victim.severity {
+                                        Text(severity.localized)
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color(hex: severity.color))
+                                            .clipShape(Capsule())
+                                    }
+                                }
+
+                                Text(victim.personType?.title ?? "Không rõ đối tượng")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(DS.Colors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            if let phone = victim.personPhone, !phone.isEmpty {
+                                Button {
+                                    if let url = URL(string: "tel://\(phone.replacingOccurrences(of: " ", with: ""))") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                } label: {
+                                    Image(systemName: "phone.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.white)
+                                        .frame(width: 28, height: 28)
+                                        .background(DS.Colors.success)
+                                        .clipShape(Circle())
+                                }
+                            }
+                        }
+
+                        if isExpanded {
+                            VStack(alignment: .leading, spacing: 6) {
+                                if let medicalIssues = victim.medicalIssues, !medicalIssues.isEmpty {
+                                    victimMedicalTags(medicalIssues)
+                                }
+
+                                if victim.clothingNeeded == true {
+                                    victimDetailRow(icon: "tshirt.fill", text: "Cần quần áo (\(victim.clothingGender == "MALE" ? "Nam" : "Nữ"))")
+                                }
+
+                                if let diet = victim.specialDietDescription, !diet.isEmpty {
+                                    victimDetailRow(icon: "fork.knife", text: "Chế độ ăn: \(diet)")
+                                }
+                            }
+                            .padding(.leading, 46)
+                        }
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DS.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(DS.Colors.accent.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(DS.Colors.accent.opacity(0.15), lineWidth: 1)
+        )
+    }
+
+    private func victimMedicalTags(_ issues: [MedicalIssue]) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "cross.case.fill")
+                .font(.system(size: 10))
+                .foregroundColor(DS.Colors.accent)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(issues, id: \.self) { issue in
+                        Text(issue.title)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(DS.Colors.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(DS.Colors.accent.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    private func victimDetailRow(icon: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+                .foregroundColor(DS.Colors.textSecondary)
+            
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+    }
+
     private var normalizedActivityTypeKey: String {
         activity.normalizedActivityTypeKey
+    }
+
+    private var shouldShowVictimsSection: Bool {
+        let hiddenTypes = ["collectsupplies", "returnsupplies", "returnassemblypoint"]
+        return !hiddenTypes.contains(normalizedActivityTypeKey)
     }
 
     private var primaryCompleteActionLabel: String {

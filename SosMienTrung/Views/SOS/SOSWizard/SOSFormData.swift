@@ -421,6 +421,31 @@ enum RescueSituation: String, Codable, CaseIterable, Identifiable {
 
 // MARK: - Nhóm vấn đề y tế
 
+enum VictimSeverity: String, Codable {
+    case critical = "CRITICAL"
+    case high = "HIGH"
+    case medium = "MEDIUM"
+    case low = "LOW"
+
+    var localized: String {
+        switch self {
+        case .critical: return "Nguy kịch"
+        case .high: return "Cao"
+        case .medium: return "Trung bình"
+        case .low: return "Thấp"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .critical: return "#D32F2F"
+        case .high: return "#F57C00"
+        case .medium: return "#FBC02D"
+        case .low: return "#388E3C"
+        }
+    }
+}
+
 enum MedicalIssueCategory: String, CaseIterable, Identifiable {
     case injury = "INJURY"
     case danger = "DANGER"
@@ -466,6 +491,12 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
     case confusion         = "CONFUSION"
     case needsMedicalDevice = "NEEDS_MEDICAL_DEVICE"
     
+    // --- Bổ sung cho Activity ---
+    case pregnancy         = "PREGNANCY"
+    case mentalHealth      = "MENTAL_HEALTH"
+    case fever             = "FEVER"
+    case diarrhea          = "DIARRHEA"
+    
     // --- Khác ---
     case other             = "OTHER"
     
@@ -490,6 +521,10 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .chronicDisease:      return "Cần thuốc bệnh nền"
         case .confusion:           return "Lú lẫn / mất phương hướng"
         case .needsMedicalDevice:  return "Cần thiết bị y tế"
+        case .pregnancy:           return "Thai sản"
+        case .mentalHealth:        return "Tâm thần / Tâm lý"
+        case .fever:               return "Sốt"
+        case .diarrhea:            return "Tiêu chảy"
         case .other:               return "Khác"
         }
     }
@@ -513,6 +548,10 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .chronicDisease:      return "💊"
         case .confusion:           return "🧠"
         case .needsMedicalDevice:  return "🩺"
+        case .pregnancy:           return "🤰"
+        case .mentalHealth:        return "🧠"
+        case .fever:               return "🌡️"
+        case .diarrhea:            return "🚽"
         case .other:               return "🏥"
         }
     }
@@ -536,6 +575,10 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .chronicDisease:      return "pills.fill"
         case .confusion:           return "brain.head.profile"
         case .needsMedicalDevice:  return "stethoscope"
+        case .pregnancy:           return "figure.and.child.holdinghands"
+        case .mentalHealth:        return "brain.head.profile"
+        case .fever:               return "thermometer.medium"
+        case .diarrhea:            return "pills.fill"
         case .other:               return "cross.case.fill"
         }
     }
@@ -560,6 +603,10 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .chronicDisease:       return 2
         case .confusion:            return 2
         case .needsMedicalDevice:   return 2
+        case .pregnancy:            return 4
+        case .mentalHealth:         return 2
+        case .fever:                return 2
+        case .diarrhea:             return 2
         case .other:                return 1
         }
     }
@@ -568,7 +615,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
     var isSevere: Bool {
         switch self {
         case .unconscious, .drowning, .breathingDifficulty,
-             .chestPainStroke, .severelyBleeding:
+             .chestPainStroke, .severelyBleeding, .pregnancy:
             return true
         default:
             return false
@@ -583,7 +630,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .unconscious, .breathingDifficulty, .chestPainStroke, .cannotMove, .drowning:
             return .danger
         case .highFever, .dehydration, .infantNeedsMilk, .lostParent,
-             .chronicDisease, .confusion, .needsMedicalDevice:
+             .chronicDisease, .confusion, .needsMedicalDevice, .pregnancy, .mentalHealth, .fever, .diarrhea:
             return .special
         case .other:
             return .other
@@ -640,6 +687,8 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
                 // Khác
                 .other
             ]
+        case .other:
+            return [.other]
         }
     }
 }
@@ -673,12 +722,14 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
         case adult = "ADULT"
         case child = "CHILD"
         case elderly = "ELDERLY"
+        case other = "OTHER"
 
         var idPrefix: String {
             switch self {
             case .adult: return "adult"
             case .child: return "child"
             case .elderly: return "elderly"
+            case .other: return "other"
             }
         }
         
@@ -687,6 +738,7 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
             case .adult: return "Người lớn"
             case .child: return "Trẻ em"
             case .elderly: return "Người già"
+            case .other: return "Khác"
             }
         }
         
@@ -695,6 +747,7 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
             case .adult: return "🧑"
             case .child: return "👶"
             case .elderly: return "👴"
+            case .other: return "❓"
             }
         }
 
@@ -703,6 +756,7 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
             case .adult: return "person.fill"
             case .child: return "figure.child"
             case .elderly: return "figure.seated.side"
+            case .other: return "person.fill.questionmark"
             }
         }
         
@@ -712,6 +766,7 @@ struct Person: Codable, Equatable, Identifiable, Hashable {
             case .adult: return 1.0
             case .child: return 1.4
             case .elderly: return 1.3
+            case .other: return 1.0
             }
         }
     }
@@ -1192,6 +1247,10 @@ final class SOSFormData: ObservableObject {
                 partialResult.children += 1
             case .elderly:
                 partialResult.elderly += 1
+            case .other:
+                // Skip or count as adults? Usually safer to skip or count as adults.
+                // For now just skip as it doesn't fit the 3 main categories.
+                break
             }
         }
     }

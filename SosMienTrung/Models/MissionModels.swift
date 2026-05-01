@@ -222,6 +222,7 @@ struct Activity: Codable, Identifiable {
     let activityType: String?
     let description: String?
     let imageUrl: String?
+    let targetVictimSummary: String?
     let priority: String?
     let estimatedTime: Int?
     let sosRequestId: Int?
@@ -236,6 +237,7 @@ struct Activity: Codable, Identifiable {
     let assignedAt: String?
     let completedAt: String?
     let completedBy: String?
+    let targetVictims: [TargetVictim]?
 
     var activityStatus: ActivityStatus {
         ActivityStatus(apiValue: status) ?? .planned
@@ -279,6 +281,7 @@ struct Activity: Codable, Identifiable {
             activityType: activityType,
             description: description,
             imageUrl: imageUrl,
+            targetVictimSummary: targetVictimSummary,
             priority: priority,
             estimatedTime: estimatedTime,
             sosRequestId: sosRequestId,
@@ -292,7 +295,8 @@ struct Activity: Codable, Identifiable {
             missionTeamId: missionTeamId,
             assignedAt: assignedAt,
             completedAt: completedAt,
-            completedBy: completedBy
+            completedBy: completedBy,
+            targetVictims: targetVictims
         )
     }
 
@@ -1226,4 +1230,25 @@ struct RouteStep: Codable {
 struct RouteWaypoint: Codable {
     let latitude: Double
     let longitude: Double
+}
+
+struct TargetVictim: Codable, Identifiable {
+    let personId: String
+    let displayName: String?
+    let personType: Person.PersonType?
+    let personPhone: String?
+    let index: Int?
+    let isInjured: Bool?
+    let severity: VictimSeverity?
+    let medicalIssues: [MedicalIssue]?
+    let clothingNeeded: Bool?
+    let clothingGender: String?
+    let specialDietDescription: String?
+
+    var id: String { personId }
+
+    var displayMedicalIssues: String? {
+        guard let issues = medicalIssues, !issues.isEmpty else { return nil }
+        return issues.map { $0.title }.joined(separator: ", ")
+    }
 }

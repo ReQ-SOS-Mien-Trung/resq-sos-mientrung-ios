@@ -367,6 +367,8 @@ nonisolated struct VoiceSOSDraft: Codable, Equatable, Sendable {
                     children += 1
                 case .elderly:
                     elderly += 1
+                case .other:
+                    adults += 1
                 }
             }
         }
@@ -876,7 +878,7 @@ actor GeminiVoiceSOSUnderstandingProvider: VoiceSOSUnderstandingProvider {
         conversationHistory: [VoiceConversationTurn],
         currentDraft: VoiceSOSDraft
     ) async throws -> VoiceSOSDraft {
-        let apiKey = KeyManager.gemini
+        let apiKey = await MainActor.run { KeyManager.gemini }
         guard !apiKey.isEmpty else {
             throw VoiceSOSUnderstandingError.unavailable("Chưa cấu hình Gemini API Key.")
         }
@@ -1705,6 +1707,12 @@ private nonisolated func voiceSOSNormalizedMedicalIssue(from rawValue: String) -
         return MedicalIssue.lostParent.rawValue
     case searchable.contains("sua"), searchable.contains("em be"):
         return MedicalIssue.infantNeedsMilk.rawValue
+    case searchable.contains("mang thai"), searchable.contains("co bau"), searchable.contains("sinh de"):
+        return MedicalIssue.pregnancy.rawValue
+    case searchable.contains("tam ly"), searchable.contains("hoang loan"):
+        return MedicalIssue.mentalHealth.rawValue
+    case searchable.contains("tieu chay"), searchable.contains("di ngoai"):
+        return MedicalIssue.diarrhea.rawValue
     default:
         return nil
     }
@@ -1814,6 +1822,14 @@ private nonisolated func voiceSOSKeywords(forMedicalIssue issue: String) -> [Str
         return ["luc lan", "mat phuong huong"]
     case MedicalIssue.needsMedicalDevice.rawValue:
         return ["thiet bi y te"]
+    case MedicalIssue.pregnancy.rawValue:
+        return ["mang thai", "co bau", "sinh de"]
+    case MedicalIssue.mentalHealth.rawValue:
+        return ["tam ly", "hoang loan", "tram cam"]
+    case MedicalIssue.fever.rawValue:
+        return ["sot", "nong"]
+    case MedicalIssue.diarrhea.rawValue:
+        return ["tieu chay", "dau bung", "di ngoai"]
     default:
         return []
     }

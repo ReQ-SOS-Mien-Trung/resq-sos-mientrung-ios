@@ -49,48 +49,20 @@ struct PickupConfirmationSheet: View {
 
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
-                        title: drafts[index].itemName,
-                        subtitle: pickupCardSubtitle(for: drafts[index])
+                        title: drafts[index].itemName
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                            HStack(spacing: DS.Spacing.sm) {
-                                metricChip(
-                                    title: "Kế hoạch",
-                                    value: quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit),
-                                    tone: DS.Colors.info
-                                )
-
-                                metricChip(
-                                    title: "Vật phẩm dự trù",
-                                    value: quantityText(drafts[index].bufferQuantityToReceive, unit: drafts[index].unit),
-                                    tone: DS.Colors.warning
-                                )
-                            }
+                            compactSummaryRow(metrics: [
+                                ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
+                                ("Dự trù", quantityText(drafts[index].bufferQuantityToReceive, unit: drafts[index].unit)),
+                                ("Tổng nhận", quantityText(drafts[index].totalPickupQuantity, unit: drafts[index].unit))
+                            ])
 
                             if drafts[index].lotAllocations.isEmpty == false {
                                 supplyLotSummarySection(
                                     title: "Chi tiết lô tiếp nhận",
                                     allocations: drafts[index].lotAllocations,
                                     unit: drafts[index].unit
-                                )
-                            }
-
-                            if drafts[index].bufferQuantityToReceive > 0 {
-                                metricChip(
-                                    title: "Tổng tiếp nhận",
-                                    value: quantityText(drafts[index].totalPickupQuantity, unit: drafts[index].unit),
-                                    tone: DS.Colors.accent
-                                )
-
-                                IncidentInlineNotice(
-                                    icon: "checkmark.seal.fill",
-                                    text: "Đội cứu hộ sẽ tiếp nhận toàn bộ phần dự trù khi xác nhận.",
-                                    tone: DS.Colors.warning
-                                )
-                            } else {
-                                IncidentInlineNotice(
-                                    icon: "checkmark.circle.fill",
-                                    text: "Vật phẩm này không có phần dự trù. Hệ thống sẽ trừ đúng số lượng kế hoạch khi bạn xác nhận."
                                 )
                             }
                         }
@@ -223,32 +195,20 @@ struct DeliveryConfirmationSheet: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
-                        title: drafts[index].itemName,
-                        subtitle: deliveryCardSubtitle(for: drafts[index])
+                        title: drafts[index].itemName
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                             if drafts[index].bufferQuantityToDeliver > 0 {
-                                HStack(spacing: DS.Spacing.sm) {
-                                    metricChip(
-                                        title: "Kế hoạch",
-                                        value: quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit),
-                                        tone: DS.Colors.info
-                                    )
-
-                                    metricChip(
-                                        title: "Dự trù đã nhận",
-                                        value: quantityText(drafts[index].bufferQuantityToDeliver, unit: drafts[index].unit),
-                                        tone: DS.Colors.warning
-                                    )
-                                }
-
-                                metricChip(
-                                    title: "Tối đa có thể phát",
-                                    value: quantityText(drafts[index].deliverableQuantity, unit: drafts[index].unit),
-                                    tone: DS.Colors.accent
-                                )
+                                compactSummaryRow(metrics: [
+                                    ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
+                                    ("Dự trù", quantityText(drafts[index].bufferQuantityToDeliver, unit: drafts[index].unit)),
+                                    ("Tối đa phát", quantityText(drafts[index].deliverableQuantity, unit: drafts[index].unit))
+                                ])
+                            } else {
+                                compactSummaryRow(metrics: [
+                                    ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit))
+                                ])
                             }
-
                             IncidentTextInputField(
                                 title: "Số lượng đã giao thực tế",
                                 placeholder: String(drafts[index].deliverableQuantity),
@@ -562,45 +522,44 @@ struct ReturnSuppliesConfirmationSheet: View {
 
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
-                        title: drafts[index].itemName,
-                        subtitle: returnCardSubtitle(for: drafts[index])
+                        title: drafts[index].itemName
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                            HStack(spacing: DS.Spacing.sm) {
-                                metricChip(
-                                    title: "Kế hoạch",
-                                    value: quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit),
-                                    tone: DS.Colors.info
-                                )
-
-                                metricChip(
-                                    title: "Theo lô",
-                                    value: "\(drafts[index].lotCount) lô",
-                                    tone: DS.Colors.warning
-                                )
-                            }
-
-                            if drafts[index].primaryLots.isEmpty {
-                                IncidentInlineNotice(
-                                    icon: "shippingbox",
-                                    text: "Vật phẩm này chưa có thông tin lô hoàn trả chi tiết.",
-                                    tone: DS.Colors.warning
-                                )
+                            if drafts[index].isReusable {
+                                compactSummaryRow(metrics: [
+                                    ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
+                                    ("Phân loại", "Thiết bị")
+                                ])
                             } else {
-                                supplyLotSummarySection(
-                                    title: drafts[index].primaryLotsTitle,
-                                    allocations: drafts[index].primaryLots,
-                                    unit: drafts[index].unit
-                                )
+                                compactSummaryRow(metrics: [
+                                    ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
+                                    ("Theo dõi", "\(drafts[index].lotCount) lô")
+                                ])
                             }
 
-                            if let referenceTitle = drafts[index].referenceLotsTitle,
-                               drafts[index].referenceLots.isEmpty == false {
-                                supplyLotSummarySection(
-                                    title: referenceTitle,
-                                    allocations: drafts[index].referenceLots,
-                                    unit: drafts[index].unit
-                                )
+                            if !drafts[index].isReusable {
+                                if drafts[index].primaryLots.isEmpty {
+                                    IncidentInlineNotice(
+                                        icon: "shippingbox",
+                                        text: "Vật phẩm này chưa có thông tin lô hoàn trả chi tiết.",
+                                        tone: DS.Colors.warning
+                                    )
+                                } else {
+                                    supplyLotSummarySection(
+                                        title: drafts[index].primaryLotsTitle,
+                                        allocations: drafts[index].primaryLots,
+                                        unit: drafts[index].unit
+                                    )
+                                }
+
+                                if let referenceTitle = drafts[index].referenceLotsTitle,
+                                   drafts[index].referenceLots.isEmpty == false {
+                                    supplyLotSummarySection(
+                                        title: referenceTitle,
+                                        allocations: drafts[index].referenceLots,
+                                        unit: drafts[index].unit
+                                    )
+                                }
                             }
                         }
                     }
@@ -636,9 +595,17 @@ struct ReturnSuppliesConfirmationSheet: View {
                     )
                 }
 
+                if proofImage == nil {
+                    IncidentInlineNotice(
+                        icon: "camera.fill",
+                        text: "Vui lòng chụp ảnh minh chứng để hoàn tất hoàn trả.",
+                        tone: DS.Colors.accent
+                    )
+                }
+
                 IncidentSubmitButton(
                     title: "Xác nhận đã hoàn trả",
-                    isEnabled: true,
+                    isEnabled: proofImage != nil,
                     isLoading: isSubmissionLocked
                 ) {
                     guard isSubmissionLocked == false else { return }
@@ -662,7 +629,7 @@ struct ReturnSuppliesConfirmationSheet: View {
     }
 
     private var hasMissingLotDetails: Bool {
-        drafts.contains { $0.primaryLots.isEmpty }
+        drafts.contains { !$0.isReusable && $0.primaryLots.isEmpty }
     }
 
     private var isSubmissionLocked: Bool {
@@ -827,6 +794,7 @@ private struct ReturnSupplyDraft: Identifiable {
     let primaryLots: [MissionSupplyLotAllocation]
     let referenceLotsTitle: String?
     let referenceLots: [MissionSupplyLotAllocation]
+    let isReusable: Bool
 
     var id: String { "\(itemId)" }
     var lotCount: Int { primaryLots.count }
@@ -863,6 +831,12 @@ private struct ReturnSupplyDraft: Identifiable {
             referenceLotsTitle = nil
             referenceLots = []
         }
+
+        let hasReusableInfo = (supply.expectedReturnUnits?.isEmpty == false) ||
+                             (supply.returnedReusableUnits?.isEmpty == false) ||
+                             (supply.pickedReusableUnits?.isEmpty == false) ||
+                             (supply.plannedPickupReusableUnits?.isEmpty == false)
+        isReusable = hasReusableInfo
     }
 }
 
@@ -878,28 +852,49 @@ private func supplyLotSummarySection(
 
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
             ForEach(Array(allocations.enumerated()), id: \.offset) { _, allocation in
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Lô \(lotIdDisplay(allocation.lotId))")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(DS.Colors.text)
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Lô")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(DS.Colors.textSecondary)
+                        Text(lotIdDisplay(allocation.lotId))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(DS.Colors.text)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
 
-                    HStack(spacing: DS.Spacing.xs) {
-                        lotInfoChip(
-                            title: "SL",
-                            value: lotQuantityDisplay(allocation.quantityTaken, unit: unit),
-                            tone: DS.Colors.info
-                        )
+                    Divider()
+                        .frame(height: 24)
 
-                        lotInfoChip(
-                            title: "HSD",
-                            value: lotExpiryDisplay(allocation.expiredDate),
-                            tone: DS.Colors.warning
-                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Số lượng")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(DS.Colors.textSecondary)
+                        Text(lotQuantityDisplay(allocation.quantityTaken, unit: unit))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(DS.Colors.text)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+
+                    if let expiredDate = allocation.expiredDate {
+                        Divider()
+                            .frame(height: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("HSD")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(DS.Colors.textSecondary)
+                            Text(lotExpiryDisplay(expiredDate))
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(DS.Colors.text)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
                     }
                 }
-                .padding(.horizontal, DS.Spacing.sm)
                 .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(DS.Colors.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -1018,6 +1013,36 @@ private func lotSortDate(_ rawValue: String?) -> Date? {
 
 private func lotSortKey(_ lotId: String?) -> String {
     lotId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+}
+
+private func compactSummaryRow(metrics: [(title: String, value: String)]) -> some View {
+    HStack(spacing: 0) {
+        ForEach(Array(metrics.enumerated()), id: \.offset) { i, metric in
+            if i > 0 {
+                Divider()
+                    .frame(height: 24)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(metric.title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .textCase(.uppercase)
+                Text(metric.value)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(DS.Colors.text)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+        }
+    }
+    .padding(.vertical, 8)
+    .background(DS.Colors.surface)
+    .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 }
 
 private func metricChip(title: String, value: String, tone: Color) -> some View {
