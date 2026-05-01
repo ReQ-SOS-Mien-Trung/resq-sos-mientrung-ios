@@ -4,6 +4,7 @@ import PhotosUI
 
 struct ActivityProofCaptureSection: View {
     @Binding var proofImage: UIImage?
+    var title: String
     var subtitle: String
 
     @State private var showCameraPicker = false
@@ -11,14 +12,19 @@ struct ActivityProofCaptureSection: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showImageSourceSheet = false
 
-    init(proofImage: Binding<UIImage?>, subtitle: String = "Ảnh sẽ được tải lên để lưu minh chứng hoàn thành bước nhiệm vụ.") {
+    init(
+        proofImage: Binding<UIImage?>,
+        title: String = "Ảnh minh chứng (tùy chọn)",
+        subtitle: String = "Ảnh sẽ được tải lên để lưu minh chứng hoàn thành bước nhiệm vụ."
+    ) {
         _proofImage = proofImage
+        self.title = title
         self.subtitle = subtitle
     }
 
     var body: some View {
         IncidentFormSection(
-            title: "Ảnh minh chứng (tùy chọn)",
+            title: title,
             subtitle: subtitle
         ) {
             VStack(alignment: .leading, spacing: DS.Spacing.sm) {

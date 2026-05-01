@@ -567,7 +567,8 @@ struct ReturnSuppliesConfirmationSheet: View {
 
                 ActivityProofCaptureSection(
                     proofImage: $proofImage,
-                    subtitle: "Bạn có thể chụp ảnh tại kho để lưu minh chứng hoàn trả vật phẩm."
+                    title: "Ảnh minh chứng",
+                    subtitle: "Chụp ảnh tại kho để lưu minh chứng hoàn trả vật phẩm."
                 )
             }
             .padding(.horizontal, DS.Spacing.md)
