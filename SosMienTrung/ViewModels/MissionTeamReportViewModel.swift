@@ -967,8 +967,8 @@ private enum MissionTeamReportDemoData {
 
     private static func hueMixedRouteScenario(timestamp: String) -> MissionTeamReportDemoScenario {
         MissionTeamReportDemoScenario(
-            teamSummary: "Đội Hường đã xử lý mission mixed #101 tại cụm #111: tiếp nhận vật phẩm ở kho Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế, phân phát cho SOS #361 và SOS #7, cứu hộ/y tế cho nhóm ưu tiên, sơ tán 7 người về điểm an toàn, trả 3 nước dừa và áo phao LIFEJACKET-D01-003 về kho. Bước quay về điểm tập kết là chặng cuối của đội.",
-            teamNote: "Dữ liệu demo tạo lúc \(timestamp). Nội dung bám theo mission #101 ngày 22/04/2026: Đội Hường hoàn tất các bước cứu trợ, cứu hộ, y tế, sơ tán và hoàn trả vật phẩm trước khi quay về Sân vận động Tự Do để bàn giao.",
+            teamSummary: "Đội đã xử lý SOS #21 tại cụm #12 (2 Trần Hưng Đạo, Phú Hòa, TP. Huế): tiếp nhận vật phẩm tại kho, phân phát nước uống, thực phẩm, chăn mền, quần áo và thuốc cho nạn nhân, sơ cứu khẩn cấp ông Khoa (bất tỉnh, chấn thương đầu, bệnh nền tim mạch/tiểu đường), ổn định trẻ Thảo (lạc người thân), sơ tán 2 người về điểm an toàn và bàn giao ca y tế. Bước quay về điểm tập kết là chặng cuối của đội.",
+            teamNote: "Dữ liệu demo tạo lúc \(timestamp). Nội dung bám theo SOS #21 ngày 02/05/2026: đội hoàn tất cứu trợ, cứu hộ khẩn cấp, y tế và sơ tán 2 nạn nhân (ông Khoa và trẻ Thảo) trước khi quay về Sân vận động Tự Do để bàn giao.",
             teamPayload: MissionReportStructuredPayloadForm(
                 issueFlags: MissionReportIssueFlagsForm(
                     blockedRoad: true,
@@ -980,91 +980,91 @@ private enum MissionTeamReportDemoData {
                     medicalOverload: false
                 ),
                 issueExtras: [
-                    MissionReportKeyValueEntry(key: "missionId", value: "101"),
-                    MissionReportKeyValueEntry(key: "clusterId", value: "111"),
-                    MissionReportKeyValueEntry(key: "doiThucHien", value: "Đội Hường"),
-                    MissionReportKeyValueEntry(key: "khuVuc", value: "TP. Huế - SOS #361 và SOS #7"),
+                    MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                    MissionReportKeyValueEntry(key: "clusterId", value: "12"),
+                    MissionReportKeyValueEntry(key: "khuVuc", value: "2 Trần Hưng Đạo, Phú Hòa, TP. Huế - SOS #21"),
                     MissionReportKeyValueEntry(key: "khoVatPham", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế, 46 Đống Đa"),
                     MissionReportKeyValueEntry(key: "diemTapKet", value: "Sân vận động Tự Do (Thừa Thiên Huế)"),
-                    MissionReportKeyValueEntry(key: "canhBao", value: "Nước lên nhanh; SOS #361 có người gãy xương, mất nhiệt và trẻ lạc người thân")
+                    MissionReportKeyValueEntry(key: "canhBao", value: "Nước dâng cao; ông Khoa bất tỉnh/chấn thương đầu/bệnh nền nặng; trẻ Thảo lạc người thân"),
+                    MissionReportKeyValueEntry(key: "nguoiBaoCao", value: "Lê Minh Anh (+84374745872)")
                 ],
-                resultMetrics: metrics(rescued: 7, treated: 5, referred: 1),
+                resultMetrics: metrics(rescued: 2, treated: 2, referred: 1),
                 resultExtras: [
-                    MissionReportKeyValueEntry(key: "sosDaXuLy", value: "2"),
-                    MissionReportKeyValueEntry(key: "vatPhamDaNhan", value: "Nước dừa x14; Nước khoáng 500ml x14; Nước tinh khiết x14; Viên lọc nước x14; Áo phao LIFEJACKET-D01-003 x1"),
-                    MissionReportKeyValueEntry(key: "vatPhamDaGiao", value: "53 đơn vị tiêu hao (SOS #361: 24; SOS #7: 29)"),
-                    MissionReportKeyValueEntry(key: "vatPhamHoanTra", value: "Nước dừa đóng hộp x3; Áo phao cứu sinh LIFEJACKET-D01-003 x1"),
-                    MissionReportKeyValueEntry(key: "trangThaiCuoi", value: "Đã cứu hộ, y tế, sơ tán và hoàn trả vật phẩm; còn bước quay về điểm tập kết")
+                    MissionReportKeyValueEntry(key: "sosDaXuLy", value: "1"),
+                    MissionReportKeyValueEntry(key: "vatPhamDaNhan", value: "Nước uống x6; Thực phẩm x4; Chăn mền x2; Quần áo nam x1 (Khoa); Thuốc thông dụng x1 bộ; Vật tư sơ cứu x1 bộ; Pin sạc dự phòng x1"),
+                    MissionReportKeyValueEntry(key: "vatPhamDaGiao", value: "Toàn bộ vật phẩm đã giao SOS #21 (2 nạn nhân)"),
+                    MissionReportKeyValueEntry(key: "vatPhamHoanTra", value: "Không có"),
+                    MissionReportKeyValueEntry(key: "trangThaiCuoi", value: "Đã cứu hộ, y tế khẩn cấp, sơ tán và bàn giao ca y tế; còn bước quay về điểm tập kết")
                 ],
                 evidenceEntries: [
                     MissionReportEvidenceEntry(
                         type: "note",
                         url: "",
-                        note: "Báo cáo demo tổng hợp từ mission #101: hoàn thành cứu trợ SOS #361/#7, bàn giao y tế, sơ tán nhóm 7 người và hoàn trả vật phẩm dư."
+                        note: "Báo cáo demo tổng hợp từ SOS #21 (02/05/2026): hoàn thành cứu trợ, sơ cứu khẩn cấp ông Khoa và ổn định trẻ Thảo, sơ tán 2 người và bàn giao ca y tế."
                     )
                 ]
             ),
             activities: [
                 421: activity(
-                    summary: "Đội Hường tiếp nhận vật phẩm tại kho Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế: nước dừa x14, nước khoáng 500ml x14, nước tinh khiết x14, viên lọc nước khẩn cấp x14 và áo phao LIFEJACKET-D01-003 x1. Đã kiểm tra lô/hạn dùng và sẵn sàng phân phát.",
+                    summary: "Đội tiếp nhận vật phẩm tại kho Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế để phục vụ SOS #21: nước uống x6, thực phẩm x4, chăn mền x2, quần áo nam x1 (cho ông Khoa), thuốc thông dụng x1 bộ, vật tư sơ cứu x1 bộ và pin sạc dự phòng x1. Đã kiểm tra hạn dùng và ưu tiên vật tư y tế khẩn cấp.",
                     issueFlags: MissionReportIssueFlagsForm(),
                     issueExtras: [
                         MissionReportKeyValueEntry(key: "kho", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế"),
                         MissionReportKeyValueEntry(key: "diaChi", value: "46 Đống Đa, TP. Huế"),
-                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-04-22T05:30:25Z")
+                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-05-02T13:30:00Z")
                     ],
                     resultMetrics: metrics(),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "vatPhamTieuHaoDaNhan", value: "56"),
-                        MissionReportKeyValueEntry(key: "thietBiReusableDaNhan", value: "Áo phao LIFEJACKET-D01-003")
+                        MissionReportKeyValueEntry(key: "vatPhamTieuHaoDaNhan", value: "15"),
+                        MissionReportKeyValueEntry(key: "chiTiet", value: "Nước x6; Thực phẩm x4; Chăn mền x2; Quần áo x1; Thuốc x1 bộ; VTSC x1 bộ; Pin x1")
                     ],
-                    evidenceNote: "Ảnh/biên nhận kho có thể đính kèm cho bước tiếp nhận vật phẩm."
+                    evidenceNote: "Ảnh/biên nhận kho có thể đính kèm cho bước tiếp nhận vật phẩm SOS #21."
                 ),
                 422: activity(
-                    summary: "Đã phân phát ưu tiên cho SOS #361 trước khi cứu hộ: mỗi loại 6 đơn vị gồm nước dừa, nước khoáng 500ml, nước tinh khiết và viên lọc nước khẩn cấp. Tổng giao 24 đơn vị, còn 8 đơn vị mỗi loại để xử lý SOS #7.",
+                    summary: "Đã phân phát vật phẩm cho SOS #21 tại 2 Trần Hưng Đạo, Phú Hòa, TP. Huế: nước uống x6, thực phẩm x4, chăn mền x2 (ưu tiên ông Khoa đang lạnh run), quần áo nam x1 (Khoa), thuốc thông dụng + vật tư sơ cứu x1 bộ mỗi loại và pin sạc dự phòng x1. Ưu tiên giao vật tư y tế trước khi bắt đầu sơ cứu.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
                         MissionReportKeyValueEntry(key: "diaChi", value: "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"),
-                        MissionReportKeyValueEntry(key: "uuTien", value: "Giao nhanh trước khi xử lý ca gãy xương, trẻ lạc người thân và người già mất nhiệt")
+                        MissionReportKeyValueEntry(key: "uuTien", value: "Giao vật tư y tế khẩn cấp và chăn mền trước khi xử lý ông Khoa bất tỉnh, chấn thương đầu và trẻ Thảo lạc người thân")
                     ],
                     resultMetrics: metrics(),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "tongVatPhamDaGiao", value: "24"),
-                        MissionReportKeyValueEntry(key: "chiTiet", value: "4 mặt hàng x6 đơn vị")
+                        MissionReportKeyValueEntry(key: "tongVatPhamDaGiao", value: "15"),
+                        MissionReportKeyValueEntry(key: "chiTiet", value: "Nước x6; Thực phẩm x4; Chăn mền x2; Quần áo x1; Thuốc x1 bộ; VTSC x1 bộ; Pin x1")
                     ],
-                    evidenceNote: "Ghi nhận bàn giao vật phẩm cho SOS #361."
+                    evidenceNote: "Ghi nhận bàn giao vật phẩm cho SOS #21."
                 ),
                 423: activity(
-                    summary: "Đội tiếp cận SOS #361 và hỗ trợ 3 nạn nhân ưu tiên: ông Khoa bị gãy xương/không thể di chuyển/mất phương hướng, Thảo là trẻ em lạc người thân, Người già 1 có nguy cơ mất nhiệt. Khu vực đã được kiểm soát để chuyển sang sơ cứu.",
+                    summary: "Đội tiếp cận SOS #21 và ưu tiên 2 nạn nhân: ông Khoa (người lớn, CRITICAL) đang bất tỉnh, chấn thương đầu, không thể di chuyển, mất phương hướng — bệnh nền tim mạch/tiểu đường/bệnh phổi/bệnh thận, cần bình oxy, đã từng gãy xương; và Thảo (trẻ em, HIGH) đang lạc người thân, cần sữa. Khu vực nước dâng cao, đội đã kiểm soát hiện trường và bắt đầu phân loại.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
-                        MissionReportKeyValueEntry(key: "nanNhanUuTien", value: "ông Khoa; Thảo; Người già 1"),
-                        MissionReportKeyValueEntry(key: "nguyCo", value: "Gãy xương, hạ thân nhiệt, trẻ lạc người thân")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "nanNhanUuTien", value: "Khoa (người lớn, bất tỉnh); Thảo (trẻ em, lạc người thân)"),
+                        MissionReportKeyValueEntry(key: "nguyCo", value: "Bất tỉnh, chấn thương đầu, bệnh nền nặng, nước dâng cao")
                     ],
-                    resultMetrics: metrics(rescued: 3),
+                    resultMetrics: metrics(rescued: 2),
                     resultExtras: [
                         MissionReportKeyValueEntry(key: "nguoiLon", value: "1"),
                         MissionReportKeyValueEntry(key: "treEm", value: "1"),
-                        MissionReportKeyValueEntry(key: "nguoiGia", value: "1")
+                        MissionReportKeyValueEntry(key: "mucDoUuTien", value: "Critical")
                     ],
-                    evidenceNote: "Ghi nhận tiếp cận và phân loại nhanh nhóm nạn nhân SOS #361."
+                    evidenceNote: "Ghi nhận tiếp cận và phân loại nhanh 2 nạn nhân SOS #21."
                 ),
                 424: activity(
-                    summary: "Đã cố định gãy xương cho ông Khoa, xử trí nguy cơ hạ thân nhiệt, kiểm tra bệnh nền/người già và ổn định trẻ Thảo trước khi di chuyển. ông Khoa cần bàn giao y tế để theo dõi gãy xương và tình trạng lú lẫn.",
+                    summary: "Sơ cứu khẩn cấp ông Khoa: băng ép vết thương đầu, giữ ấm, theo dõi nhịp tim và nhịp thở (bệnh nền tim mạch/bệnh phổi), hỗ trợ bình oxy, đặt tư thế phục hồi cho người bất tỉnh. Kiểm tra đường huyết (tiểu đường) và theo dõi tình trạng thận. Ổn định trẻ Thảo: giữ ấm, cung cấp sữa, trấn an tâm lý và tiến hành tìm kiếm người thân. Ông Khoa cần bàn giao y tế khẩn cấp để theo dõi chấn thương đầu, bệnh nền và tình trạng bất tỉnh.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "sosRequestId", value: "361"),
-                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Cố định gãy xương; giữ ấm; ổn định trẻ em; kiểm tra dấu hiệu sinh tồn"),
-                        MissionReportKeyValueEntry(key: "caCanBanGiao", value: "ông Khoa")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Băng ép chấn thương đầu; hỗ trợ bình oxy; theo dõi tim mạch/bệnh phổi/thận/đường huyết; tư thế phục hồi; ổn định trẻ em"),
+                        MissionReportKeyValueEntry(key: "caCanBanGiao", value: "Khoa (bất tỉnh, chấn thương đầu, bệnh nền nặng)")
                     ],
-                    resultMetrics: metrics(treated: 3, referred: 1),
+                    resultMetrics: metrics(treated: 2, referred: 1),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "benhNhanTheoDoi", value: "ông Khoa - gãy xương/mất phương hướng"),
-                        MissionReportKeyValueEntry(key: "treEmOnDinh", value: "Thảo")
+                        MissionReportKeyValueEntry(key: "benhNhanNguyKich", value: "Khoa - bất tỉnh/chấn thương đầu/bệnh nền tim-đái tháo đường-phổi-thận"),
+                        MissionReportKeyValueEntry(key: "treEmOnDinh", value: "Thảo - đã được cung cấp sữa và trấn an")
                     ],
-                    evidenceNote: "Ghi nhận xử trí y tế tại SOS #361 trước khi sơ tán."
+                    evidenceNote: "Ghi nhận sơ cứu khẩn cấp tại SOS #21 trước khi sơ tán."
                 ),
                 425: activity(
                     summary: "Đã phân phát phần vật phẩm còn lại cho SOS #7: nước khoáng 500ml x8, nước tinh khiết x8, viên lọc nước khẩn cấp x8 và nước dừa x5. Thiếu 3 nước dừa so với kế hoạch do nhu cầu thực nhận thấp hơn sau đánh giá tại hiện trường; 3 đơn vị này được giữ nguyên và hoàn trả kho ở bước 9.",
@@ -1084,65 +1084,64 @@ private enum MissionTeamReportDemoData {
                     evidenceNote: "Ghi nhận bàn giao vật phẩm SOS #7 và lý do giao thiếu nước dừa."
                 ),
                 426: activity(
-                    summary: "Đội tiếp cận SOS #7, hỗ trợ nhóm nạn nhân khi nước đang lên nhanh, ưu tiên người già không thể di chuyển và người bị thương nhẹ. Nhóm được đưa ra khỏi vị trí nguy hiểm để chuẩn bị sơ cứu và sơ tán.",
+                    summary: "Đội thực hiện sơ tán khẩn cấp 2 nạn nhân ra khỏi khu vực nước dâng tại SOS #21. Ông Khoa được càng trên càng cầu (2 người dìu), duy trì bình oxy và theo dõi liên tục trong suốt hành trình. Trẻ Thảo được bế chủ động để giữ ấm và an toàn. Cả 2 được đưa về điểm an toàn gần nhất.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "sosRequestId", value: "7"),
-                        MissionReportKeyValueEntry(key: "nguyCo", value: "Nước lên nhanh; có người già hạn chế di chuyển và người bị thương nhẹ")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "nguyCo", value: "Nước dâng cao; ông Khoa bất tỉnh/không thể tự di chuyển")
                     ],
-                    resultMetrics: metrics(rescued: 4),
+                    resultMetrics: metrics(rescued: 2),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "nhomSos7HoTro", value: "4"),
-                        MissionReportKeyValueEntry(key: "uuTien", value: "Người già không thể di chuyển")
+                        MissionReportKeyValueEntry(key: "nhomSoTan", value: "2"),
+                        MissionReportKeyValueEntry(key: "uuTien", value: "Ông Khoa càng cầu; Thảo bế an toàn")
                     ],
-                    evidenceNote: "Ghi nhận tiếp cận và di chuyển nhóm SOS #7 khỏi khu vực nguy hiểm."
+                    evidenceNote: "Ghi nhận sơ tán 2 nạn nhân SOS #21 ra khỏi khu vực nguy hiểm."
                 ),
                 427: activity(
-                    summary: "Đã sơ cứu người bị thương nhẹ tại SOS #7 và kiểm tra dấu hiệu sinh tồn của người già trước khi sơ tán. Không ghi nhận ca tử vong hoặc mất tích; nhóm đủ điều kiện di chuyển về điểm an toàn.",
+                    summary: "Đã bàn giao khẩn cấp ông Khoa cho đơn vị y tế tuyến trên: cung cấp hồ sơ y tế nền (bệnh nền tim mạch, tiểu đường, bệnh phổi, bệnh thận; dị ứng thuốc; nhóm máu AB+; đã từng gãy xương), tình trạng hiện tại (bất tỉnh, chấn thương đầu, không thể di chuyển) và các can thiệp đã thực hiện. Thảo được bàn giao cho nhân viên xã hội để tiếp tục tìm kiếm người thân.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "sosRequestId", value: "7"),
-                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Sơ cứu vết thương nhẹ; kiểm tra dấu hiệu sinh tồn người già")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "canThiepYTe", value: "Bàn giao bất tỉnh/chấn thương đầu; bệnh nền đầy đủ")
                     ],
-                    resultMetrics: metrics(treated: 2),
+                    resultMetrics: metrics(treated: 2, referred: 1),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "nguoiBiThuongNhe", value: "1"),
-                        MissionReportKeyValueEntry(key: "nguoiGiaKiemTra", value: "1")
+                        MissionReportKeyValueEntry(key: "caChuyenTuyen", value: "Khoa - chấn thương đầu/bất tỉnh/bệnh nền nặng"),
+                        MissionReportKeyValueEntry(key: "banGiaoXaHoi", value: "Thảo - tìm kiếm người thân")
                     ],
-                    evidenceNote: "Ghi nhận sơ cứu và đánh giá ổn định trước sơ tán SOS #7."
+                    evidenceNote: "Ghi nhận bàn giao y tế và xã hội sau sơ tán SOS #21."
                 ),
                 428: activity(
-                    summary: "Đội sơ tán toàn bộ nhóm 7 người về điểm an toàn, bàn giao ca y tế cần theo dõi và ghi nhận nhu cầu cứu trợ bổ sung để tạo mission RELIEF riêng.",
+                    summary: "Đội xác nhận hoàn tất SOS #21 (trạng thái Resolved): 2/2 nạn nhân đã được sơ tán và bàn giao an toàn. Ghi nhận nhu cầu hỗ trợ tiếp thêm: theo dõi bình oxy của ông Khoa tại cơ sở y tế tuyến trên và cập nhật tình trạng Thảo. Tổng kết nhiệm vụ và chuẩn bị bàn giao thông tin cho đội tiếp theo.",
                     issueFlags: routeIssueFlags(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "diemAnToan", value: "16.4706395, 107.593927"),
-                        MissionReportKeyValueEntry(key: "banGiaoYTe", value: "Có"),
-                        MissionReportKeyValueEntry(key: "deXuatTachRelief", value: "Có")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "trangThaiSos", value: "Resolved"),
+                        MissionReportKeyValueEntry(key: "deXuatTheoDoiSauSoTan", value: "Theo dõi ông Khoa tại tuyến trên; cập nhật tình trạng Thảo")
                     ],
-                    resultMetrics: metrics(rescued: 7, referred: 1),
+                    resultMetrics: metrics(rescued: 2, referred: 1),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "soNguoiSoTan", value: "7"),
-                        MissionReportKeyValueEntry(key: "nhuCauReliefRieng", value: "Ghi nhận sau sơ tán")
+                        MissionReportKeyValueEntry(key: "soNguoiSoTan", value: "2"),
+                        MissionReportKeyValueEntry(key: "sosHoanTat", value: "SOS #21 - đã giải quyết")
                     ],
-                    evidenceNote: "Ghi nhận bàn giao nhóm 7 người tại điểm an toàn."
+                    evidenceNote: "Ghi nhận xác nhận hoàn tất và tổng kết nhân lực SOS #21."
                 ),
                 429: activity(
-                    summary: "Đã trả vật phẩm còn lại về kho: nước dừa đóng hộp x3 và áo phao cứu sinh LIFEJACKET-D01-003 x1. Tình trạng áo phao còn Good, tồn kho tiêu hao/reusable đã được cập nhật theo bàn giao.",
+                    summary: "Kiểm kê và xử lý vật phẩm sau SOS #21: toàn bộ vật phẩm đã được giao đủ cho 2 nạn nhân, không có hàng thừa cần hoàn trả kho. Ghi nhận xác nhận khóa số vật phẩm và cập nhật tình trạng cầp phát cho mission.",
                     issueFlags: MissionReportIssueFlagsForm(),
                     issueExtras: [
-                        MissionReportKeyValueEntry(key: "khoNhanLai", value: "Uỷ Ban MTTQVN Tỉnh Thừa Thiên Huế"),
-                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-04-22T05:39:31Z")
+                        MissionReportKeyValueEntry(key: "sosRequestId", value: "21"),
+                        MissionReportKeyValueEntry(key: "thoiGianHoanTatUTC", value: "2026-05-02T13:52:00Z")
                     ],
                     resultMetrics: metrics(),
                     resultExtras: [
-                        MissionReportKeyValueEntry(key: "nuocDuaHoanTra", value: "3"),
-                        MissionReportKeyValueEntry(key: "aoPhaoHoanTra", value: "LIFEJACKET-D01-003"),
-                        MissionReportKeyValueEntry(key: "tinhTrangAoPhao", value: "Good")
+                        MissionReportKeyValueEntry(key: "vatPhamHoanTra", value: "Không có (toàn bộ đã giao hết)"),
+                        MissionReportKeyValueEntry(key: "xacNhanDongSo", value: "Hoàn tất")
                     ],
-                    evidenceNote: "Ghi nhận hoàn trả vật phẩm tiêu hao còn lại và thiết bị reusable."
+                    evidenceNote: "Ghi nhận kiểm kê vật phẩm sau khi hoàn tất SOS #21."
                 ),
                 430: activity(
-                    summary: "Đội Hường quay về điểm tập kết Sân vận động Tự Do (Thừa Thiên Huế), hoàn tất bàn giao thông tin hiện trường, trạng thái vật phẩm và các ca cần theo dõi. Đây là bước cuối để đóng mission sau khi đội cập nhật vị trí tại điểm tập kết.",
+                    summary: "Đội quay về điểm tập kết Sân vận động Tự Do (Thừa Thiên Huế), hoàn tất bàn giao thông tin hiện trường SOS #21, trạng thái vật phẩm và các ca cần theo dõi. Đây là bước cuối để đóng mission sau khi đội cập nhật vị trí tại điểm tập kết.",
                     issueFlags: MissionReportIssueFlagsForm(
                         blockedRoad: true,
                         flooding: true,
