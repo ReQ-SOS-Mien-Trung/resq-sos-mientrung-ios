@@ -141,18 +141,42 @@ struct SOSRulePriorityScoreConfig: Codable, Equatable {
     }
 
     init(
-        formula: String = "ROUND((medical_score + relief_score) * situation_multiplier)",
-        useRequestTypeScore: Bool = false,
+        formula: String = "MIN(100, ROUND(((medical_score * 2) + (relief_score * 1.1) + (request_type_score * 0.15)) * situation_multiplier * relief_pressure_multiplier))",
+        useRequestTypeScore: Bool = true,
         expression: SOSExpressionNode = SOSExpressionNode(
-            op: "ROUND",
-            operand: SOSExpressionNode(
-                op: "MUL",
-                left: SOSExpressionNode(
-                    op: "ADD",
-                    left: SOSExpressionNode(variable: "medical_score"),
-                    right: SOSExpressionNode(variable: "relief_score")
-                ),
-                right: SOSExpressionNode(variable: "situation_multiplier")
+            op: "MIN",
+            left: SOSExpressionNode(numericValue: 100),
+            right: SOSExpressionNode(
+                op: "ROUND",
+                operand: SOSExpressionNode(
+                    op: "MUL",
+                    left: SOSExpressionNode(
+                        op: "MUL",
+                        left: SOSExpressionNode(
+                            op: "ADD",
+                            left: SOSExpressionNode(
+                                op: "ADD",
+                                left: SOSExpressionNode(
+                                    op: "MUL",
+                                    left: SOSExpressionNode(variable: "medical_score"),
+                                    right: SOSExpressionNode(numericValue: 2)
+                                ),
+                                right: SOSExpressionNode(
+                                    op: "MUL",
+                                    left: SOSExpressionNode(variable: "relief_score"),
+                                    right: SOSExpressionNode(numericValue: 1.1)
+                                )
+                            ),
+                            right: SOSExpressionNode(
+                                op: "MUL",
+                                left: SOSExpressionNode(variable: "request_type_score"),
+                                right: SOSExpressionNode(numericValue: 0.15)
+                            )
+                        ),
+                        right: SOSExpressionNode(variable: "situation_multiplier")
+                    ),
+                    right: SOSExpressionNode(variable: "relief_pressure_multiplier")
+                )
             )
         )
     ) {
@@ -166,15 +190,19 @@ struct SOSRuleMedicalScoreConfig: Codable, Equatable {
     let formula: String
     let ageWeights: [String: Double]
     let medicalIssueSeverity: [String: Double]
+    let victimSeverityScore: [String: Double]
+    let medicineUrgencyScore: SOSRuleMedicineUrgencyScoreConfig
 
     private enum CodingKeys: String, CodingKey {
         case formula
         case ageWeights = "age_weights"
         case medicalIssueSeverity = "medical_issue_severity"
+        case victimSeverityScore = "victim_severity_score"
+        case medicineUrgencyScore = "medicine_urgency_score"
     }
 
     init(
-        formula: String = "SUM(issue_weight_sum_per_injured_person * age_weight)",
+        formula: String = "SUM(issue_weight_sum_per_injured_person * age_weight + victim_severity_score) + medicine_urgency_score",
         ageWeights: [String: Double] = [
             "ADULT": 1.0,
             "CHILD": 1.4,
@@ -199,13 +227,77 @@ struct SOSRuleMedicalScoreConfig: Codable, Equatable {
             "CONFUSION": 2,
             "NEEDS_MEDICAL_DEVICE": 2,
             "OTHER": 1
-        ]
+        ],
+        victimSeverityScore: [String: Double] = [
+            "CRITICAL": 8,
+            "SEVERE": 5,
+            "HIGH": 5,
+            "MEDIUM": 3,
+            "MODERATE": 3,
+            "LOW": 1,
+            "MILD": 1,
+            "STABLE": 0,
+            "OTHER": 0
+        ],
+        medicineUrgencyScore: SOSRuleMedicineUrgencyScoreConfig = SOSRuleMedicineUrgencyScoreConfig()
     ) {
         self.formula = formula
         self.ageWeights = ageWeights
         self.medicalIssueSeverity = medicalIssueSeverity
+        self.victimSeverityScore = victimSeverityScore
+        self.medicineUrgencyScore = medicineUrgencyScore
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = SOSRuleMedicalScoreConfig()
+        self.formula = try container.decodeIfPresent(String.self, forKey: .formula) ?? fallback.formula
+        self.ageWeights = try container.decodeIfPresent([String: Double].self, forKey: .ageWeights) ?? fallback.ageWeights
+        self.medicalIssueSeverity = try container.decodeIfPresent([String: Double].self, forKey: .medicalIssueSeverity) ?? fallback.medicalIssueSeverity
+        self.victimSeverityScore = try container.decodeIfPresent([String: Double].self, forKey: .victimSeverityScore) ?? fallback.victimSeverityScore
+        self.medicineUrgencyScore = try container.decodeIfPresent(SOSRuleMedicineUrgencyScoreConfig.self, forKey: .medicineUrgencyScore) ?? fallback.medicineUrgencyScore
     }
 }
+
+struct SOSRuleMedicineUrgencyScoreConfig: Codable, Equatable {
+    let needsUrgentMedicineScore: Double
+    let conditionScores: [String: Double]
+    let medicalNeedScores: [String: Double]
+    let maxScore: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case needsUrgentMedicineScore = "needs_urgent_medicine_score"
+        case conditionScores = "condition_scores"
+        case medicalNeedScores = "medical_need_scores"
+        case maxScore = "max_score"
+    }
+
+    init(
+        needsUrgentMedicineScore: Double = 4,
+        conditionScores: [String: Double] = [
+            "INJURED": 1.5,
+            "CHRONIC_DISEASE": 2,
+            "HIGH_FEVER": 2,
+            "OTHER": 1
+        ],
+        medicalNeedScores: [String: Double] = [
+            "FIRST_AID": 2,
+            "COMMON_MEDICINE": 1,
+            "CHRONIC_MAINTENANCE": 2,
+            "MINOR_INJURY": 1,
+            "OXYGEN": 4,
+            "MEDICAL_DEVICE": 3,
+            "OTHER": 1
+        ],
+        maxScore: Double = 8
+    ) {
+        self.needsUrgentMedicineScore = needsUrgentMedicineScore
+        self.conditionScores = conditionScores
+        self.medicalNeedScores = medicalNeedScores
+        self.maxScore = maxScore
+    }
+}
+
 
 struct SOSRuleBlanketUrgencyConfig: Codable, Equatable {
     let applyOnlyWhenSupplySelected: Bool
@@ -290,7 +382,7 @@ struct SOSRuleVulnerabilityRawConfig: Codable, Equatable {
         case hasPregnantAny = "HAS_PREGNANT_ANY"
     }
 
-    init(childPerPerson: Double = 1, elderlyPerPerson: Double = 1, hasPregnantAny: Double = 2) {
+    init(childPerPerson: Double = 3, elderlyPerPerson: Double = 3, hasPregnantAny: Double = 4) {
         self.childPerPerson = childPerPerson
         self.elderlyPerPerson = elderlyPerPerson
         self.hasPregnantAny = hasPregnantAny
@@ -322,7 +414,7 @@ struct SOSRuleVulnerabilityScoreConfig: Codable, Equatable {
             )
         ),
         vulnerabilityRaw: SOSRuleVulnerabilityRawConfig = SOSRuleVulnerabilityRawConfig(),
-        capRatio: Double = 0.10
+        capRatio: Double = 0.50
     ) {
         self.formula = formula
         self.expression = expression
@@ -560,6 +652,7 @@ struct SOSRuleDisplayLabelsConfig: Codable, Equatable {
         requestTypes: [String: String] = [
             "RESCUE": "Cứu nạn",
             "RELIEF": "Tiếp tế",
+            "BOTH": "Cứu nạn + tiếp tế",
             "OTHER": "Khác"
         ]
     ) {
@@ -644,8 +737,9 @@ struct SOSRuleConfig: Codable, Equatable {
             "SEVERELY_BLEEDING"
         ],
         requestTypeScores: [String: Double] = [
-            "RESCUE": 30,
-            "RELIEF": 20,
+            "RESCUE": 10,
+            "RELIEF": 10,
+            "BOTH": 10,
             "OTHER": 10
         ],
         priorityScore: SOSRulePriorityScoreConfig = SOSRulePriorityScoreConfig(),
@@ -837,6 +931,36 @@ extension SOSRuleConfig {
             ?? ""
     }
 
+    nonisolated static func normalizeRequestType(_ raw: String?) -> String {
+        switch normalizeKey(raw) {
+        case "SUPPLY", "RELIEF":
+            return "RELIEF"
+        case "RESCUE", "MEDICAL", "EVACUATION":
+            return "RESCUE"
+        case "BOTH", "MIXED", "RESCUE_RELIEF", "RESCUE_AND_RELIEF":
+            return "BOTH"
+        case "":
+            return "OTHER"
+        default:
+            return "OTHER"
+        }
+    }
+
+    nonisolated static func normalizeVictimSeverity(_ raw: String?) -> String {
+        switch normalizeKey(raw) {
+        case "LIFE_THREATENING", "EMERGENCY":
+            return "CRITICAL"
+        case "SERIOUS":
+            return "SEVERE"
+        case "MODERATE":
+            return "MEDIUM"
+        case "MINOR":
+            return "LOW"
+        default:
+            return normalizeKey(raw)
+        }
+    }
+
     func ageWeight(for personType: Person.PersonType) -> Double {
         let normalizedKey = Self.normalizeKey(personType.rawValue)
         return medicalScore.ageWeights.first(where: { Self.normalizeKey($0.key) == normalizedKey })?.value
@@ -851,13 +975,37 @@ extension SOSRuleConfig {
             ?? 1.0
     }
 
+    func victimSeverityScore(for severityKey: String?) -> Double {
+        let normalizedKey = Self.normalizeVictimSeverity(severityKey)
+        guard !normalizedKey.isEmpty else { return 0 }
+        return medicalScore.victimSeverityScore.first(where: { Self.normalizeKey($0.key) == normalizedKey })?.value
+            ?? medicalScore.victimSeverityScore.first(where: { Self.normalizeKey($0.key) == "OTHER" })?.value
+            ?? 0
+    }
+
+    func medicineConditionScore(for conditionKey: String) -> Double {
+        resolveMappedScore(
+            in: medicalScore.medicineUrgencyScore.conditionScores,
+            for: conditionKey,
+            fallbackKey: "OTHER"
+        )
+    }
+
+    func medicalSupportNeedScore(for needKey: String) -> Double {
+        resolveMappedScore(
+            in: medicalScore.medicineUrgencyScore.medicalNeedScores,
+            for: needKey,
+            fallbackKey: "OTHER"
+        )
+    }
+
     func isSevereMedicalIssue(_ issueKey: String) -> Bool {
         let normalizedKey = Self.normalizeKey(issueKey)
         return medicalSevereIssues.contains { Self.normalizeKey($0) == normalizedKey }
     }
 
     func requestTypeScore(for sosType: String?) -> Double {
-        let normalizedKey = Self.normalizeKey(sosType)
+        let normalizedKey = Self.normalizeRequestType(sosType)
         return requestTypeScores.first(where: { Self.normalizeKey($0.key) == normalizedKey })?.value
             ?? requestTypeScores.first(where: { Self.normalizeKey($0.key) == "OTHER" })?.value
             ?? 0
@@ -977,12 +1125,17 @@ extension SOSRuleConfig {
         }
     }
 
-    private func resolveMappedScore(in mapping: [String: Double], for optionKey: String?) -> Double {
+    private func resolveMappedScore(
+        in mapping: [String: Double],
+        for optionKey: String?,
+        fallbackKey: String = "NOT_SELECTED"
+    ) -> Double {
         let normalizedKey = Self.normalizeKey(optionKey)
         if let value = mapping.first(where: { Self.normalizeKey($0.key) == normalizedKey })?.value {
             return value
         }
-        return mapping.first(where: { Self.normalizeKey($0.key) == "NOT_SELECTED" })?.value ?? 0
+        let normalizedFallback = Self.normalizeKey(fallbackKey)
+        return mapping.first(where: { Self.normalizeKey($0.key) == normalizedFallback })?.value ?? 0
     }
 
     private func uniqueNormalized(_ keys: some Sequence<String>, fallback: [String]) -> [String] {

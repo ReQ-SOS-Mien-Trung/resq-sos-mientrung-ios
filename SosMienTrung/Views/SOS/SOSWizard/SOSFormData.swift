@@ -54,6 +54,19 @@ enum PriorityLevel: String, Codable {
         case .p4: return .green
         }
     }
+
+    var rank: Int {
+        switch self {
+        case .p4: return 0
+        case .p3: return 1
+        case .p2: return 2
+        case .p1: return 3
+        }
+    }
+
+    func escalated(to minimum: PriorityLevel) -> PriorityLevel {
+        minimum.rank > rank ? minimum : self
+    }
 }
 
 // MARK: - Enums
@@ -319,6 +332,8 @@ enum ClothingStatus: String, Codable, CaseIterable, Identifiable {
 enum MedicalSupportNeed: String, Codable, CaseIterable, Identifiable {
     case commonMedicine = "COMMON_MEDICINE"
     case firstAid = "FIRST_AID"
+    case oxygen = "OXYGEN"
+    case medicalDevice = "MEDICAL_DEVICE"
     case chronicMaintenance = "CHRONIC_MAINTENANCE"
     case minorInjury = "MINOR_INJURY"
 
@@ -330,6 +345,10 @@ enum MedicalSupportNeed: String, Codable, CaseIterable, Identifiable {
             return "Thuốc thông dụng (hạ sốt, đau đầu, tiêu hóa...)"
         case .firstAid:
             return "Vật tư sơ cứu (băng gạc, oxy già, thuốc đỏ...)"
+        case .oxygen:
+            return "Oxy / hỗ trợ thở"
+        case .medicalDevice:
+            return "Thiết bị y tế"
         case .chronicMaintenance:
             return "Người có bệnh nền cần thuốc duy trì"
         case .minorInjury:
@@ -1020,6 +1039,34 @@ struct ReliefData: Codable, Equatable {
             self.blanketRequestCount = min(max(blanketRequestCount, 1), maxPeopleCount)
         }
     }
+
+    var hasMedicineNeedDetails: Bool {
+        needsUrgentMedicine != nil ||
+            !medicineConditions.isEmpty ||
+            medicineOtherDescription.nilIfBlank != nil ||
+            !medicalNeeds.isEmpty ||
+            medicalDescription.nilIfBlank != nil
+    }
+
+    func medicineUrgencyScore(using config: SOSRuleConfig) -> Double {
+        guard hasMedicineNeedDetails else { return 0 }
+        let rule = config.medicalScore.medicineUrgencyScore
+        var score = needsUrgentMedicine == true ? rule.needsUrgentMedicineScore : 0
+        score += medicineConditions.reduce(0) { $0 + config.medicineConditionScore(for: $1.rawValue) }
+        score += medicalNeeds.reduce(0) { $0 + config.medicalSupportNeedScore(for: $1.rawValue) }
+        return rule.maxScore > 0 ? min(score, rule.maxScore) : score
+    }
+
+    func hasUrgentMedicineNeed(using config: SOSRuleConfig, urgencyScore: Double? = nil) -> Bool {
+        guard hasMedicineNeedDetails else { return false }
+        let score = urgencyScore ?? medicineUrgencyScore(using: config)
+        return needsUrgentMedicine == true ||
+            score >= 4 ||
+            medicalNeeds.contains(.firstAid) ||
+            medicalNeeds.contains(.oxygen) ||
+            medicalNeeds.contains(.medicalDevice) ||
+            medicalNeeds.contains(.chronicMaintenance)
+    }
 }
 
 /// Dữ liệu cứu hộ (rescue)
@@ -1101,12 +1148,33 @@ struct RescueData: Codable, Equatable {
         }
         return total
     }
+
+    func victimSeverity(for personId: String, using config: SOSRuleConfig) -> String? {
+        guard injuredPersonIds.contains(personId) else { return nil }
+        let meaningfulIssues = meaningfulMedicalIssues(for: personId)
+        guard !meaningfulIssues.isEmpty else { return nil }
+        return meaningfulIssues.contains(where: { config.isSevereMedicalIssue($0) }) ? "CRITICAL" : "HIGH"
+    }
+
+    func victimSeverityScore(using config: SOSRuleConfig) -> Double {
+        injuredPersonIds.reduce(0) { total, personId in
+            total + config.victimSeverityScore(for: victimSeverity(for: personId, using: config))
+        }
+    }
+
+    func clinicalMedicalScore(using config: SOSRuleConfig) -> Double {
+        weightedMedicalScore(using: config) + victimSeverityScore(using: config)
+    }
     
     /// Medical Severe Flag: có bất kỳ issue nào isSevere
     func medicalSevere(using config: SOSRuleConfig) -> Bool {
-        medicalInfoByPerson.values.contains { info in
-            info.medicalIssues.contains { config.isSevereMedicalIssue($0) }
+        injuredPersonIds.contains { personId in
+            medicalInfoByPerson[personId]?.medicalIssues.contains { config.isSevereMedicalIssue($0) } == true
         }
+    }
+
+    func criticalSeverity(using config: SOSRuleConfig) -> Bool {
+        injuredPersonIds.contains { victimSeverity(for: $0, using: config) == "CRITICAL" }
     }
     
     /// Situation Severe Flag
@@ -1118,7 +1186,22 @@ struct RescueData: Codable, Equatable {
             return false
         }
     }
+
+    var dangerousSituation: Bool {
+        switch SOSRuleConfig.normalizeKey(situation) {
+        case "TRAPPED", "FLOODING", "COLLAPSED", "DANGER_ZONE", "CANNOT_MOVE":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func meaningfulMedicalIssues(for personId: String) -> Set<String> {
+        let issues = medicalInfoByPerson[personId]?.medicalIssues ?? []
+        return Set(issues.filter { SOSRuleConfig.normalizeKey($0) != MedicalIssue.other.rawValue })
+    }
 }
+
 
 // MARK: - Main Form Data
 
@@ -1154,6 +1237,13 @@ final class SOSFormData: ObservableObject {
         if selectedTypes.contains(.rescue) { return .rescue }
         if selectedTypes.contains(.relief) { return .relief }
         return nil
+    }
+
+    var selectedSOSTypeValue: String {
+        if needsBothSteps { return "BOTH" }
+        if needsRescueStep { return SOSType.rescue.rawValue }
+        if needsReliefStep { return SOSType.relief.rawValue }
+        return "OTHER"
     }
     
     // Số người cần hỗ trợ (shared giữa rescue và relief)
@@ -1575,8 +1665,16 @@ final class SOSFormData: ObservableObject {
             + (hasPregnantVictim ? rules.hasPregnantAny : 0)
     }
 
+    private var rescueMedicalScore: Double {
+        needsRescueStep ? rescueData.clinicalMedicalScore(using: ruleConfig) : 0
+    }
+
+    private var medicineUrgencyScore: Double {
+        needsReliefStep ? reliefData.medicineUrgencyScore(using: ruleConfig) : 0
+    }
+
     private var medicalScore: Double {
-        needsRescueStep ? rescueData.weightedMedicalScore(using: ruleConfig) : 0
+        rescueMedicalScore + medicineUrgencyScore
     }
 
     private var waterUrgencyScore: Double {
@@ -1597,12 +1695,13 @@ final class SOSFormData: ObservableObject {
             return rules.noneOrNotSelectedScore
         }
 
-        if rules.applyOnlyWhenAreBlanketsEnoughIsFalse && reliefData.areBlanketsEnough != false {
+        if rules.applyOnlyWhenAreBlanketsEnoughIsFalse && resolvedAreBlanketsEnough != false {
             return rules.noneOrNotSelectedScore
         }
 
-        let requestedCount = max(0, reliefData.blanketRequestCount ?? 0)
-        guard requestedCount > 0 else { return rules.noneOrNotSelectedScore }
+        guard let requestedCount = resolvedBlanketRequestCount, requestedCount > 0 else {
+            return rules.noneOrNotSelectedScore
+        }
         if requestedCount == 1 { return rules.requestedCountEquals1Score }
 
         let totalPeople = max(sharedPeopleCount.total, 1)
@@ -1611,6 +1710,39 @@ final class SOSFormData: ObservableObject {
         }
 
         return rules.requestedCountBetween2AndHalfPeopleScore
+    }
+
+    private var resolvedAreBlanketsEnough: Bool? {
+        if let explicit = reliefData.areBlanketsEnough {
+            return explicit
+        }
+
+        switch reliefData.blanketAvailability {
+        case .some(.none), .some(.notEnough):
+            return false
+        case .some(.enough):
+            return true
+        case .none:
+            return nil
+        }
+    }
+
+    private var resolvedBlanketRequestCount: Int? {
+        if let explicit = reliefData.blanketRequestCount {
+            return explicit
+        }
+
+        guard reliefData.supplies.contains(.blanket), resolvedAreBlanketsEnough == false else {
+            return nil
+        }
+
+        if let availability = reliefData.blanketAvailability,
+           [.none, .notEnough].contains(availability),
+           sharedPeopleCount.total > 0 {
+            return sharedPeopleCount.total
+        }
+
+        return ruleConfig.blanketRequestDefault()
     }
 
     private var clothingUrgencyScore: Double {
@@ -1646,7 +1778,7 @@ final class SOSFormData: ObservableObject {
         return waterUrgencyScore + foodUrgencyScore + blanketUrgencyScore + clothingUrgencyScore
     }
 
-    /// Vulnerability Score: CHILD +1, ELDERLY +1, có thai +2; cap = 10% supplyUrgencyScore.
+    /// Vulnerability Score mirrors BE: CHILD/ELDERLY/PREGNANT raw weights, capped by supply urgency ratio.
     var vulnerabilityScore: Double {
         guard needsReliefStep else { return 0 }
         let context: [String: Double] = [
@@ -1673,21 +1805,33 @@ final class SOSFormData: ObservableObject {
             ?? (supplyUrgencyScore + vulnerabilityScore)
     }
 
-    /// PriorityScore = (medicalScore + reliefScore) × situationMultiplier
+    var reliefPressureMultiplier: Double {
+        1 + min(0.25, max(0, reliefScore) / 80)
+    }
+
+    /// PriorityScore mirrors BE rule-base formula from SOS priority config.
     var priorityScore: Int {
+        let requestTypeScore = ruleConfig.requestTypeScore(for: selectedSOSTypeValue)
         let context: [String: Double] = [
             "MEDICAL_SCORE": medicalScore,
-            "REQUEST_TYPE_SCORE": ruleConfig.requestTypeScore(for: sosType?.rawValue),
+            "REQUEST_TYPE_SCORE": requestTypeScore,
             "SUPPLY_URGENCY_SCORE": supplyUrgencyScore,
             "VULNERABILITY_RAW": vulnerabilityRawScore,
             "CAP_RATIO": ruleConfig.reliefScore.vulnerabilityScore.capRatio,
             "VULNERABILITY_SCORE": vulnerabilityScore,
             "RELIEF_SCORE": reliefScore,
-            "SITUATION_MULTIPLIER": situationMultiplierValue
+            "SITUATION_MULTIPLIER": situationMultiplierValue,
+            "RELIEF_PRESSURE_MULTIPLIER": reliefPressureMultiplier
         ]
 
         let raw = (try? SOSExpressionEngine.evaluate(ruleConfig.priorityScore.expression, context: context))
-            ?? ((medicalScore + reliefScore) * situationMultiplierValue).rounded()
+            ?? min(
+                100,
+                (((medicalScore * 2) + (reliefScore * 1.1) + (requestTypeScore * 0.15))
+                    * situationMultiplierValue
+                    * reliefPressureMultiplier)
+                    .rounded()
+            )
         return Int(raw.rounded())
     }
     
@@ -1695,17 +1839,68 @@ final class SOSFormData: ObservableObject {
     
     /// Ngưỡng điểm cho từng mức ưu tiên
     /// Flags tổng hợp
+    var medicalSevereFlag: Bool {
+        needsRescueStep && rescueData.medicalSevere(using: ruleConfig)
+    }
+
+    var criticalSeverityFlag: Bool {
+        needsRescueStep && rescueData.criticalSeverity(using: ruleConfig)
+    }
+
+    var dangerousSituationFlag: Bool {
+        needsRescueStep && rescueData.dangerousSituation
+    }
+
+    var hasVulnerablePeople: Bool {
+        sharedPeopleCount.children > 0 || sharedPeopleCount.elderly > 0 || hasPregnantVictim
+    }
+
+    var urgentMedicineFlag: Bool {
+        needsReliefStep && reliefData.hasUrgentMedicineNeed(
+            using: ruleConfig,
+            urgencyScore: medicineUrgencyScore
+        )
+    }
+
+    var hasReliefPressure: Bool {
+        supplyUrgencyScore >= 10 || reliefScore >= 12 || resolvedAreBlanketsEnough == false
+    }
+
     var hasSevereFlag: Bool {
-        (needsRescueStep && rescueData.medicalSevere(using: ruleConfig)) || (needsRescueStep && rescueData.situationSevere)
+        medicalSevereFlag || criticalSeverityFlag || (needsRescueStep && rescueData.situationSevere)
     }
     
     /// Mức ưu tiên theo triage rule
     var priorityLevel: PriorityLevel {
         let score = priorityScore
-        if score >= ruleConfig.priorityLevel.p1Threshold && hasSevereFlag { return .p1 }
-        if score >= ruleConfig.priorityLevel.p2Threshold && hasSevereFlag { return .p2 }
-        if score >= ruleConfig.priorityLevel.p3Threshold                  { return .p3 }
-        return .p4
+        var level: PriorityLevel
+        if score >= ruleConfig.priorityLevel.p1Threshold && hasSevereFlag {
+            level = .p1
+        } else if score >= ruleConfig.priorityLevel.p2Threshold && hasSevereFlag {
+            level = .p2
+        } else if score >= ruleConfig.priorityLevel.p3Threshold {
+            level = .p3
+        } else {
+            level = .p4
+        }
+
+        if criticalSeverityFlag {
+            level = level.escalated(to: .p2)
+        }
+
+        if medicalSevereFlag && dangerousSituationFlag && hasVulnerablePeople {
+            level = level.escalated(to: .p2)
+        }
+
+        if criticalSeverityFlag && (dangerousSituationFlag || urgentMedicineFlag || hasVulnerablePeople) {
+            level = level.escalated(to: .p1)
+        }
+
+        if medicalSevereFlag && dangerousSituationFlag && hasVulnerablePeople && hasReliefPressure {
+            level = level.escalated(to: .p1)
+        }
+
+        return level
     }
 
     private func exceedsHalf(count: Int, totalPeople: Int, operatorSymbol: String) -> Bool {
@@ -2320,7 +2515,7 @@ final class SOSFormData: ObservableObject {
     /// Convert to structured JSON for server
     func toStructuredPayload() -> SOSStructuredPayload {
         SOSStructuredPayload(
-            sosType: sosType?.rawValue,
+            sosType: selectedSOSTypeValue,
             reliefData: needsReliefStep ? reliefData : nil,
             rescueData: needsRescueStep ? rescueData : nil,
             additionalDescription: packetAdditionalDescription,
@@ -2449,18 +2644,6 @@ extension SOSFormData {
         let longitude = effectiveLocation?.longitude ?? 0
         let accuracy = effectiveLocation?.accuracy
         
-        // Determine SOS type string
-        let sosTypeString: String
-        if needsBothSteps {
-            sosTypeString = "BOTH"
-        } else if needsRescueStep {
-            sosTypeString = "RESCUE"
-        } else if needsReliefStep {
-            sosTypeString = "RELIEF"
-        } else {
-            sosTypeString = "UNKNOWN"
-        }
-
         let structuredData = SOSStructuredData(
             incident: SOSIncidentData(
                 situation: needsRescueStep ? rescueData.situation : nil,
@@ -2502,7 +2685,7 @@ extension SOSFormData {
             longitude: longitude,
             accuracy: accuracy,
             address: addressToSend,
-            sosType: sosTypeString,
+            sosType: selectedSOSTypeValue,
             message: toSOSMessage(),
             structuredData: structuredData,
             // BE hiện link các nạn nhân/companions từ structured_data.victims[].person_phone.
@@ -2610,10 +2793,7 @@ extension SOSFormData {
                 : []
             let severity: String? = {
                 guard isInjured else { return nil }
-                let personIssues = rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? []
-                let meaningfulIssues = personIssues.filter { $0 != MedicalIssue.other.rawValue }
-                guard meaningfulIssues.isEmpty == false else { return nil }
-                return meaningfulIssues.contains(where: { ruleConfig.isSevereMedicalIssue($0) }) ? "CRITICAL" : "HIGH"
+                return rescueData.victimSeverity(for: person.id, using: ruleConfig)
             }()
             let resolvedName = manualSingleVictimName
                 ?? person.displayName.nilIfBlank

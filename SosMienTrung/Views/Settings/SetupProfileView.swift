@@ -66,6 +66,8 @@ struct SetupProfileView: View {
     @Binding var isSetupComplete: Bool
     @FocusState private var focusedField: Field?
     @State private var isRescuerPasswordFocused = false
+    @State private var agreedToTerms = false
+    @State private var showTermsSheet = false
     
     enum Field {
         case name, phone, password, confirmPassword, rescuerEmail, rescuerPassword, otp
@@ -408,6 +410,32 @@ struct SetupProfileView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         } else if authMode == .register {
+                            HStack(alignment: .center, spacing: DS.Spacing.sm) {
+                                Button {
+                                    agreedToTerms.toggle()
+                                } label: {
+                                    Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(agreedToTerms ? DS.Colors.accent : DS.Colors.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+
+                                HStack(spacing: 4) {
+                                    Text("Tôi đồng ý với")
+                                        .font(DS.Typography.caption)
+                                        .foregroundColor(DS.Colors.textSecondary)
+                                    Button {
+                                        showTermsSheet = true
+                                    } label: {
+                                        Text("Điều khoản sử dụng")
+                                            .font(DS.Typography.caption.bold())
+                                            .underline()
+                                            .foregroundColor(DS.Colors.accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
                             Button { sendOTP() } label: {
                                 HStack(spacing: DS.Spacing.sm) {
                                     if isLoading { ProgressView().tint(.white) }
@@ -522,6 +550,9 @@ struct SetupProfileView: View {
         .sheet(isPresented: $showOTPSheet) {
             otpVerificationSheet
         }
+        .sheet(isPresented: $showTermsSheet) {
+            SOSTermsSheet()
+        }
         .simultaneousGesture(
             TapGesture().onEnded {
                 focusedField = nil
@@ -580,7 +611,7 @@ struct SetupProfileView: View {
             return !trimmedEmail.isEmpty && trimmedEmail.contains("@") && !trimmedPass.isEmpty
         }
         if authMode == .register {
-            return isPhoneValid && isPINValid && confirmPassword == password
+            return isPhoneValid && isPINValid && confirmPassword == password && agreedToTerms
         }
         // Đăng nhập bằng PIN: cần phone + PIN hợp lệ
         return isPhoneValid && password.count == 6

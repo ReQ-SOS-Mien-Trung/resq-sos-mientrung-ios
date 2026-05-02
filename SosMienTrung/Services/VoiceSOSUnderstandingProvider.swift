@@ -1779,6 +1779,10 @@ private nonisolated func voiceSOSKeywords(for need: MedicalSupportNeed) -> [Stri
         return ["thuoc", "ha sot", "dau dau", "tieu hoa"]
     case .firstAid:
         return ["so cuu", "bang gac", "oxy gia", "thuoc do"]
+    case .oxygen:
+        return ["oxy", "thở oxy", "kho tho", "ho tro tho"]
+    case .medicalDevice:
+        return ["thiet bi y te", "may tho", "binh oxy", "may do", "ong nghe"]
     case .chronicMaintenance:
         return ["benh nen", "thuoc duy tri"]
     case .minorInjury:

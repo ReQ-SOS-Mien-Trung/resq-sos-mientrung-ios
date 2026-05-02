@@ -81,6 +81,7 @@ final class SosMienTrungTests: XCTestCase {
             activityType: "RESCUE",
             description: "Di chuyển đến 18.351, 105.902. Thực hiện cứu hộ 5 người bị ảnh hưởng bởi sạt lở đất.",
             imageUrl: nil,
+            targetVictimSummary: nil,
             priority: "High",
             estimatedTime: 2,
             sosRequestId: 3,
@@ -94,7 +95,8 @@ final class SosMienTrungTests: XCTestCase {
             missionTeamId: 3,
             assignedAt: nil,
             completedAt: nil,
-            completedBy: nil
+            completedBy: nil,
+            targetVictims: nil
         )
 
         XCTAssertTrue(activityDescriptionHasRouteInstruction(activity))
@@ -108,6 +110,7 @@ final class SosMienTrungTests: XCTestCase {
             activityType: "MEDICAL",
             description: "Thực hiện sơ cứu tại 18.351, 105.902 cho 2 người bị thương.",
             imageUrl: nil,
+            targetVictimSummary: nil,
             priority: "High",
             estimatedTime: 2,
             sosRequestId: 3,
@@ -121,7 +124,8 @@ final class SosMienTrungTests: XCTestCase {
             missionTeamId: 3,
             assignedAt: nil,
             completedAt: nil,
-            completedBy: nil
+            completedBy: nil,
+            targetVictims: nil
         )
 
         XCTAssertFalse(activityDescriptionHasRouteInstruction(activity))
@@ -351,6 +355,83 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertNil(decoded.victimInfo)
         XCTAssertEqual(decoded.reporterInfo?.userId, "user-1")
         XCTAssertEqual(decoded.isSentOnBehalf, false)
+    }
+
+    func testSOSRuleConfigFallbackMatchesBackendRuleBaseWeights() {
+        let config = SOSRuleConfig.fallback
+
+        XCTAssertTrue(config.priorityScore.useRequestTypeScore)
+        XCTAssertEqual(config.requestTypeScore(for: "BOTH"), 10)
+        XCTAssertEqual(config.requestTypeScore(for: "RESCUE"), 10)
+        XCTAssertEqual(config.requestTypeScore(for: "RELIEF"), 10)
+        XCTAssertEqual(config.reliefScore.vulnerabilityScore.vulnerabilityRaw.childPerPerson, 3)
+        XCTAssertEqual(config.reliefScore.vulnerabilityScore.vulnerabilityRaw.elderlyPerPerson, 3)
+        XCTAssertEqual(config.reliefScore.vulnerabilityScore.vulnerabilityRaw.hasPregnantAny, 4)
+        XCTAssertEqual(config.reliefScore.vulnerabilityScore.capRatio, 0.5)
+        XCTAssertEqual(config.medicalScore.victimSeverityScore["CRITICAL"], 8)
+        XCTAssertEqual(config.medicalScore.medicineUrgencyScore.maxScore, 8)
+        XCTAssertEqual(config.medicalSupportNeedScore(for: MedicalSupportNeed.firstAid.rawValue), 2)
+        XCTAssertEqual(config.medicineConditionScore(for: MedicineCondition.injured.rawValue), 1.5)
+    }
+
+    func testRuleBasedPriorityScoresCriticalMixedSOSLikeBackend() {
+        let formData = makeFormData(adults: 1, children: 1, elderly: 1)
+        formData.selectedTypes = [.rescue, .relief]
+        formData.rescueData.situation = RescueSituation.trapped.rawValue
+        formData.rescueData.hasInjured = true
+        formData.rescueData.injuredPersonIds = ["adult_1"]
+        formData.rescueData.medicalInfoByPerson["adult_1"] = PersonMedicalInfo(
+            personId: "adult_1",
+            medicalIssues: [
+                MedicalIssue.severelyBleeding.rawValue,
+                MedicalIssue.headInjury.rawValue
+            ],
+            otherDescription: ""
+        )
+        formData.reliefData.supplies = [.water, .food, .medicine, .blanket, .clothes, .other]
+        formData.reliefData.waterDuration = WaterDuration.from6to12h.rawValue
+        formData.reliefData.foodDuration = FoodDuration.from12to24h.rawValue
+        formData.reliefData.needsUrgentMedicine = true
+        formData.reliefData.medicineConditions = [.chronicDisease, .injured]
+        formData.reliefData.medicalNeeds = [.commonMedicine, .firstAid]
+        formData.reliefData.isColdOrWet = true
+        formData.reliefData.blanketAvailability = .notEnough
+        formData.reliefData.areBlanketsEnough = false
+        formData.reliefData.clothingStatus = .partiallyLacking
+        formData.reliefData.clothingPersonIds = ["child_1"]
+        formData.reliefData.clothingInfoByPerson["child_1"] = ClothingPersonInfo(
+            personId: "child_1",
+            gender: .male
+        )
+
+        XCTAssertEqual(formData.supplyUrgencyScore, 16, accuracy: 0.001)
+        XCTAssertEqual(formData.vulnerabilityScore, 6, accuracy: 0.001)
+        XCTAssertEqual(formData.reliefScore, 22, accuracy: 0.001)
+        XCTAssertEqual(formData.priorityScore, 100)
+        XCTAssertEqual(formData.priorityLevel, .p1)
+
+        let packet = formData.toSOSPacket(originIdOverride: "rule-test-device")
+        XCTAssertEqual(packet.sosType, "BOTH")
+        XCTAssertEqual(
+            packet.structuredData?.victims?.first(where: { $0.personId == "adult_1" })?.incidentStatus.severity,
+            "CRITICAL"
+        )
+    }
+
+    func testCriticalMedicalEscalatorCanPromoteBelowCriticalThreshold() {
+        let formData = makeFormData(adults: 1, children: 1)
+        formData.selectedTypes = [.rescue]
+        formData.rescueData.situation = RescueSituation.trapped.rawValue
+        formData.rescueData.hasInjured = true
+        formData.rescueData.injuredPersonIds = ["adult_1"]
+        formData.rescueData.medicalInfoByPerson["adult_1"] = PersonMedicalInfo(
+            personId: "adult_1",
+            medicalIssues: [MedicalIssue.severelyBleeding.rawValue],
+            otherDescription: ""
+        )
+
+        XCTAssertLessThan(formData.priorityScore, SOSRuleConfig.fallback.priorityLevel.p1Threshold)
+        XCTAssertEqual(formData.priorityLevel, .p1)
     }
 
     func testFormDataOtherModeSerializesVictimReporterAndLegacySender() throws {
@@ -1471,6 +1552,7 @@ final class SosMienTrungTests: XCTestCase {
             activityType: "EVACUATE",
             description: "Sample activity \(id)",
             imageUrl: nil,
+            targetVictimSummary: nil,
             priority: "High",
             estimatedTime: 15,
             sosRequestId: nil,
@@ -1484,7 +1566,8 @@ final class SosMienTrungTests: XCTestCase {
             missionTeamId: missionTeamId,
             assignedAt: nil,
             completedAt: nil,
-            completedBy: nil
+            completedBy: nil,
+            targetVictims: nil
         )
     }
 
