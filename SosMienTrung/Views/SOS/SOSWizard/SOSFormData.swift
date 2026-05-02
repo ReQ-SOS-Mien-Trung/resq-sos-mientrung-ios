@@ -39,8 +39,8 @@ enum PriorityLevel: String, Codable {
     
     var title: String {
         switch self {
-        case .p1: return "P1 – Nguy kịch"
-        case .p2: return "P2 – Cao"
+        case .p1: return "P1 – Rất nghiêm trọng"
+        case .p2: return "P2 – Nghiêm trọng"
         case .p3: return "P3 – Trung bình"
         case .p4: return "P4 – Thấp"
         }
@@ -448,7 +448,7 @@ enum VictimSeverity: String, Codable {
 
     var localized: String {
         switch self {
-        case .critical: return "Nguy kịch"
+        case .critical: return "Khẩn cấp"
         case .high: return "Cao"
         case .medium: return "Trung bình"
         case .low: return "Thấp"

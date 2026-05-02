@@ -5,29 +5,54 @@ import UIKit
 struct IncidentFormSection<Content: View>: View {
     let title: String
     var subtitle: String? = nil
+    var showDeliveredBadge: Bool = false
+    var onToggleDelivered: (() -> Void)? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(DS.Colors.text)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(DS.Colors.text)
 
-                if let subtitle, subtitle.isEmpty == false {
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(DS.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle, subtitle.isEmpty == false {
+                        Text(subtitle)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                if let toggle = onToggleDelivered {
+                    Button(action: toggle) {
+                        HStack(spacing: 4) {
+                            Image(systemName: showDeliveredBadge ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Đã giao")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(showDeliveredBadge ? .white : DS.Colors.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(showDeliveredBadge ? Color(hex: "#388E3C") : DS.Colors.borderSubtle)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .animation(.easeInOut(duration: 0.18), value: showDeliveredBadge)
                 }
             }
 
             content()
         }
+        .animation(.easeInOut(duration: 0.2), value: showDeliveredBadge)
         .padding(DS.Spacing.md)
         .sharpCard(
-            borderColor: DS.Colors.borderSubtle,
-            borderWidth: DS.Border.thin,
+            borderColor: (onToggleDelivered != nil && showDeliveredBadge) ? Color(hex: "#388E3C").opacity(0.4) : DS.Colors.borderSubtle,
+            borderWidth: (onToggleDelivered != nil && showDeliveredBadge) ? DS.Border.medium : DS.Border.thin,
             shadow: DS.Shadow.none,
             backgroundColor: DS.Colors.surface,
             radius: 16
