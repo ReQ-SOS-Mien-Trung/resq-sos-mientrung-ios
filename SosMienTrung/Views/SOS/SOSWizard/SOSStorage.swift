@@ -648,30 +648,43 @@ struct SavedSOS: Codable, Identifiable, Equatable {
 enum SOSSendStatus: String, Codable {
     case draft = "DRAFT"        // Nháp
     case pending = "PENDING"    // Đang gửi (chưa lên server)
-    case sent = "SENT"          // Đã gửi lên server
-    case delivered = "DELIVERED" // Server đã xác nhận
+    case sent = "SENT"          // Đã gửi lên server (Backend: Pending)
+    case assigned = "ASSIGNED"  // Đã được phân công (Backend: Assigned)
+    case inProgress = "IN_PROGRESS" // Đang thực hiện (Backend: InProgress)
+    case incident = "INCIDENT"  // Có sự cố phát sinh (Backend: Incident)
+    case resolved = "RESOLVED"  // Đã xử lý xong (Backend: Resolved)
+    case cancelled = "CANCELLED" // Đã hủy (Backend: Cancelled)
+    case delivered = "DELIVERED" // Server đã xác nhận (Legacy)
     case relayed = "RELAYED"    // Đang relay qua mesh
-    case resolved = "RESOLVED"  // Đã xử lý xong
+    case closed = "CLOSED"      // Đã đóng (Legacy)
     
     var title: String {
         switch self {
         case .draft: return "Nháp"
         case .pending: return "Đang gửi"
         case .sent: return "Đã gửi"
+        case .assigned: return "Đã tiếp nhận"
+        case .inProgress: return "Đang xử lý"
+        case .incident: return "Có sự cố"
+        case .resolved: return "Hoàn thành"
+        case .cancelled: return "Đã hủy"
         case .delivered: return "Đã nhận"
         case .relayed: return "Đang relay"
-        case .resolved: return "Đã xử lý"
+        case .closed: return "Đã đóng"
         }
     }
     
     var color: Color {
         switch self {
-        case .draft: return .gray
+        case .draft, .cancelled, .closed: return .gray
         case .pending: return .orange
         case .sent: return .blue
+        case .assigned: return .cyan
+        case .inProgress: return .green
+        case .incident: return .red
+        case .resolved: return Color(red: 0.2, green: 0.7, blue: 0.4)
         case .delivered: return .green
         case .relayed: return .purple
-        case .resolved: return Color(red: 0.2, green: 0.7, blue: 0.4)
         }
     }
     
@@ -680,9 +693,14 @@ enum SOSSendStatus: String, Codable {
         case .draft: return "doc"
         case .pending: return "clock.arrow.circlepath"
         case .sent: return "arrow.up.circle.fill"
+        case .assigned: return "person.badge.shield.checkmark.fill"
+        case .inProgress: return "figure.run.circle.fill"
+        case .incident: return "exclamationmark.octagon.fill"
+        case .resolved: return "checkmark.seal.fill"
+        case .cancelled: return "xmark.circle.fill"
         case .delivered: return "checkmark.circle.fill"
         case .relayed: return "antenna.radiowaves.left.and.right"
-        case .resolved: return "checkmark.seal.fill"
+        case .closed: return "lock.fill"
         }
     }
 }
@@ -880,8 +898,14 @@ struct SOSServerRecord: Decodable {
     static func mapStatus(_ raw: String?) -> SOSSendStatus {
         switch raw {
         case "Pending":                 return .sent
-        case "Approved", "InProgress":  return .delivered
-        case "Resolved", "Closed":      return .resolved
+        case "Assigned":                return .assigned
+        case "InProgress":              return .inProgress
+        case "Incident":                return .incident
+        case "Resolved":                return .resolved
+        case "Cancelled":               return .cancelled
+        // Phục vụ các giá trị cũ hoặc đặc biệt khác
+        case "Approved":                return .assigned
+        case "Closed":                  return .closed
         default:                        return .sent
         }
     }

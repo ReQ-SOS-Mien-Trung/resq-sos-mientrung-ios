@@ -190,7 +190,7 @@ struct SettingsView: View {
                         }
                         if userProfile.currentUser != nil {
                             EditorialDivider()
-                            SettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: DS.Colors.danger, title: "Đăng xuất", subtitle: authSession.session?.username ?? authSession.session?.fullName ?? userProfile.currentUser?.name ?? "Tài khoản") {
+                            SettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: DS.Colors.danger, title: "Đăng xuất", subtitle: "") {
                                 showLogoutConfirmation = true
                             }
                         }

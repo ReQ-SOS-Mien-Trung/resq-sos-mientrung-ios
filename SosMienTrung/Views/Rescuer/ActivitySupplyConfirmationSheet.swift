@@ -175,6 +175,7 @@ struct DeliveryConfirmationSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [DeliveryDraft]
+    @State private var manuallyDelivered: Set<Int> = []
     @State private var deliveryNote = ""
     @State private var proofImage: UIImage?
     @State private var isSubmittingLocal = false
@@ -195,7 +196,9 @@ struct DeliveryConfirmationSheet: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 ForEach(drafts.indices, id: \.self) { index in
                     IncidentFormSection(
-                        title: drafts[index].itemName
+                        title: drafts[index].itemName,
+                        showDeliveredBadge: manuallyDelivered.contains(index),
+                        onToggleDelivered: { toggleDelivered(at: index) }
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                             if drafts[index].bufferQuantityToDeliver > 0 {
@@ -327,6 +330,14 @@ struct DeliveryConfirmationSheet: View {
         drafts.contains { draft in
             guard let actualQuantity = parsedActualQuantity(for: draft) else { return false }
             return actualQuantity != draft.deliverableQuantity
+        }
+    }
+
+    private func toggleDelivered(at index: Int) {
+        if manuallyDelivered.contains(index) {
+            manuallyDelivered.remove(index)
+        } else {
+            manuallyDelivered.insert(index)
         }
     }
 
