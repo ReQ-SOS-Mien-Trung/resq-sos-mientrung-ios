@@ -447,10 +447,18 @@ final class ServerRequestGateway: ObservableObject {
     }
 
     private func nextRetryDate(for attempt: Int) -> Date {
-        // Tối thiểu 10 giây sau khi thất bại (lớn hơn timeout request 15s là vô nghĩa nếu < 15s)
-        // Dùng exponential: 10, 20, 40, 60, 60, ... (giây)
-        let baseDelay = max(10.0, pow(2.0, Double(attempt + 2)))
-        let delay = min(baseDelay, 60.0)
+        // [Fix #5] Retry nhanh hơn cho SOS: 3s → 6s → 12s → 24s → 48s → 60s (trần)
+        // Đợt đầu chỉ 3s để re-broadcast khi peer mới vừa secure-connection xong.
+        let delay: Double
+        switch attempt {
+        case ..<2:
+            delay = 3.0
+        case 2:
+            delay = 6.0
+        default:
+            let exp = pow(2.0, Double(attempt))
+            delay = min(exp, 60.0)
+        }
         return Date().addingTimeInterval(delay)
     }
 
@@ -467,9 +475,9 @@ final class ServerRequestGateway: ObservableObject {
             } else {
                 // Chi relay qua mesh, KHONG tang attempt (chua thuc su gui HTTP)
                 relayIfNeeded(entry.envelope, excluding: entry.lastReceiveTransport)
-                // Cho 10s co dinh roi thu relay lai
+                // [Fix #5] Cho 5s co dinh roi thu relay lai (giam tu 10s) de mesh broadcast nhanh hon
                 guard var e = pending[entry.envelope.requestId] else { continue }
-                e.nextRetryAt = Date().addingTimeInterval(10.0)
+                e.nextRetryAt = Date().addingTimeInterval(5.0)
                 pending[entry.envelope.requestId] = e
             }
         }

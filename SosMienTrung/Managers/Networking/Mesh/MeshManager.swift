@@ -23,8 +23,8 @@ final class MeshManager {
     private var heartbeatTimer: DispatchSourceTimer?
     private var isStarted = false
 
-    private let staleInterval: TimeInterval = 60
-    private let heartbeatInterval: TimeInterval = 30
+    private let staleInterval: TimeInterval = 30
+    private let heartbeatInterval: TimeInterval = 8
 
     private var state = State()
 
@@ -60,6 +60,16 @@ final class MeshManager {
 
     func currentLevel() -> Int {
         stateQueue.sync { state.myLevel }
+    }
+
+    /// Phát một heartbeat ngay lập tức (không reset chu kỳ định kỳ).
+    /// Dùng khi vừa có peer mới kết nối / vừa establish secure connection,
+    /// để bảng định tuyến được populate sớm thay vì chờ tick tiếp theo.
+    func kickHeartbeatNow() {
+        guard isStarted else { return }
+        heartbeatQueue.async { [weak self] in
+            self?.sendHeartbeat()
+        }
     }
 
     func processHeartbeat(payload: HeartbeatPayload, rssi: Int) {

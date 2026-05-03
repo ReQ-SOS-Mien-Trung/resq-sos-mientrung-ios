@@ -124,7 +124,28 @@ struct MessageBubble: View {
     let message: Message
     @State private var showMap = false
     @EnvironmentObject var bridgefyManager: BridgefyNetworkManager
-    
+
+    /// Tin có nền tối (đỏ SOS hoặc cam của mình) ⇒ chữ sáng. Tin nhận thường ⇒ chữ tối.
+    private var usesLightForeground: Bool {
+        message.isFromMe || message.type == .sosLocation
+    }
+
+    private var primaryTextColor: Color {
+        usesLightForeground ? .white : DS.Colors.text
+    }
+
+    private var secondaryTextColor: Color {
+        usesLightForeground ? .white.opacity(0.8) : DS.Colors.textSecondary
+    }
+
+    private var dividerColor: Color {
+        usesLightForeground ? .white.opacity(0.3) : DS.Colors.border
+    }
+
+    private var mapButtonBackground: Color {
+        usesLightForeground ? Color.white.opacity(0.2) : DS.Colors.accent.opacity(0.12)
+    }
+
     var body: some View {
         HStack {
             if message.isFromMe {
@@ -141,10 +162,10 @@ struct MessageBubble: View {
                 
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text(message.text)
-                        .foregroundColor(.white)
+                        .foregroundColor(primaryTextColor)
 
                     if message.hasLocation, let lat = message.latitude, let long = message.longitude {
-                        EditorialDivider(color: .white.opacity(0.3))
+                        EditorialDivider(color: dividerColor)
 
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
@@ -152,7 +173,7 @@ struct MessageBubble: View {
                             Text(String(format: "%.6f, %.6f", lat, long))
                                 .font(.system(.caption, design: .monospaced))
                         }
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(secondaryTextColor)
 
                         Button { showMap = true } label: {
                             HStack(spacing: 4) {
@@ -160,14 +181,15 @@ struct MessageBubble: View {
                                 Text("Xem bản đồ")
                             }
                             .font(.caption.weight(.bold))
+                            .foregroundColor(primaryTextColor)
                             .padding(6)
-                            .background(Color.white.opacity(0.2))
+                            .background(mapButtonBackground)
                         }
                     }
                 }
                 .padding(DS.Spacing.sm)
                 .background(message.type == .sosLocation ? DS.Colors.danger : (message.isFromMe ? DS.Colors.accent : DS.Colors.surface))
-                .foregroundColor(message.isFromMe || message.type == .sosLocation ? .white : DS.Colors.text)
+                .foregroundColor(primaryTextColor)
                 .overlay(Rectangle().stroke(DS.Colors.border, lineWidth: DS.Border.thin))
                 
                 // Just show time, no status
