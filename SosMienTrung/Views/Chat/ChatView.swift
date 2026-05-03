@@ -4,7 +4,7 @@ import MapKit
 struct ChatView: View {
     @ObservedObject var bridgefyManager: BridgefyNetworkManager
     @State private var messageText = ""
-    @State private var showSOSForm = false
+    @State private var showSosPicker = false
     @FocusState private var isTextFieldFocused: Bool
 
     var generalMessages: [Message] {
@@ -78,7 +78,7 @@ struct ChatView: View {
                 HStack(spacing: DS.Spacing.sm) {
                     Button {
                         isTextFieldFocused = false
-                        showSOSForm = true
+                        showSosPicker = true
                     } label: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 18, weight: .bold))
@@ -105,8 +105,8 @@ struct ChatView: View {
                 .overlay(Rectangle().frame(height: DS.Border.thin).foregroundColor(DS.Colors.border), alignment: .top)
             }
             .background(DS.Colors.background)
-        .fullScreenCover(isPresented: $showSOSForm) {
-            SOSFormView(bridgefyManager: bridgefyManager)
+        .sheet(isPresented: $showSosPicker) {
+            GeneralChatSosPickerView(bridgefyManager: bridgefyManager)
         }
     }
 
@@ -117,6 +117,220 @@ struct ChatView: View {
         bridgefyManager.sendBroadcastMessage(trimmedText)
         messageText = ""
         isTextFieldFocused = false
+    }
+}
+
+private struct GeneralChatSosPickerView: View {
+    @ObservedObject var bridgefyManager: BridgefyNetworkManager
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var sosRequests: [SosRequestDto] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if sosRequests.isEmpty {
+                    emptyState
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: DS.Spacing.sm) {
+                            ForEach(sosRequests) { sos in
+                                Button {
+                                    share(sos)
+                                } label: {
+                                    GeneralChatSosPickerRow(sos: sos)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(DS.Spacing.md)
+                    }
+                }
+            }
+            .background(DS.Colors.background)
+            .navigationTitle("Chọn SOS đã gửi")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+            .task {
+                await loadSOSRequests()
+            }
+            .alert("Không thể gửi SOS vào chat", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: DS.Spacing.sm) {
+            Image(systemName: "tray")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(DS.Colors.textTertiary)
+
+            Text("Chưa có SOS đã gửi")
+                .font(DS.Typography.headline)
+                .foregroundColor(DS.Colors.text)
+
+            Text("Sau khi tạo SOS, bạn có thể quay lại đây để chọn và gửi vào Trò chuyện tổng.")
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, DS.Spacing.md)
+
+            Button {
+                Task { await loadSOSRequests() }
+            } label: {
+                Label("Tải lại", systemImage: "arrow.clockwise")
+                    .font(DS.Typography.subheadline.weight(.semibold))
+            }
+            .padding(.top, DS.Spacing.xs)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(DS.Spacing.lg)
+    }
+
+    @MainActor
+    private func loadSOSRequests() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        guard let records = await APIService.shared.fetchMySOS() else {
+            sosRequests = []
+            errorMessage = "Không tải được danh sách SOS đã gửi."
+            return
+        }
+
+        sosRequests = records
+            .map(Self.mapServerSOSRecord)
+            .sorted { lhs, rhs in
+                if let leftDate = Self.parseServerDate(lhs.createdAt),
+                   let rightDate = Self.parseServerDate(rhs.createdAt) {
+                    return leftDate > rightDate
+                }
+                return lhs.id > rhs.id
+            }
+    }
+
+    private func share(_ sos: SosRequestDto) {
+        guard bridgefyManager.sendSosRequestToGeneralChat(sos) else {
+            errorMessage = "Bridgefy chưa sẵn sàng hoặc chưa có thông tin người dùng."
+            return
+        }
+        dismiss()
+    }
+
+    private static func mapServerSOSRecord(_ record: SOSServerRecord) -> SosRequestDto {
+        SosRequestDto(
+            id: record.id,
+            sosType: record.sosType,
+            msg: record.rawMessage,
+            status: record.status ?? "Pending",
+            priorityLevel: record.priorityLevel,
+            waitTimeMinutes: record.waitTimeMinutes,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            createdAt: record.createdAt
+        )
+    }
+
+    private static func parseServerDate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        return ISO8601DateFormatter().date(from: raw)
+    }
+}
+
+private struct GeneralChatSosPickerRow: View {
+    let sos: SosRequestDto
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            HStack(alignment: .top, spacing: DS.Spacing.sm) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xxxs) {
+                    Text("SOS #\(sos.id)")
+                        .font(DS.Typography.headline.monospacedDigit())
+                        .foregroundColor(DS.Colors.text)
+
+                    if let type = SosDisplayFormatter.localizedType(sos.sosType) {
+                        Text(type)
+                            .font(DS.Typography.caption)
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+                }
+
+                Spacer(minLength: DS.Spacing.sm)
+
+                statusBadge
+            }
+
+            Text(sos.msg)
+                .font(DS.Typography.subheadline)
+                .foregroundColor(DS.Colors.textSecondary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            HStack(spacing: DS.Spacing.xs) {
+                if let priority = SosDisplayFormatter.localizedPriority(sos.priorityLevel) {
+                    metadataPill(icon: "flag.fill", text: priority)
+                }
+
+                if let latitude = sos.latitude, let longitude = sos.longitude {
+                    metadataPill(
+                        icon: "location.fill",
+                        text: String(format: "%.4f, %.4f", latitude, longitude)
+                    )
+                }
+            }
+        }
+        .padding(DS.Spacing.sm)
+        .sharpCard(shadow: DS.Shadow.small, backgroundColor: DS.Colors.surface, radius: DS.Radius.md)
+    }
+
+    private var statusBadge: some View {
+        Text(SosDisplayFormatter.localizedStatus(sos.status))
+            .font(DS.Typography.caption.weight(.bold))
+            .foregroundColor(statusColor)
+            .padding(.horizontal, DS.Spacing.xs)
+            .padding(.vertical, DS.Spacing.xxxs)
+            .overlay(Rectangle().stroke(statusColor.opacity(0.45), lineWidth: DS.Border.thin))
+    }
+
+    private var statusColor: Color {
+        switch SosDisplayFormatter.normalizedKey(sos.status) {
+        case "pending", "waiting", "queued", "new":
+            return DS.Colors.warning
+        case "approved", "accepted", "assigned", "inprogress", "ongoing", "processing":
+            return DS.Colors.info
+        case "resolved", "closed", "completed", "done":
+            return DS.Colors.success
+        case "rejected", "declined", "cancelled", "canceled", "cancel":
+            return DS.Colors.danger
+        default:
+            return DS.Colors.textSecondary
+        }
+    }
+
+    private func metadataPill(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .lineLimit(1)
+        }
+        .font(DS.Typography.caption)
+        .foregroundColor(DS.Colors.textSecondary)
     }
 }
 

@@ -36,6 +36,9 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     private let lifecycleQueue = DispatchQueue(label: "bridgefy.lifecycle.state")
     private var isStartInProgress = false
     private var pendingPauseAfterStart = false
+    /// True nếu đang trong quá trình soft-restart: bridgefy.stop() đã gọi và đang chờ bridgefyDidStop
+    /// để tự động start() lại (dùng khi app foreground sau background để fresh BLE link).
+    private var pendingRestartAfterStop = false
     
     /// Get current Bridgefy user ID
     var currentUserId: UUID? {
@@ -175,6 +178,52 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         #endif
     }
 
+    /// Buộc tái khởi tạo Bridgefy: stop() → chờ bridgefyDidStop → nil instance → start() lại.
+    /// Dùng khi app foreground sau background để reset BLE central/peripheral –
+    /// khắc phục tình trạng "Bridgefy already started" nhưng link BLE đã chết do iOS suspend.
+    func softRestart() {
+        #if targetEnvironment(simulator)
+        return
+        #else
+        let (paused, currentlyStarting) = lifecycleQueue.sync {
+            (!pauseReasons.isEmpty, isStartInProgress)
+        }
+        guard !paused else {
+            print("⏸ Bridgefy softRestart skipped (paused)")
+            return
+        }
+        guard !isIdentityDisabled else {
+            print("ℹ️ Bridgefy softRestart skipped (identity disabled)")
+            return
+        }
+        if currentlyStarting {
+            print("⏳ Bridgefy softRestart skipped (start in progress)")
+            return
+        }
+        if pendingRestartAfterStop {
+            print("⏳ Bridgefy softRestart already in progress")
+            return
+        }
+
+        if let bridgefy = self.bridgefy {
+            print("🔄 Bridgefy soft restart: stopping current instance to refresh BLE...")
+            pendingRestartAfterStop = true
+            bridgefy.stop()
+            // Safety timeout: nếu bridgefyDidStop không fire trong 3s, force restart
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                guard let self = self, self.pendingRestartAfterStop else { return }
+                print("⚠️ Bridgefy didStop did not fire within 3s – forcing restart")
+                self.pendingRestartAfterStop = false
+                self.bridgefy = nil
+                self.start()
+            }
+        } else {
+            print("🔄 Bridgefy soft restart: no live instance, starting fresh...")
+            start()
+        }
+        #endif
+    }
+
     var isPaused: Bool {
         lifecycleQueue.sync { !pauseReasons.isEmpty }
     }
@@ -249,6 +298,82 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         } catch {
             print("❌ Bridgefy send failed: \(error.localizedDescription)")
         }
+    }
+
+    @discardableResult
+    func sendSosRequestToGeneralChat(_ sos: SosRequestDto) -> Bool {
+        guard let bridgefy, let sender = bridgefy.currentUserId else {
+            print("Bridgefy not started or missing userId")
+            return false
+        }
+
+        guard let currentUser = UserProfile.shared.currentUser else {
+            print("User profile not set")
+            return false
+        }
+
+        let messageId = UUID()
+        let timestamp = Date()
+        let text = Self.generalChatText(for: sos)
+        let payload = MessagePayload(
+            type: .sosLocation,
+            text: text,
+            messageId: messageId,
+            timestamp: timestamp,
+            senderId: sender,
+            senderName: currentUser.name,
+            senderPhone: currentUser.phoneNumber,
+            latitude: sos.latitude,
+            longitude: sos.longitude
+        )
+
+        do {
+            let data = try JSONEncoder().encode(payload)
+            _ = try bridgefy.send(data, using: .broadcast(senderId: sender))
+
+            let message = Message(
+                id: messageId,
+                type: .sosLocation,
+                text: text,
+                senderId: sender,
+                isFromMe: true,
+                timestamp: timestamp,
+                senderName: currentUser.name,
+                senderPhone: currentUser.phoneNumber,
+                latitude: sos.latitude,
+                longitude: sos.longitude
+            )
+            messages.append(message)
+            objectWillChange.send()
+            print("📤 Shared SOS #\(sos.id) to general chat")
+            return true
+        } catch {
+            print("❌ Bridgefy SOS share failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private static func generalChatText(for sos: SosRequestDto) -> String {
+        var header = "SOS #\(sos.id)"
+        if let type = SosDisplayFormatter.localizedType(sos.sosType) {
+            header += " • \(type)"
+        }
+
+        var lines = [
+            header,
+            "Trạng thái: \(SosDisplayFormatter.localizedStatus(sos.status))"
+        ]
+
+        if let priority = SosDisplayFormatter.localizedPriority(sos.priorityLevel) {
+            lines.append("Mức ưu tiên: \(priority)")
+        }
+
+        let summary = sos.msg.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !summary.isEmpty {
+            lines.append(summary)
+        }
+
+        return lines.joined(separator: "\n")
     }
     
     // Send direct message to specific user
@@ -386,9 +511,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         guard let coords = locationManager.coordinates else {
             print("Location not available")
-            await MainActor.run {
-                sendBroadcastMessage(text)
-            }
             return
         }
 
@@ -410,15 +532,19 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         // Gửi qua ServerRequestGateway (tự upload hoặc relay)
         ServerRequestGateway.shared.submitSOSBasic(sosPacket)
 
-        // Luôn broadcast qua mesh network (để các device khác có thể relay)
+        // Broadcast qua mesh network để các device khác có thể relay; không tự đưa vào chat tổng.
         await MainActor.run {
             broadcastSOSPacket(sosPacket, originalMessage: text, timestamp: timestamp)
         }
     }
     
     /// Gửi SOS với structured data từ Wizard form
+    /// - Parameters:
+    ///   - formData: Dữ liệu form SOS
+    ///   - reusePacketId: Nếu khác nil, dùng lại packetId cõ (cho luồng resend) và KHÔNG tạo entry SavedSOS mới.
+    ///     Entry cũ sẽ được cập nhật status/event trực tiếp vì id == packetId.
     /// - Returns: `true` nếu gửi thành công lên server, `false` nếu chỉ relay qua mesh
-    func sendStructuredSOS(_ formData: SOSFormData) async -> Bool {
+    func sendStructuredSOS(_ formData: SOSFormData, reusePacketId: String? = nil) async -> Bool {
         guard UserProfile.shared.currentUser != nil else {
             print("⚠️ [SOS] User profile not set")
             return false
@@ -440,25 +566,37 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         let timestamp = Date()
 
-        // Tạo Enhanced SOS Packet
-        let enhancedPacket = SOSPacketEnhanced(
-            from: formData,
-            originId: sender,
-            latitude: latitude,
-            longitude: longitude
-        )
+        // Tạo Enhanced SOS Packet — nếu resend thì dùng lại packetId cũ để cuối cùng status update trúng entry cũ.
+        let enhancedPacket: SOSPacketEnhanced
+        if let reusePacketId = reusePacketId {
+            let packet = formData.toSOSPacket(
+                originIdOverride: sender,
+                packetIdOverride: reusePacketId,
+                timestampOverride: timestamp
+            )
+            enhancedPacket = SOSPacketEnhanced(packet: packet, priorityScore: formData.priorityScore)
+        } else {
+            enhancedPacket = SOSPacketEnhanced(
+                from: formData,
+                originId: sender,
+                latitude: latitude,
+                longitude: longitude
+            )
+        }
 
         // Convert to basic packet for mesh relay compatibility
         let sosPacket = enhancedPacket.toBasicPacket()
 
-        // 📦 Lưu SOS vào storage
-        await MainActor.run {
-            SOSStorageManager.shared.saveSOS(
-                formData,
-                packetId: sosPacket.packetId,
-                latitude: latitude,
-                longitude: longitude
-            )
+        // 📦 Lưu SOS vào storage — chỉ tạo entry mới khi KHÔNG phải resend
+        if reusePacketId == nil {
+            await MainActor.run {
+                SOSStorageManager.shared.saveSOS(
+                    formData,
+                    packetId: sosPacket.packetId,
+                    latitude: latitude,
+                    longitude: longitude
+                )
+            }
         }
 
         // Thử gửi thẳng lên server nếu có mạng
@@ -525,17 +663,14 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         }
 
         // [Fix #6] Bỏ duplicate broadcast: khi !serverReached, Gateway đã broadcast envelope .serverRequest (chứa enhanced).
-        // Chỉ append message local + xử lý các trường hợp đặc biệt:
+        // Không tự append vào chat tổng; chỉ xử lý các trường hợp transport:
         //   - serverReached: phát thêm envelope .serverRequest cho peer biết
         //   - Bridgefy chưa sẵn sàng: enqueue vào pendingSOSBroadcasts
         let meshMessage = formData.toSOSMessage()
         if bridgefy != nil && bridgefy?.currentUserId != nil {
             await MainActor.run {
-                // Hiển thị message local trong chat
-                appendLocalSOSMessage(sosPacket: sosPacket, originalMessage: meshMessage, timestamp: timestamp)
-
                 if serverReached {
-                    // Server đã ack: vẫn broadcast envelope qua mesh để các peer hiển thị / biết SOS
+                    // Server đã ack: vẫn broadcast envelope qua mesh để peer biết/relay, không tạo bubble chat.
                     let envelope = ServerRequestEnvelope.enhancedSOS(enhancedPacket)
                     sendServerRequest(envelope)
                 } else {
@@ -573,9 +708,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
     /// Broadcast SOS packet qua mesh network
     private func broadcastSOSPacket(_ sosPacket: SOSPacket, originalMessage: String, timestamp: Date) {
-        // Luôn append message local để hiển thị trong chat (kể cả khi chưa gửi được)
-        appendLocalSOSMessage(sosPacket: sosPacket, originalMessage: originalMessage, timestamp: timestamp)
-
         guard let bridgefy, let sender = bridgefy.currentUserId else {
             // Bridgefy chưa sẵn sàng → enqueue để retry sau
             enqueuePendingSOSBroadcast(sosPacket: sosPacket, message: originalMessage, timestamp: timestamp)
@@ -598,37 +730,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             // [Fix #4] Send fail (vd: chưa secure connection) ⇒ enqueue để retry
             print("❌ Failed to broadcast SOS: \(error.localizedDescription) – enqueue retry")
             enqueuePendingSOSBroadcast(sosPacket: sosPacket, message: originalMessage, timestamp: timestamp)
-        }
-    }
-
-    /// Helper: chỉ append local message (dùng cho cả broadcastSOSPacket và sendStructuredSOS path mới)
-    private func appendLocalSOSMessage(sosPacket: SOSPacket, originalMessage: String, timestamp: Date) {
-        guard let bridgefy, let sender = bridgefy.currentUserId else { return }
-        guard let currentUser = UserProfile.shared.currentUser else { return }
-
-        let messageId = UUID(uuidString: sosPacket.packetId) ?? UUID()
-        let locParts = sosPacket.loc.split(separator: ",")
-        let lat = Double(locParts.first ?? "0") ?? 0
-        let long = Double(locParts.last ?? "0") ?? 0
-
-        let message = Message(
-            id: messageId,
-            type: .sosLocation,
-            text: originalMessage,
-            senderId: sender,
-            isFromMe: true,
-            timestamp: timestamp,
-            senderName: currentUser.name,
-            senderPhone: currentUser.phoneNumber,
-            latitude: lat,
-            longitude: long
-        )
-
-        DispatchQueue.main.async {
-            if !self.messages.contains(where: { $0.id == message.id }) {
-                self.messages.append(message)
-                self.objectWillChange.send()
-            }
         }
     }
 
@@ -779,6 +880,22 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             pendingPauseAfterStart = false
         }
         MeshManager.shared.stop()
+
+        // Nếu đang trong soft-restart → nil instance và start() lại
+        if pendingRestartAfterStop {
+            pendingRestartAfterStop = false
+            bridgefy = nil
+            DispatchQueue.main.async { [weak self] in
+                self?.connectedUsers.removeAll()
+                self?.connectedUsersList.removeAll()
+            }
+            print("🔄 Bridgefy stopped → restarting fresh instance...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.start()
+            }
+            return
+        }
+
         if isPaused {
             print("⏸ Bridgefy stopped (paused by app)")
         } else {
@@ -889,19 +1006,10 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             if let sosPacket = meshPayload.sosPacket {
                 print("📨 Received SOS relay packet via \(transmissionMode)")
                 handleReceivedSOSPacket(sosPacket)
-
-                // Cũng hiển thị như message trong chat
-                displaySOSPacketAsMessage(sosPacket)
             }
 
         case .serverRequest:
             if let request = meshPayload.serverRequest {
-                // [Fix #6] Hiển thị SOS trong chat của peer (vì sendStructuredSOS không còn broadcast .sosRelay riêng)
-                if let basic = request.sosPacket {
-                    displaySOSPacketAsMessage(basic)
-                } else if let enhanced = request.sosEnhanced {
-                    displaySOSPacketAsMessage(enhanced.toBasicPacket())
-                }
                 ServerRequestGateway.shared.handleIncomingRequest(request, transport: .bridgefyMesh)
             }
 
@@ -914,36 +1022,6 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
             // Các loại message thường - dùng chatPayload
             if let payload = meshPayload.chatPayload {
                 handleLegacyPayload(payload, messageId: messageId, transmissionMode: transmissionMode)
-            }
-        }
-    }
-
-    private func displaySOSPacketAsMessage(_ sosPacket: SOSPacket) {
-        let locParts = sosPacket.loc.split(separator: ",")
-        let lat = Double(locParts.first ?? "0") ?? 0
-        let long = Double(locParts.last ?? "0") ?? 0
-
-        let packetMessageId = UUID(uuidString: sosPacket.packetId) ?? UUID()
-        let originId = UUID(uuidString: sosPacket.originId) ?? UUID()
-
-        let message = Message(
-            id: packetMessageId,
-            type: .sosLocation,
-            text: sosPacket.msg,
-            senderId: originId,
-            isFromMe: false,
-            timestamp: Date(timeIntervalSince1970: TimeInterval(sosPacket.ts)),
-            senderName: "SOS từ \(sosPacket.originId.prefix(8))...",
-            senderPhone: "",
-            latitude: lat,
-            longitude: long
-        )
-
-        DispatchQueue.main.async {
-            if !self.messages.contains(where: { $0.id == message.id }) {
-                self.messages.append(message)
-                self.objectWillChange.send()
-                print("⚠️ SOS Location received: \(lat), \(long)")
             }
         }
     }

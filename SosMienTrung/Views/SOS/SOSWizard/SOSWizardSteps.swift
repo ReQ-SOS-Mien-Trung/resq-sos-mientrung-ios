@@ -1574,6 +1574,7 @@ struct Step2AReliefView: View {
 struct Step2BRescueView: View {
     @ObservedObject var formData: SOSFormData
     @State private var selectedPersonForMedical: Person? = nil
+    @State private var isShowingMedicalForm = false
     
     var body: some View {
         ScrollView {
@@ -1602,11 +1603,11 @@ struct Step2BRescueView: View {
                 }
                 .padding(.top, 20)
                 
-                // Section 1: Ai bị thương? (hiển thị sẵn)
+                // Section 1: Ai cần cứu? (hiển thị sẵn)
                 if !formData.sharedPeople.isEmpty {
                     InjuredPersonSelectionSection(
                         formData: formData,
-                        selectedPersonForMedical: $selectedPersonForMedical
+                        onOpenMedicalForm: presentMedicalForm
                     )
                 }
                 
@@ -1626,13 +1627,32 @@ struct Step2BRescueView: View {
             // Mặc định set hasInjured = true để hiển thị danh sách người
             formData.rescueData.hasInjured = true
         }
-        .sheet(item: $selectedPersonForMedical) { person in
-            PersonMedicalFormSheet(
-                person: person,
-                formData: formData,
-                onDismiss: { selectedPersonForMedical = nil }
-            )
+        .sheet(isPresented: $isShowingMedicalForm, onDismiss: {
+            selectedPersonForMedical = nil
+        }) {
+            Group {
+                if let person = selectedPersonForMedical {
+                    PersonMedicalFormSheet(
+                        person: person,
+                        formData: formData,
+                        onDismiss: dismissMedicalForm
+                    )
+                }
+            }
         }
+    }
+
+    private func presentMedicalForm(for person: Person) {
+        selectedPersonForMedical = formData.person(for: person.id) ?? person
+        // Defer presentation until the injured-row layout update has committed.
+        DispatchQueue.main.async {
+            isShowingMedicalForm = true
+        }
+    }
+
+    private func dismissMedicalForm() {
+        isShowingMedicalForm = false
+        selectedPersonForMedical = nil
     }
 }
 
@@ -1806,13 +1826,13 @@ struct InjuredQuestionSection: View {
 
 struct InjuredPersonSelectionSection: View {
     @ObservedObject var formData: SOSFormData
-    @Binding var selectedPersonForMedical: Person?
+    let onOpenMedicalForm: (Person) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SharedPersonSelectionSection(
                 iconName: "hand.point.up.left.fill",
-                title: "Ai bị thương?",
+                title: "Ai cần cứu?",
                 subtitle: "Chọn người bị thương, sau đó nhập tình trạng y tế",
                 people: formData.sharedPeople
             ) { person in
@@ -1825,7 +1845,7 @@ struct InjuredPersonSelectionSection: View {
                         togglePersonInjured(person)
                     },
                     onEditMedical: {
-                        selectedPersonForMedical = person
+                        onOpenMedicalForm(person)
                     }
                 )
             }
@@ -1856,7 +1876,7 @@ struct InjuredPersonSelectionSection: View {
         } else {
             formData.rescueData.injuredPersonIds.insert(person.id)
             // Mở form y tế ngay
-            selectedPersonForMedical = person
+            onOpenMedicalForm(person)
         }
         // Reset nếu tất cả đều bị thương
         if formData.rescueData.injuredPersonIds.count >= formData.sharedPeople.count {

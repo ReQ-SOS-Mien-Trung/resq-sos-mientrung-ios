@@ -70,15 +70,17 @@ struct SOSDetailView: View {
                         } label: {
                             Label("Chỉnh sửa", systemImage: "pencil")
                         }
-                        
-                        Button {
-                            showResendConfirm = true
-                        } label: {
-                            Label("Gửi lại", systemImage: "arrow.clockwise")
+
+                        if canResend {
+                            Button {
+                                showResendConfirm = true
+                            } label: {
+                                Label("Gửi lại", systemImage: "arrow.clockwise")
+                            }
                         }
-                        
+
                         Divider()
-                        
+
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
@@ -930,19 +932,33 @@ struct SOSDetailView: View {
         }
     }
     
+    /// SOS đã thực sự đến server (hoặc đã đóng/hủy) ⇒ không cho gửi lại.
+    /// Cho phép gửi lại: draft / pending (chưa gửi xong) / relayed (đang nhờ mesh).
+    private var canResend: Bool {
+        switch currentSOS.status {
+        case .draft, .pending, .relayed:
+            return true
+        case .sent, .delivered, .assigned, .inProgress, .incident, .resolved, .cancelled, .closed:
+            return false
+        }
+    }
+
     private func resendSOS() {
         isSending = true
-        
+
         // Ghi sự kiện đang thử gửi lại
         SOSStorageManager.shared.addSendEvent(
             id: currentSOS.id,
             event: SOSSendEvent(type: .pendingRetry, note: "Người dùng yêu cầu gửi lại")
         )
-        
+
         let formData = currentSOS.toFormData()
-        
+        let reuseId = currentSOS.id
+
         Task {
-            let success = await bridgefyManager.sendStructuredSOS(formData)
+            // Tái sử dụng packetId cũ ⇒ không tạo entry SavedSOS mới,
+            // status update sẽ đi vào đúng entry đang xem.
+            let success = await bridgefyManager.sendStructuredSOS(formData, reusePacketId: reuseId)
             await MainActor.run {
                 isSending = false
                 // Không dismiss – người dùng có thể xem lịch sử cập nhật
@@ -1083,19 +1099,26 @@ struct SOSEditView: View {
     
     private func sendUpdatedSOS() {
         isSending = true
-        
+
         Task {
             let didSyncDirectly = await performDirectVictimUpdateIfPossible()
 
             if !didSyncDirectly {
-                _ = await bridgefyManager.sendStructuredSOS(formData)
+                // Tái sử dụng packetId cũ ⇒ KHÔNG tạo entry SavedSOS mới khi gửi lại sau chỉnh sửa.
+                _ = await bridgefyManager.sendStructuredSOS(formData, reusePacketId: savedSOS.id)
 
+                // Cập nhật field từ form mới, nhưng giữ status / sendHistory / serverSosRequestId
+                // mà sendStructuredSOS vừa cập nhật trong storage.
                 var updated = updatedLocalSnapshot()
-                updated.status = .pending
+                if let latest = SOSStorageManager.shared.getSOS(id: savedSOS.id) {
+                    updated.status = latest.status
+                    updated.sendHistory = latest.sendHistory
+                    updated.serverSosRequestId = latest.serverSosRequestId
+                }
                 SOSStorageManager.shared.updateSOS(updated)
                 SOSStorageManager.shared.addSendEvent(
                     id: savedSOS.id,
-                    event: SOSSendEvent(type: .pendingRetry, note: "Đã chỉnh sửa nội dung và gửi lại như SOS mới")
+                    event: SOSSendEvent(type: .pendingRetry, note: "Đã chỉnh sửa nội dung và gửi lại")
                 )
             }
 

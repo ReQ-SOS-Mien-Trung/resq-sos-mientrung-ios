@@ -15,6 +15,9 @@ struct ContentView: View {
     @State private var selectedPeer: MCPeerID?
     @State private var isSetupComplete = false
     @State private var lastObservedAuthSession: AuthSession? = AuthSessionStore.shared.session
+    /// Cờ đánh dấu app đã từng vào background — dùng để trigger softRestart Bridgefy
+    /// khi quay lại foreground (khắc phục BLE link bị iOS đông băng ở background).
+    @State private var didEnterBackgroundOnce = false
     
     init() {
         let manager = NearbyInteractionManager()
@@ -137,10 +140,22 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { newPhase in
-                guard newPhase == .active else { return }
-                guard isFullyAuthenticated else { return }
-                MissionActivitySyncStore.shared.triggerDeferredSync(reason: .appDidBecomeActive)
-                refreshAuthenticatedAccess(force: true)
+                switch newPhase {
+                case .background:
+                    didEnterBackgroundOnce = true
+                case .active:
+                    guard isFullyAuthenticated else { return }
+                    MissionActivitySyncStore.shared.triggerDeferredSync(reason: .appDidBecomeActive)
+                    refreshAuthenticatedAccess(force: true)
+                    if didEnterBackgroundOnce {
+                        didEnterBackgroundOnce = false
+                        // Buộc Bridgefy reset BLE central/peripheral để tránh phantom-connected
+                        // sau khi iOS suspend BLE ở background.
+                        bridgefyManager.softRestart()
+                    }
+                default:
+                    break
+                }
             }
     }
 
