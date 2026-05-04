@@ -21,6 +21,7 @@ struct MissionDetailView: View {
     let mission: Mission
     @StateObject private var vm = RescuerMissionViewModel()
     @StateObject private var incidentVM = IncidentViewModel()
+    @StateObject private var missionRealtime = MissionRealtimeService()
     @ObservedObject private var authSession = AuthSessionStore.shared
     @State private var showReportIncident = false
     @State private var showMissionReport = false
@@ -311,6 +312,10 @@ struct MissionDetailView: View {
         .onAppear {
             guard canViewMissionWorkspace else { return }
             refreshMissionWorkspace()
+            startMissionRealtime()
+        }
+        .onDisappear {
+            missionRealtime.disconnect()
         }
     }
 
@@ -1033,6 +1038,25 @@ struct MissionDetailView: View {
         loadMissionDetail()
         vm.loadActivities(missionId: activeMission.id)
         incidentVM.loadIncidents(missionId: activeMission.id)
+    }
+
+    private func startMissionRealtime() {
+        missionRealtime.onMissionUpdate = { payload in
+            if let status = payload.status {
+                missionStatus = status
+            }
+            loadMissionDetail()
+        }
+
+        missionRealtime.onActivityStatusUpdate = { update in
+            vm.applyRealtimeActivityStatus(update)
+        }
+
+        missionRealtime.onRefreshRecommended = {
+            vm.loadActivities(missionId: mission.id)
+        }
+
+        missionRealtime.connect(missionId: mission.id)
     }
 
     private func handleActivityStatusChange(_ status: String, for activity: Activity, within knownActivities: [Activity]) {

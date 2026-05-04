@@ -577,6 +577,29 @@ final class RescuerMissionViewModel: ObservableObject {
         missionActivitySyncStore.triggerDeferredSync(reason: reason)
     }
 
+    func applyRealtimeActivityStatus(_ update: MissionRealtimeActivityStatusUpdate) {
+        missionActivitySyncStore.clearSyncedUpdateIfMatched(
+            missionId: update.missionId,
+            activityId: update.activityId,
+            serverStatus: update.status
+        )
+
+        activities = sortActivities(
+            replacingActivityStatus(
+                in: activities,
+                activityId: update.activityId,
+                status: update.status
+            )
+        )
+        currentTeamActivities = sortActivities(
+            replacingActivityStatus(
+                in: currentTeamActivities,
+                activityId: update.activityId,
+                status: update.status
+            )
+        )
+    }
+
     private func submitActivityStatus(
         missionId: Int,
         activityId: Int,
@@ -743,6 +766,16 @@ final class RescuerMissionViewModel: ObservableObject {
             }
 
             return lhs.id < rhs.id
+        }
+    }
+
+    private func replacingActivityStatus(
+        in source: [Activity],
+        activityId: Int,
+        status: String
+    ) -> [Activity] {
+        source.map { activity in
+            activity.id == activityId ? activity.replacing(status: status) : activity
         }
     }
 

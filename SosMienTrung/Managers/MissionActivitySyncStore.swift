@@ -215,6 +215,20 @@ final class MissionActivitySyncStore: ObservableObject {
         }
     }
 
+    func clearSyncedUpdateIfMatched(missionId: Int, activityId: Int, serverStatus: String) {
+        let beforeCount = updates.count
+        let normalizedServerStatus = normalizedStatusKey(serverStatus)
+
+        updates.removeAll { update in
+            update.missionId == missionId
+                && update.activityId == activityId
+                && normalizedStatusKey(update.targetStatus) == normalizedServerStatus
+        }
+
+        guard updates.count != beforeCount else { return }
+        persistCurrentUser()
+    }
+
     func triggerDeferredSync(reason: MissionActivitySyncTriggerReason) {
         guard currentUserId() != nil else { return }
 
@@ -308,5 +322,14 @@ final class MissionActivitySyncStore: ObservableObject {
 
             return lhs.activityId < rhs.activityId
         }
+    }
+
+    private func normalizedStatusKey(_ status: String) -> String {
+        status
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
     }
 }
