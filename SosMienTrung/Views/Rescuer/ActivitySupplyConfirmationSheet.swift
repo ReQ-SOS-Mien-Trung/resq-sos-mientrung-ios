@@ -201,6 +201,8 @@ struct DeliveryConfirmationSheet: View {
                         onToggleDelivered: { toggleDelivered(at: index) }
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                            reusableSerialInlineRow(units: drafts[index].deliveryReusableUnits)
+
                             if drafts[index].bufferQuantityToDeliver > 0 {
                                 compactSummaryRow(metrics: [
                                     ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
@@ -537,6 +539,8 @@ struct ReturnSuppliesConfirmationSheet: View {
                     ) {
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                             if drafts[index].isReusable {
+                                reusableSerialInlineRow(units: drafts[index].reusableUnits)
+
                                 compactSummaryRow(metrics: [
                                     ("Kế hoạch", quantityText(drafts[index].plannedQuantity, unit: drafts[index].unit)),
                                     ("Phân loại", "Thiết bị")
@@ -807,6 +811,7 @@ private struct ReturnSupplyDraft: Identifiable {
     let referenceLotsTitle: String?
     let referenceLots: [MissionSupplyLotAllocation]
     let isReusable: Bool
+    let reusableUnits: [MissionSupplyReusableUnit]
 
     var id: String { "\(itemId)" }
     var lotCount: Int { primaryLots.count }
@@ -849,6 +854,16 @@ private struct ReturnSupplyDraft: Identifiable {
                              (supply.pickedReusableUnits?.isEmpty == false) ||
                              (supply.plannedPickupReusableUnits?.isEmpty == false)
         isReusable = hasReusableInfo
+
+        if supply.returnedReusableUnits?.isEmpty == false {
+            reusableUnits = supply.returnedReusableUnits ?? []
+        } else if supply.expectedReturnUnits?.isEmpty == false {
+            reusableUnits = supply.expectedReturnUnits ?? []
+        } else if supply.pickedReusableUnits?.isEmpty == false {
+            reusableUnits = supply.pickedReusableUnits ?? []
+        } else {
+            reusableUnits = supply.plannedPickupReusableUnits ?? []
+        }
     }
 }
 
@@ -925,6 +940,35 @@ private func supplyLotSummarySection(
             .stroke(DS.Colors.info.opacity(0.24), lineWidth: 1)
     )
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+}
+
+@ViewBuilder
+private func reusableSerialInlineRow(units: [MissionSupplyReusableUnit]) -> some View {
+    let serials = units.compactMap { $0.serialNumber?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+    if serials.isEmpty == false {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(serials, id: \.self) { sn in
+                HStack(spacing: 5) {
+                    Image(systemName: "barcode")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(DS.Colors.textSecondary)
+                    Text(sn)
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(DS.Colors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(DS.Colors.surface)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(DS.Colors.borderSubtle, lineWidth: 1)
+                )
+                .clipShape(Capsule(style: .continuous))
+            }
+        }
+    }
 }
 
 private func lotInfoChip(title: String, value: String, tone: Color) -> some View {

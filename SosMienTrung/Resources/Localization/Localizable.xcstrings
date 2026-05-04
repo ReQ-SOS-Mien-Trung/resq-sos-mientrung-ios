@@ -4329,6 +4329,19 @@
         }
       }
     },
+    "Hỗ trợ cho %lld người" : {
+
+    },
+    "Hoặc nhập mã thủ công:" : {
+      "localizations" : {
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoặc nhập mã thủ công:"
+          }
+        }
+      }
+    },
     "Hoàn tất" : {
 
     },
@@ -4353,25 +4366,12 @@
         }
       }
     },
-    "Hỗ trợ cho %lld người" : {
-
-    },
     "hoặc" : {
       "localizations" : {
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "hoặc"
-          }
-        }
-      }
-    },
-    "Hoặc nhập mã thủ công:" : {
-      "localizations" : {
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hoặc nhập mã thủ công:"
           }
         }
       }

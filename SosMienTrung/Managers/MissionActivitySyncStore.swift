@@ -64,8 +64,40 @@ struct NoopMissionActivitySyncTransport: MissionActivitySyncTransport {
     }
 }
 
+struct LiveMissionActivitySyncTransport: MissionActivitySyncTransport {
+    func send(
+        updates: [PendingMissionActivityUpdate],
+        trigger: MissionActivitySyncTriggerReason
+    ) async throws -> MissionActivitySyncTransportResult {
+        guard updates.isEmpty == false else { return .empty }
+
+        print("[MissionActivitySync] Live sync trigger=\(trigger.rawValue) pending=\(updates.count)")
+
+        var synced: Set<String> = []
+        var failed: Set<String> = []
+
+        for update in updates {
+            do {
+                try await MissionService.shared.updateActivityStatus(
+                    missionId: update.missionId,
+                    activityId: update.activityId,
+                    status: update.targetStatus,
+                    imageUrl: nil
+                )
+                synced.insert(update.clientMutationId)
+                print("[MissionActivitySync] ✓ Synced activity \(update.activityId) → \(update.targetStatus)")
+            } catch {
+                failed.insert(update.clientMutationId)
+                print("[MissionActivitySync] ✗ Failed activity \(update.activityId): \(error.localizedDescription)")
+            }
+        }
+
+        return MissionActivitySyncTransportResult(syncedMutationIds: synced, failedMutationIds: failed)
+    }
+}
+
 final class MissionActivitySyncStore: ObservableObject {
-    static let shared = MissionActivitySyncStore()
+    static let shared = MissionActivitySyncStore(transport: LiveMissionActivitySyncTransport())
 
     @Published private(set) var updates: [PendingMissionActivityUpdate] = []
 
@@ -189,13 +221,33 @@ final class MissionActivitySyncStore: ObservableObject {
         let snapshot = updates
         guard snapshot.isEmpty == false else { return }
 
-        Task { [transport] in
+        Task { [weak self, transport] in
             do {
-                _ = try await transport.send(updates: snapshot, trigger: reason)
+                let result = try await transport.send(updates: snapshot, trigger: reason)
+                await MainActor.run {
+                    self?.applyTransportResult(result)
+                }
             } catch {
                 print("[MissionActivitySync] Deferred sync failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func applyTransportResult(_ result: MissionActivitySyncTransportResult) {
+        guard result.syncedMutationIds.isEmpty == false || result.failedMutationIds.isEmpty == false else { return }
+
+        updates = updates.compactMap { update in
+            if result.syncedMutationIds.contains(update.clientMutationId) {
+                return nil
+            }
+            if result.failedMutationIds.contains(update.clientMutationId) {
+                var mutable = update
+                mutable.syncState = .failed
+                return mutable
+            }
+            return update
+        }
+        persistCurrentUser()
     }
 
     private func currentUserId() -> String? {
