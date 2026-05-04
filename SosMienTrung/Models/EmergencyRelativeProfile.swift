@@ -778,7 +778,7 @@ final class RelativeProfileStore: ObservableObject {
     }
 
     private func loadServerSyncPreference(for userId: String) -> Bool {
-        userDefaults.object(forKey: serverSyncPreferenceKey(for: userId)) as? Bool ?? false
+        userDefaults.object(forKey: serverSyncPreferenceKey(for: userId)) as? Bool ?? true
     }
 
     private func persistServerSyncPreference(_ enabled: Bool, for userId: String) {
@@ -1048,6 +1048,12 @@ final class RelativeProfileStore: ObservableObject {
 
     private func applyRemoteSnapshot(_ remoteProfiles: [EmergencyRelativeProfile], for userId: String) {
         let sortedProfiles = sortProfiles(remoteProfiles)
+
+        if sortedProfiles.isEmpty, !profiles.isEmpty {
+            print("⚠️ Remote snapshot is empty but local has \(profiles.count) profiles – keeping local data.")
+            return
+        }
+
         remoteProfilesById = dictionary(from: sortedProfiles)
         hasLoadedRemoteSnapshot = true
 
