@@ -77,6 +77,7 @@ enum AllergyOption: String, Codable, CaseIterable, Identifiable, Hashable {
     case food = "FOOD"
     case insect = "INSECT"
     case environment = "ENVIRONMENT"
+    case dust = "DUST"
 
     var id: String { rawValue }
 
@@ -86,6 +87,7 @@ enum AllergyOption: String, Codable, CaseIterable, Identifiable, Hashable {
         case .food: return "Dị ứng thực phẩm"
         case .insect: return "Dị ứng côn trùng"
         case .environment: return "Dị ứng môi trường"
+        case .dust: return "Dị ứng bụi"
         }
     }
 }
@@ -286,6 +288,34 @@ struct RelativeMedicalProfile: Codable, Equatable, Hashable {
         self.medicalHistory = normalizeSelection(medicalHistory)
         self.medicalHistoryDetails = medicalHistoryDetails.trimmingCharacters(in: .whitespacesAndNewlines)
         self.bloodType = bloodType
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chronicConditions = c.decodeLossyEnumArray(ChronicConditionOption.self, forKey: .chronicConditions)
+        otherChronicCondition = (try? c.decode(String.self, forKey: .otherChronicCondition)) ?? ""
+        allergyOptions = c.decodeLossyEnumArray(AllergyOption.self, forKey: .allergyOptions)
+        allergyDetails = (try? c.decode(String.self, forKey: .allergyDetails)) ?? ""
+        hasLongTermMedication = (try? c.decode(Bool.self, forKey: .hasLongTermMedication)) ?? false
+        longTermMedications = (try? c.decode([LongTermMedicationEntry].self, forKey: .longTermMedications)) ?? []
+        mobilityStatus = (try? c.decode(MobilityStatus.self, forKey: .mobilityStatus)) ?? .normal
+        medicalDevices = c.decodeLossyEnumArray(MedicalDeviceOption.self, forKey: .medicalDevices)
+        otherMedicalDevice = (try? c.decode(String.self, forKey: .otherMedicalDevice)) ?? ""
+        specialSituation = (try? c.decode(SpecialMedicalSituation.self, forKey: .specialSituation)) ?? SpecialMedicalSituation()
+        medicalHistory = c.decodeLossyEnumArray(MedicalHistoryOption.self, forKey: .medicalHistory)
+        medicalHistoryDetails = (try? c.decode(String.self, forKey: .medicalHistoryDetails)) ?? ""
+        bloodType = (try? c.decode(BloodTypeOption.self, forKey: .bloodType)) ?? .unknown
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case chronicConditions, otherChronicCondition
+        case allergyOptions, allergyDetails
+        case hasLongTermMedication, longTermMedications
+        case mobilityStatus
+        case medicalDevices, otherMedicalDevice
+        case specialSituation
+        case medicalHistory, medicalHistoryDetails
+        case bloodType
     }
 
     var summaryLines: [String] {
@@ -723,18 +753,28 @@ final class RelativeProfileStore: ObservableObject {
     }
 
     func refreshFromServerIfPossible(force: Bool = false) {
-        guard let userId = currentUserId(),
-              !userId.isEmpty,
-              isServerSyncEnabled,
-              canSyncToServer,
-              isSyncing == false else {
+        guard let userId = currentUserId(), !userId.isEmpty else {
+            print("⏭️ [RelativeProfileStore] refreshFromServerIfPossible skipped: no userId")
             return
         }
-
+        guard isServerSyncEnabled else {
+            print("⏭️ [RelativeProfileStore] refreshFromServerIfPossible skipped: serverSync disabled")
+            return
+        }
+        guard canSyncToServer else {
+            print("⏭️ [RelativeProfileStore] refreshFromServerIfPossible skipped: canSyncToServer=false")
+            return
+        }
+        guard isSyncing == false else {
+            print("⏭️ [RelativeProfileStore] refreshFromServerIfPossible skipped: already syncing")
+            return
+        }
         guard force || hasLoadedRemoteSnapshot == false || profiles.isEmpty else {
+            print("⏭️ [RelativeProfileStore] refreshFromServerIfPossible skipped: already loaded (force=\(force), hasSnapshot=\(hasLoadedRemoteSnapshot), profileCount=\(profiles.count))")
             return
         }
 
+        print("🔄 [RelativeProfileStore] Scheduling server bootstrap (force=\(force))")
         scheduleServerBootstrap(for: userId)
     }
 
@@ -850,7 +890,11 @@ final class RelativeProfileStore: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
-            print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+            if case RelativeProfileAPIError.decodingError(let underlying) = error {
+                print("❌ Failed to sync relative profiles (decoding): \(underlying)")
+            } else {
+                print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -936,10 +980,18 @@ final class RelativeProfileStore: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+                if case RelativeProfileAPIError.decodingError(let underlying) = error {
+                    print("❌ Failed to sync relative profiles (decoding): \(underlying)")
+                } else {
+                    print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+                }
             }
         } catch {
-            print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+            if case RelativeProfileAPIError.decodingError(let underlying) = error {
+                print("❌ Failed to sync relative profiles (decoding): \(underlying)")
+            } else {
+                print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -1104,6 +1156,23 @@ private func normalizeSelection<Option: CaseIterable & Hashable>(_ values: [Opti
 where Option.AllCases: Collection {
     let selected = Set(values)
     return Array(Option.allCases).filter { selected.contains($0) }
+}
+
+private extension KeyedDecodingContainer {
+    /// Decodes an array of `Decodable` values, silently skipping elements that fail to decode.
+    /// Prevents a crash when the server adds new enum cases unknown to the current iOS build.
+    func decodeLossyEnumArray<T: Decodable>(_ type: T.Type, forKey key: K) -> [T] {
+        guard var arrayContainer = try? nestedUnkeyedContainer(forKey: key) else { return [] }
+        var result: [T] = []
+        while !arrayContainer.isAtEnd {
+            if let value = try? arrayContainer.decode(T.self) {
+                result.append(value)
+            } else {
+                _ = try? arrayContainer.decode(String.self)
+            }
+        }
+        return result
+    }
 }
 
 private extension String {

@@ -101,6 +101,9 @@ struct RelativeProfilesView: View {
             .searchable(text: $searchText, prompt: "Tìm theo tên, số điện thoại, bệnh nền")
             .navigationTitle("Hồ sơ người thân")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                store.refreshFromServerIfPossible()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Đóng") {
