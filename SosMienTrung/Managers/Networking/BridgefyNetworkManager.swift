@@ -40,6 +40,21 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
     /// để tự động start() lại (dùng khi app foreground sau background để fresh BLE link).
     private var pendingRestartAfterStop = false
     
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRelayedSOSNotification(_:)),
+            name: .serverRequestGatewayRelayedSOS,
+            object: nil
+        )
+    }
+
+    @objc private func handleRelayedSOSNotification(_ notification: Notification) {
+        guard let packet = notification.object as? SOSPacket else { return }
+        addSOSMessageIfNeeded(from: packet)
+    }
+
     /// Get current Bridgefy user ID
     var currentUserId: UUID? {
         bridgefy?.currentUserId
@@ -759,6 +774,28 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
 
         // Relay/upload qua ServerRequestGateway
         ServerRequestGateway.shared.handleIncomingRequest(ServerRequestEnvelope.basicSOS(sosPacket), transport: .bridgefyMesh)
+
+        // Thêm Message vào messages để hiển thị trong "Đã nhận" ở SOSHistoryView
+        let senderUUID = UUID(uuidString: sosPacket.originId) ?? UUID()
+        let message = Message(
+            id: UUID(uuidString: sosPacket.packetId) ?? UUID(),
+            type: .sosLocation,
+            text: sosPacket.msg,
+            senderId: senderUUID,
+            isFromMe: false,
+            timestamp: Date(timeIntervalSince1970: TimeInterval(sosPacket.ts)),
+            senderName: sosPacket.reporterInfo?.userName ?? sosPacket.senderInfo?.userName ?? "",
+            senderPhone: sosPacket.reporterInfo?.userPhone ?? sosPacket.senderInfo?.userPhone ?? "",
+            latitude: sosPacket.location.lat,
+            longitude: sosPacket.location.lng
+        )
+        DispatchQueue.main.async {
+            if !self.messages.contains(where: { $0.id == message.id }) {
+                self.messages.append(message)
+                self.objectWillChange.send()
+                print("📨 Relay SOS added to messages for UI: \(sosPacket.packetId)")
+            }
+        }
     }
 
     // MARK: - BridgefyDelegate
@@ -1011,6 +1048,12 @@ final class BridgefyNetworkManager: NSObject, ObservableObject, BridgefyDelegate
         case .serverRequest:
             if let request = meshPayload.serverRequest {
                 ServerRequestGateway.shared.handleIncomingRequest(request, transport: .bridgefyMesh)
+                // Thêm Message vào messages để hiển thị "Đã nhận" ở SOSHistoryView
+                if let sosPacket = request.sosPacket {
+                    addSOSMessageIfNeeded(from: sosPacket)
+                } else if let enhanced = request.sosEnhanced {
+                    addSOSMessageIfNeeded(from: enhanced.packet)
+                }
             }
 
         case .serverAck:

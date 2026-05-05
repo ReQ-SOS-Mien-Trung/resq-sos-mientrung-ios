@@ -2788,11 +2788,10 @@ extension SOSFormData {
                 return effectiveVictimPhone?.nilIfBlank
             }()
             let isInjured = needsRescueStep && rescueData.injuredPersonIds.contains(person.id)
-            let issues = isInjured
-                ? Array(rescueData.medicalInfoByPerson[person.id]?.medicalIssues ?? [])
-                : []
+            let medicalInfo = rescueData.medicalInfoByPerson[person.id]
+            let issues = Array(medicalInfo?.medicalIssues ?? [])
             let severity: String? = {
-                guard isInjured else { return nil }
+                guard needsRescueStep, medicalInfo != nil else { return nil }
                 return rescueData.victimSeverity(for: person.id, using: ruleConfig)
             }()
             let resolvedName = manualSingleVictimName
@@ -2809,6 +2808,7 @@ extension SOSFormData {
                 index: person.index,
                 customName: resolvedName,
                 personPhone: snapshot?.phoneNumber?.nilIfBlank ?? manualSingleVictimPhone,
+                needRescue: isInjured,
                 incidentStatus: SOSVictimIncidentStatus(
                     isInjured: isInjured,
                     severity: severity,

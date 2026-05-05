@@ -169,6 +169,7 @@ struct SOSVictimEntry: Codable, Identifiable {
     let index: Int
     let customName: String
     let personPhone: String?
+    let needRescue: Bool
     let incidentStatus: SOSVictimIncidentStatus
     let personalNeeds: SOSVictimPersonalNeeds
 
@@ -180,6 +181,7 @@ struct SOSVictimEntry: Codable, Identifiable {
         case index
         case customName = "custom_name"
         case personPhone = "person_phone"
+        case needRescue = "need_rescue"
         case incidentStatus = "incident_status"
         case personalNeeds = "personal_needs"
     }
@@ -194,6 +196,7 @@ struct SOSVictimEntry: Codable, Identifiable {
         index: Int,
         customName: String,
         personPhone: String?,
+        needRescue: Bool = false,
         incidentStatus: SOSVictimIncidentStatus,
         personalNeeds: SOSVictimPersonalNeeds
     ) {
@@ -202,6 +205,7 @@ struct SOSVictimEntry: Codable, Identifiable {
         self.index = index
         self.customName = customName
         self.personPhone = personPhone
+        self.needRescue = needRescue
         self.incidentStatus = incidentStatus
         self.personalNeeds = personalNeeds
     }
@@ -217,6 +221,7 @@ struct SOSVictimEntry: Codable, Identifiable {
             ?? legacyContainer.decodeIfPresent(String.self, forKey: .name)?.trimmedNilIfEmpty
             ?? "Người \(index)"
         personPhone = try container.decodeIfPresent(String.self, forKey: .personPhone)
+        needRescue = try container.decodeIfPresent(Bool.self, forKey: .needRescue) ?? false
         incidentStatus = try container.decode(SOSVictimIncidentStatus.self, forKey: .incidentStatus)
         personalNeeds = try container.decode(SOSVictimPersonalNeeds.self, forKey: .personalNeeds)
     }

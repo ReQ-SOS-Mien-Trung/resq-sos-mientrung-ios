@@ -2,6 +2,10 @@ import Foundation
 import Combine
 import UIKit
 
+extension Notification.Name {
+    static let serverRequestGatewayRelayedSOS = Notification.Name("serverRequestGatewayRelayedSOS")
+}
+
 final class ServerRequestGateway: ObservableObject {
     static let shared = ServerRequestGateway()
 
@@ -129,6 +133,15 @@ final class ServerRequestGateway: ObservableObject {
             self.processed.insert(envelope.requestId)
 
             let isLocalOrigin = envelope.originDeviceId == self.myDeviceId
+
+            // Báo cho BridgefyNetworkManager thêm Message vào UI nếu đây là relay SOS
+            if !isLocalOrigin {
+                if let sosPacket = envelope.sosPacket {
+                    NotificationCenter.default.post(name: .serverRequestGatewayRelayedSOS, object: sosPacket)
+                } else if let enhanced = envelope.sosEnhanced {
+                    NotificationCenter.default.post(name: .serverRequestGatewayRelayedSOS, object: enhanced.packet)
+                }
+            }
 
             self.pending[envelope.requestId] = PendingRequest(
                 envelope: envelope,
