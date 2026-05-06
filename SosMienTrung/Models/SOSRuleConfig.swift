@@ -131,17 +131,26 @@ indirect enum SOSExpressionNode: Codable, Equatable, Hashable {
 
 struct SOSRulePriorityScoreConfig: Codable, Equatable {
     let formula: String
+    let medicalWeight: Double
+    let reliefWeight: Double
+    let requestTypeWeight: Double
     let useRequestTypeScore: Bool
     let expression: SOSExpressionNode
 
     private enum CodingKeys: String, CodingKey {
         case formula
+        case medicalWeight = "medical_weight"
+        case reliefWeight = "relief_weight"
+        case requestTypeWeight = "request_type_weight"
         case useRequestTypeScore = "use_request_type_score"
         case expression
     }
 
     init(
-        formula: String = "MIN(100, ROUND(((medical_score * 2) + (relief_score * 1.1) + (request_type_score * 0.15)) * situation_multiplier * relief_pressure_multiplier))",
+        formula: String = "MIN(100, ROUND(((medical_score * 1) + (relief_score * 1.1) + (request_type_score * 0.15)) * situation_multiplier * relief_pressure_multiplier))",
+        medicalWeight: Double = 1.0,
+        reliefWeight: Double = 1.1,
+        requestTypeWeight: Double = 0.15,
         useRequestTypeScore: Bool = true,
         expression: SOSExpressionNode = SOSExpressionNode(
             op: "MIN",
@@ -159,18 +168,18 @@ struct SOSRulePriorityScoreConfig: Codable, Equatable {
                                 left: SOSExpressionNode(
                                     op: "MUL",
                                     left: SOSExpressionNode(variable: "medical_score"),
-                                    right: SOSExpressionNode(numericValue: 2)
+                                    right: SOSExpressionNode(variable: "medical_weight")
                                 ),
                                 right: SOSExpressionNode(
                                     op: "MUL",
                                     left: SOSExpressionNode(variable: "relief_score"),
-                                    right: SOSExpressionNode(numericValue: 1.1)
+                                    right: SOSExpressionNode(variable: "relief_weight")
                                 )
                             ),
                             right: SOSExpressionNode(
                                 op: "MUL",
                                 left: SOSExpressionNode(variable: "request_type_score"),
-                                right: SOSExpressionNode(numericValue: 0.15)
+                                right: SOSExpressionNode(variable: "request_type_weight")
                             )
                         ),
                         right: SOSExpressionNode(variable: "situation_multiplier")
@@ -181,8 +190,30 @@ struct SOSRulePriorityScoreConfig: Codable, Equatable {
         )
     ) {
         self.formula = formula
+        self.medicalWeight = medicalWeight
+        self.reliefWeight = reliefWeight
+        self.requestTypeWeight = requestTypeWeight
         self.useRequestTypeScore = useRequestTypeScore
         self.expression = expression
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = SOSRulePriorityScoreConfig()
+        let decodedFormula = try container.decodeIfPresent(String.self, forKey: .formula) ?? fallback.formula
+        let usesLegacyDefaultFormula = decodedFormula
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+            .contains("medical_score*2")
+
+        self.formula = usesLegacyDefaultFormula ? fallback.formula : decodedFormula
+        self.medicalWeight = try container.decodeIfPresent(Double.self, forKey: .medicalWeight) ?? fallback.medicalWeight
+        self.reliefWeight = try container.decodeIfPresent(Double.self, forKey: .reliefWeight) ?? fallback.reliefWeight
+        self.requestTypeWeight = try container.decodeIfPresent(Double.self, forKey: .requestTypeWeight) ?? fallback.requestTypeWeight
+        self.useRequestTypeScore = try container.decodeIfPresent(Bool.self, forKey: .useRequestTypeScore) ?? fallback.useRequestTypeScore
+        self.expression = usesLegacyDefaultFormula
+            ? fallback.expression
+            : (try container.decodeIfPresent(SOSExpressionNode.self, forKey: .expression) ?? fallback.expression)
     }
 }
 
@@ -734,7 +765,9 @@ struct SOSRuleConfig: Codable, Equatable {
             "BREATHING_DIFFICULTY",
             "CHEST_PAIN_STROKE",
             "DROWNING",
-            "SEVERELY_BLEEDING"
+            "SEVERELY_BLEEDING",
+            "HEAD_INJURY",
+            "CANNOT_MOVE"
         ],
         requestTypeScores: [String: Double] = [
             "RESCUE": 10,

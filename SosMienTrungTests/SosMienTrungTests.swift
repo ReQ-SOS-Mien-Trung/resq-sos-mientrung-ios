@@ -361,6 +361,11 @@ final class SosMienTrungTests: XCTestCase {
         let config = SOSRuleConfig.fallback
 
         XCTAssertTrue(config.priorityScore.useRequestTypeScore)
+        XCTAssertEqual(config.priorityScore.medicalWeight, 1.0)
+        XCTAssertEqual(config.priorityScore.reliefWeight, 1.1)
+        XCTAssertEqual(config.priorityScore.requestTypeWeight, 0.15)
+        XCTAssertTrue(config.isSevereMedicalIssue(MedicalIssue.headInjury.rawValue))
+        XCTAssertTrue(config.isSevereMedicalIssue(MedicalIssue.cannotMove.rawValue))
         XCTAssertEqual(config.requestTypeScore(for: "BOTH"), 10)
         XCTAssertEqual(config.requestTypeScore(for: "RESCUE"), 10)
         XCTAssertEqual(config.requestTypeScore(for: "RELIEF"), 10)
@@ -407,7 +412,7 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertEqual(formData.supplyUrgencyScore, 16, accuracy: 0.001)
         XCTAssertEqual(formData.vulnerabilityScore, 6, accuracy: 0.001)
         XCTAssertEqual(formData.reliefScore, 22, accuracy: 0.001)
-        XCTAssertEqual(formData.priorityScore, 100)
+        XCTAssertEqual(formData.priorityScore, 81)
         XCTAssertEqual(formData.priorityLevel, .p1)
 
         let packet = formData.toSOSPacket(originIdOverride: "rule-test-device")

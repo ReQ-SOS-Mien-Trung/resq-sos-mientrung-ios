@@ -1176,6 +1176,17 @@ struct RescueData: Codable, Equatable {
     func criticalSeverity(using config: SOSRuleConfig) -> Bool {
         injuredPersonIds.contains { victimSeverity(for: $0, using: config) == "CRITICAL" }
     }
+
+    func highOrSevereSeverity(using config: SOSRuleConfig) -> Bool {
+        injuredPersonIds.contains {
+            switch victimSeverity(for: $0, using: config) {
+            case "HIGH", "SEVERE":
+                return true
+            default:
+                return false
+            }
+        }
+    }
     
     /// Situation Severe Flag
     var situationSevere: Bool {
@@ -1814,12 +1825,15 @@ final class SOSFormData: ObservableObject {
         let requestTypeScore = ruleConfig.requestTypeScore(for: selectedSOSTypeValue)
         let context: [String: Double] = [
             "MEDICAL_SCORE": medicalScore,
+            "MEDICAL_WEIGHT": ruleConfig.priorityScore.medicalWeight,
             "REQUEST_TYPE_SCORE": requestTypeScore,
+            "REQUEST_TYPE_WEIGHT": ruleConfig.priorityScore.requestTypeWeight,
             "SUPPLY_URGENCY_SCORE": supplyUrgencyScore,
             "VULNERABILITY_RAW": vulnerabilityRawScore,
             "CAP_RATIO": ruleConfig.reliefScore.vulnerabilityScore.capRatio,
             "VULNERABILITY_SCORE": vulnerabilityScore,
             "RELIEF_SCORE": reliefScore,
+            "RELIEF_WEIGHT": ruleConfig.priorityScore.reliefWeight,
             "SITUATION_MULTIPLIER": situationMultiplierValue,
             "RELIEF_PRESSURE_MULTIPLIER": reliefPressureMultiplier
         ]
@@ -1827,7 +1841,9 @@ final class SOSFormData: ObservableObject {
         let raw = (try? SOSExpressionEngine.evaluate(ruleConfig.priorityScore.expression, context: context))
             ?? min(
                 100,
-                (((medicalScore * 2) + (reliefScore * 1.1) + (requestTypeScore * 0.15))
+                (((medicalScore * ruleConfig.priorityScore.medicalWeight)
+                    + (reliefScore * ruleConfig.priorityScore.reliefWeight)
+                    + (requestTypeScore * ruleConfig.priorityScore.requestTypeWeight))
                     * situationMultiplierValue
                     * reliefPressureMultiplier)
                     .rounded()
@@ -1847,6 +1863,10 @@ final class SOSFormData: ObservableObject {
         needsRescueStep && rescueData.criticalSeverity(using: ruleConfig)
     }
 
+    var highOrSevereSeverityFlag: Bool {
+        needsRescueStep && rescueData.highOrSevereSeverity(using: ruleConfig)
+    }
+
     var dangerousSituationFlag: Bool {
         needsRescueStep && rescueData.dangerousSituation
     }
@@ -1863,7 +1883,7 @@ final class SOSFormData: ObservableObject {
     }
 
     var hasReliefPressure: Bool {
-        supplyUrgencyScore >= 10 || reliefScore >= 12 || resolvedAreBlanketsEnough == false
+        supplyUrgencyScore >= 14 || reliefScore >= 18 || urgentMedicineFlag || resolvedAreBlanketsEnough == false
     }
 
     var hasSevereFlag: Bool {
@@ -1893,6 +1913,12 @@ final class SOSFormData: ObservableObject {
         }
 
         if criticalSeverityFlag && (dangerousSituationFlag || urgentMedicineFlag || hasVulnerablePeople) {
+            level = level.escalated(to: .p1)
+        }
+
+        if highOrSevereSeverityFlag
+            && dangerousSituationFlag
+            && (hasVulnerablePeople || urgentMedicineFlag || hasReliefPressure) {
             level = level.escalated(to: .p1)
         }
 

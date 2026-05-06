@@ -474,7 +474,7 @@ struct VoiceSOSAgentView: View {
             HStack(spacing: DS.Spacing.sm) {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 20, weight: .bold))
-                Text(viewModel.isOnDeviceAIAvailable ? "BẮT ĐẦU HỘI THOẠI SOS" : "VOICE SOS KHÔNG KHẢ DỤNG")
+                Text(viewModel.isOnDeviceAIAvailable ? "HÃY BẮT ĐẦU HỎI" : "VOICE SOS KHÔNG KHẢ DỤNG")
                     .font(DS.Typography.headline)
                     .tracking(1)
             }

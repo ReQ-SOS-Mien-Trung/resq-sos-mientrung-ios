@@ -192,7 +192,8 @@ final class VoiceSOSAgentViewModel: ObservableObject {
 
         locationManager.startContinuousUpdates()
 
-        aiSpeak("Vui lòng mô tả tình huống hiện tại của bạn để gửi yêu cầu cứu hộ")
+        conversationHistory.append(VoiceConversationTurn(role: "ai", text: "Hãy mô tả tình huống khẩn cấp của bạn."))
+        startListeningToUser()
     }
 
     func stopConversation() {
