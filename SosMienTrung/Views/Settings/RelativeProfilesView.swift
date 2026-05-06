@@ -20,6 +20,7 @@ struct RelativeProfilesView: View {
     @State private var editingProfile: EmergencyRelativeProfile?
     @State private var isCreatingProfile = false
     @State private var showClearServerDataConfirmation = false
+    @State private var profileToDelete: EmergencyRelativeProfile?
 
     private var filteredProfiles: [EmergencyRelativeProfile] {
         store.filteredProfiles(
@@ -85,7 +86,7 @@ struct RelativeProfilesView: View {
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    store.delete(profileId: profile.id)
+                                    profileToDelete = profile
                                 } label: {
                                     Label("Xóa", systemImage: "trash")
                                 }
@@ -129,6 +130,26 @@ struct RelativeProfilesView: View {
             RelativeProfileEditorView(existingProfile: profile) { updatedProfile in
                 store.save(profile: updatedProfile)
             }
+        }
+        .confirmationDialog(
+            "Xóa hồ sơ \"\(profileToDelete?.displayName ?? "")\"?",
+            isPresented: Binding(
+                get: { profileToDelete != nil },
+                set: { if !$0 { profileToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Xóa hồ sơ", role: .destructive) {
+                if let profile = profileToDelete {
+                    store.delete(profileId: profile.id)
+                }
+                profileToDelete = nil
+            }
+            Button("Hủy", role: .cancel) {
+                profileToDelete = nil
+            }
+        } message: {
+            Text("Xóa vĩnh viễn, không thể hoàn tác.")
         }
         .confirmationDialog(
             "Xóa dữ liệu trên máy chủ?",

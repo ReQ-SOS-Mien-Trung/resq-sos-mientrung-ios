@@ -1268,24 +1268,6 @@ struct ActivityRowView: View {
         return formatter.string(from: date)
     }
 
-    private func localizedPriorityText(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), value.isEmpty == false else {
-            return nil
-        }
-
-        switch value.lowercased() {
-        case "critical":
-            return "Khẩn cấp"
-        case "high":
-            return "Cao"
-        case "medium":
-            return "Trung bình"
-        case "low":
-            return "Thấp"
-        default:
-            return value
-        }
-    }
 }
 
 private struct ActivityAction: Identifiable {

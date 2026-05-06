@@ -223,7 +223,6 @@ struct Activity: Codable, Identifiable {
     let description: String?
     let imageUrl: String?
     let targetVictimSummary: String?
-    let priority: String?
     let estimatedTime: Int?
     let sosRequestId: Int?
     let depotId: Int?
@@ -282,7 +281,6 @@ struct Activity: Codable, Identifiable {
             description: description,
             imageUrl: imageUrl,
             targetVictimSummary: targetVictimSummary,
-            priority: priority,
             estimatedTime: estimatedTime,
             sosRequestId: sosRequestId,
             depotId: depotId,
