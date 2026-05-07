@@ -571,6 +571,34 @@ private func isUsableMissionActivityCoordinate(latitude: Double, longitude: Doub
         && !(abs(latitude) < 0.000001 && abs(longitude) < 0.000001)
 }
 
+// MARK: - Team Safety Check
+struct TeamSafetyCheck: Codable {
+    let missionTeamId: Int
+    let rescueTeamId: Int
+    let status: String
+    let isMonitoringActive: Bool
+    let latestCheckInAt: String?
+    let timeoutAt: String?
+    let isOverdue: Bool
+    let generatedSosRequestId: Int?
+}
+
+// MARK: - Mission Safety Check
+struct MissionSafetyCheck: Codable {
+    let overallStatus: String
+    let isMonitoringActive: Bool
+    let totalTeams: Int
+    let safeTeams: Int
+    let atRiskTeams: Int
+    let sosCreatedTeams: Int
+    let inactiveTeams: Int
+    let unknownTeams: Int
+    let overdueTeams: Int
+    let nextTimeoutAt: String?
+    let latestCheckInAt: String?
+    let serverNowUtc: String
+}
+
 // MARK: - Mission Team Member
 struct MissionTeamMember: Codable, Identifiable {
     let userId: String
@@ -605,6 +633,7 @@ struct MissionTeam: Codable, Identifiable {
     let safetyTimeoutAt: String?
     let safetyStatus: String?
     let generatedSosRequestId: Int?
+    let safetyCheck: TeamSafetyCheck?
     let members: [MissionTeamMember]?
 
     enum CodingKeys: String, CodingKey {
@@ -625,6 +654,7 @@ struct MissionTeam: Codable, Identifiable {
         case safetyTimeoutAt
         case safetyStatus
         case generatedSosRequestId
+        case safetyCheck
         case members
     }
 }
@@ -647,6 +677,7 @@ struct Mission: Codable, Identifiable {
     let suggestedMissionType: String?
     let suggestedPriorityScore: Double?
     let suggestedSeverityLevel: String?
+    let safetyCheck: MissionSafetyCheck?
 
     private var resolvedMissionTypeRaw: String? {
         firstNonEmptyTrimmed(missionType, suggestedMissionType)

@@ -35,6 +35,8 @@ struct MissionDetailView: View {
     @State private var missionStatus: String
     @State private var missionDetail: Mission?
     @State private var activityScopeFilter: ActivityScopeFilter = .myTeam
+    @State private var safetyCountdownRemaining: TimeInterval = 0
+    @State private var safetyCountdownTimer: Timer?
 
     init(mission: Mission) {
         self.mission = mission
@@ -310,12 +312,16 @@ struct MissionDetailView: View {
             Text(vm.successMessage ?? "")
         }
         .onAppear {
+            if let viewerTeam = viewerMissionTeam {
+                startSafetyCountdown(timeoutAt: viewerTeam.safetyTimeoutAt)
+            }
             guard canViewMissionWorkspace else { return }
             refreshMissionWorkspace()
             startMissionRealtime()
         }
         .onDisappear {
             missionRealtime.disconnect()
+            stopSafetyCountdown()
         }
     }
 
@@ -362,6 +368,10 @@ struct MissionDetailView: View {
 
             missionMetaGrid
             progressSummary
+
+            if let safetyCheck = activeMission.safetyCheck, safetyCheck.isMonitoringActive {
+                missionSafetyOverview(safetyCheck)
+            }
 
             if shouldShowSafetyCheckInPanel, let viewerMissionTeam {
                 safetyCheckInPanel(for: viewerMissionTeam)
@@ -443,17 +453,79 @@ struct MissionDetailView: View {
         }
     }
 
+    private func missionSafetyOverview(_ safetyCheck: MissionSafetyCheck) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(safetyOverviewColor(safetyCheck.overallStatus))
+
+                Text("An toàn nhiệm vụ")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                StatusBadge(
+                    text: safetyOverviewLabel(safetyCheck.overallStatus),
+                    color: safetyOverviewColor(safetyCheck.overallStatus)
+                )
+            }
+
+            HStack(spacing: DS.Spacing.xs) {
+                safetyStatChip(count: safetyCheck.safeTeams, label: "An toàn", color: DS.Colors.success)
+                safetyStatChip(count: safetyCheck.atRiskTeams, label: "Nguy cơ", color: DS.Colors.warning)
+                safetyStatChip(count: safetyCheck.overdueTeams, label: "Quá hạn", color: DS.Colors.danger)
+                safetyStatChip(count: safetyCheck.sosCreatedTeams, label: "SOS", color: DS.Colors.accent)
+            }
+
+            if let nextTimeoutAt = safetyCheck.nextTimeoutAt,
+               let formatted = formattedDisplayDate(nextTimeoutAt) {
+                Label("Hạn tiếp theo: \(formatted)", systemImage: "timer")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+            }
+        }
+        .padding(DS.Spacing.md)
+        .background(DS.Colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(safetyOverviewColor(safetyCheck.overallStatus).opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func safetyStatChip(count: Int, label: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Text("\(count)")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(color)
+
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(DS.Colors.textSecondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
     private func safetyCheckInPanel(for team: MissionTeam) -> some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+        let isOverdue = team.safetyCheck?.isOverdue ?? (safetyCountdownRemaining <= 0 && safetyCountdownRemaining != -Double.greatestFiniteMagnitude)
+        let statusColor = isOverdue ? DS.Colors.warning : safetyStatusColor(team.safetyStatus)
+        let countdownText = safetyCountdownText()
+
+        return VStack(alignment: .leading, spacing: DS.Spacing.md) {
             HStack(alignment: .top, spacing: DS.Spacing.sm) {
                 ZStack {
                     Circle()
-                        .fill(safetyStatusColor(team.safetyStatus).opacity(0.14))
+                        .fill(statusColor.opacity(0.14))
                         .frame(width: 36, height: 36)
 
-                    Image(systemName: "shield.fill")
+                    Image(systemName: isOverdue ? "exclamationmark.shield.fill" : "shield.fill")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(safetyStatusColor(team.safetyStatus))
+                        .foregroundColor(statusColor)
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -463,8 +535,8 @@ struct MissionDetailView: View {
                             .foregroundColor(DS.Colors.text)
 
                         StatusBadge(
-                            text: safetyStatusLabel(team.safetyStatus),
-                            color: safetyStatusColor(team.safetyStatus)
+                            text: isOverdue ? "Quá hạn" : safetyStatusLabel(team.safetyStatus),
+                            color: statusColor
                         )
                     }
 
@@ -483,10 +555,9 @@ struct MissionDetailView: View {
                     icon: "checkmark.seal"
                 )
 
-                safetyInfoChip(
-                    title: "Hạn tiếp theo",
-                    value: formattedDisplayDate(team.safetyTimeoutAt) ?? "Chưa có",
-                    icon: "timer"
+                safetyCountdownChip(
+                    isOverdue: isOverdue,
+                    countdownText: countdownText
                 )
             }
 
@@ -526,7 +597,7 @@ struct MissionDetailView: View {
                 .padding(.horizontal, DS.Spacing.md)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(DS.Colors.success)
+                .background(isOverdue ? DS.Colors.warning : DS.Colors.success)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -538,7 +609,7 @@ struct MissionDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(safetyStatusColor(team.safetyStatus).opacity(0.18), lineWidth: 1)
+                .stroke(statusColor.opacity(0.18), lineWidth: 1)
         )
     }
 
@@ -904,6 +975,120 @@ struct MissionDetailView: View {
         return name.isEmpty ? "Đội của bạn" : name
     }
 
+    private func safetyCountdownText() -> String {
+        guard safetyCountdownRemaining > 0 else { return "Quá hạn" }
+
+        let totalSeconds = Int(ceil(safetyCountdownRemaining))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%dh %02dm %02ds", hours, minutes, seconds)
+        } else if minutes > 0 {
+            return String(format: "%dm %02ds", minutes, seconds)
+        } else {
+            return String(format: "%ds", seconds)
+        }
+    }
+
+    private func safetyCountdownChip(isOverdue: Bool, countdownText: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(isOverdue ? "Đã quá hạn" : "Thời gian còn lại", systemImage: isOverdue ? "exclamationmark.triangle" : "timer")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isOverdue ? DS.Colors.warning : DS.Colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Text(countdownText)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(isOverdue ? DS.Colors.warning : DS.Colors.text)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(DS.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isOverdue ? DS.Colors.warning.opacity(0.3) : DS.Colors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func startSafetyCountdown(timeoutAt: String?) {
+        safetyCountdownTimer?.invalidate()
+
+        guard let timeoutAt,
+              let timeoutDate = parseISO8601(timeoutAt) else {
+            safetyCountdownRemaining = -Double.greatestFiniteMagnitude
+            return
+        }
+
+        let updateRemaining = { @MainActor @Sendable () -> Void in
+            let remaining = timeoutDate.timeIntervalSinceNow
+            safetyCountdownRemaining = remaining
+            if remaining <= 0 {
+                safetyCountdownTimer?.invalidate()
+                safetyCountdownTimer = nil
+            }
+        }
+
+        updateRemaining()
+
+        safetyCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Task { @MainActor in
+                updateRemaining()
+            }
+        }
+    }
+
+    private func stopSafetyCountdown() {
+        safetyCountdownTimer?.invalidate()
+        safetyCountdownTimer = nil
+    }
+
+    private func parseISO8601(_ raw: String) -> Date? {
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoBasic = ISO8601DateFormatter()
+        isoBasic.formatOptions = [.withInternetDateTime]
+
+        return isoFull.date(from: raw) ?? isoBasic.date(from: raw)
+    }
+
+    private func safetyOverviewLabel(_ status: String) -> String {
+        switch normalizedStatus(status) {
+        case "safe":
+            return "An toàn"
+        case "atrisk":
+            return "Có nguy cơ"
+        case "soscreated":
+            return "Đã tạo SOS"
+        case "inactive":
+            return "Tạm dừng"
+        default:
+            return "Chưa rõ"
+        }
+    }
+
+    private func safetyOverviewColor(_ status: String) -> Color {
+        switch normalizedStatus(status) {
+        case "safe":
+            return DS.Colors.success
+        case "atrisk":
+            return DS.Colors.warning
+        case "soscreated":
+            return DS.Colors.accent
+        case "inactive":
+            return DS.Colors.textTertiary
+        default:
+            return DS.Colors.info
+        }
+    }
+
     private var shouldShowStartMissionButton: Bool {
         switch normalizedStatus(missionStatus) {
         case "planned", "pending", "scheduled":
@@ -1025,6 +1210,9 @@ struct MissionDetailView: View {
                 let detail = try await MissionService.shared.getMission(missionId: mission.id)
                 missionDetail = detail
                 missionStatus = detail.status
+                if let viewerTeam = viewerMissionTeam {
+                    startSafetyCountdown(timeoutAt: viewerTeam.safetyTimeoutAt)
+                }
             } catch {
                 // Keep the dashboard snapshot when detail hydration fails.
             }
