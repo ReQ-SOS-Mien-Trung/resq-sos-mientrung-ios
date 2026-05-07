@@ -698,7 +698,7 @@ enum MedicalIssue: String, Codable, CaseIterable, Identifiable {
         case .elderly:
             return [
                 // Chấn thương
-                .fracture, .bleeding, .burns,
+                .fracture, .bleeding, .headInjury, .burns,
                 // Nguy hiểm
                 .unconscious, .breathingDifficulty, .chestPainStroke, .cannotMove, .drowning,
                 // Đặc thù
@@ -866,84 +866,183 @@ private enum SOSQuickFillSample {
     static let adultId = "adult_1"
     static let childId = "child_1"
     static let elderlyId = "elderly_1"
+    static let adultName = "Huỳnh Kim Cương"
+    static let childName = "Châu"
+    static let elderlyName = "Khoa"
+    static let peopleCount = PeopleCount(adults: 1, children: 1, elderly: 1)
     static let demoLatitude = 16.469621
     static let demoLongitude = 107.592778
     static let demoAddress = "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"
 
-    static let additionalDescription = "Nước dâng cao hung, ông Khoa già đang bị lạnh run, mệt lả. Cứu gấp với mấy anh ơi!"
+    static let additionalDescription = "Nước đang dâng rất nhanh, nhà có dấu hiệu sắp sập. Ông Khoa không thể di chuyển, bất tỉnh, chấn thương đầu và mất phương hướng. Bé Châu đang sốt cao, cần được đưa tới nơi an toàn để can thiệp y tế."
 
-    static let medicalContextItems: [SavedRelativeProfileNoteItem] = [
-        SavedRelativeProfileNoteItem(
-            id: elderlyId,
-            displayName: "Khoa",
-            personType: .elderly,
-            summaryLines: [
-                "Bệnh nền: Huyết áp cao, Tiểu đường, Hen suyễn, Suy giảm miễn dịch",
-                "Dị ứng: Dị ứng côn trùng",
-                "Thiết bị hỗ trợ: Bình oxy",
-                "Tiền sử chấn thương / phẫu thuật: Đã từng gãy xương",
-                "Nhóm máu: A-"
-            ]
+    struct PersonIds {
+        let adult: String
+        let child: String
+        let elderly: String
+    }
+
+    static func orderedDemoProfiles(from profiles: [EmergencyRelativeProfile]) -> [EmergencyRelativeProfile]? {
+        guard let adult = profile(named: adultName, type: .adult, in: profiles),
+              let child = profile(named: childName, type: .child, in: profiles),
+              let elderly = profile(named: elderlyName, type: .elderly, in: profiles) else {
+            return nil
+        }
+
+        return [adult, child, elderly]
+    }
+
+    static func manualPeople() -> [Person] {
+        var adult = Person(id: adultId, type: .adult, index: 1)
+        adult.customName = adultName
+
+        var child = Person(id: childId, type: .child, index: 1)
+        child.customName = childName
+
+        var elderly = Person(id: elderlyId, type: .elderly, index: 1)
+        elderly.customName = elderlyName
+
+        return [adult, child, elderly]
+    }
+
+    static func personIds(from people: [Person]) -> PersonIds {
+        PersonIds(
+            adult: personId(named: adultName, type: .adult, fallback: adultId, in: people),
+            child: personId(named: childName, type: .child, fallback: childId, in: people),
+            elderly: personId(named: elderlyName, type: .elderly, fallback: elderlyId, in: people)
         )
-    ]
+    }
 
-    static func makeReliefData(peopleCount: PeopleCount) -> ReliefData {
+    static func makeMedicalContextItems(personIds: PersonIds) -> [SavedRelativeProfileNoteItem] {
+        [
+            SavedRelativeProfileNoteItem(
+                id: personIds.adult,
+                displayName: adultName,
+                personType: .adult,
+                summaryLines: [
+                    "Tình trạng nền: Người lớn khỏe mạnh",
+                    "Khả năng vận động: Bình thường"
+                ]
+            ),
+            SavedRelativeProfileNoteItem(
+                id: personIds.elderly,
+                displayName: elderlyName,
+                personType: .elderly,
+                summaryLines: [
+                    "Bệnh nền: Huyết áp cao",
+                    "Thuốc đang dùng: Thuốc điều trị tăng huyết áp, tần suất: hằng ngày",
+                    "Khả năng vận động: Cần hỗ trợ khi di chuyển",
+                    "Ăn uống: Ăn nhạt, hạn chế muối"
+                ]
+            ),
+            SavedRelativeProfileNoteItem(
+                id: personIds.child,
+                displayName: childName,
+                personType: .child,
+                summaryLines: [
+                    "Ghi chú y tế nền: Trẻ nhỏ trong gia đình, đang sốt cao trong tình huống ngập lụt",
+                    "Yêu cầu đặc biệt: Cần đưa tới nơi an toàn để can thiệp y tế"
+                ]
+            )
+        ]
+    }
+
+    static func makeReliefData(peopleCount: PeopleCount, personIds: PersonIds) -> ReliefData {
         ReliefData(
-            supplies: [.water, .food, .clothes, .blanket, .medicine, .other],
-            otherSupplyDescription: "Pin sạc dự phòng",
+            supplies: [.water, .food, .clothes, .blanket, .medicine],
+            otherSupplyDescription: "",
             peopleCount: peopleCount,
             waterDuration: WaterDuration.from6to12h.rawValue,
             waterRemaining: nil,
             foodDuration: FoodDuration.from12to24h.rawValue,
-            specialDietNeed: nil,
-            specialDietPersonIds: [childId, adultId, elderlyId],
+            specialDietNeed: .both,
+            specialDietPersonIds: [personIds.child, personIds.elderly],
             specialDietInfoByPerson: [
-                childId: PersonSpecialDietInfo(personId: childId, dietDescription: "Ăn lỏng"),
-                adultId: PersonSpecialDietInfo(personId: adultId, dietDescription: "Không ăn béo."),
-                elderlyId: PersonSpecialDietInfo(personId: elderlyId, dietDescription: "Dị ứng hải sản.")
+                personIds.child: PersonSpecialDietInfo(personId: personIds.child, dietDescription: "Ưu tiên thức ăn mềm, dễ tiêu và đủ nước"),
+                personIds.elderly: PersonSpecialDietInfo(personId: personIds.elderly, dietDescription: "Ăn nhạt, hạn chế muối")
             ],
             needsUrgentMedicine: true,
-            medicineConditions: [.chronicDisease, .injured],
-            medicineOtherDescription: "",
-            medicalNeeds: [.commonMedicine, .firstAid],
-            medicalDescription: "",
+            medicineConditions: [.chronicDisease, .highFever],
+            medicineOtherDescription: "Ông Khoa cần Thuốc điều trị tăng huyết áp; bé Châu đang sốt cao cần thuốc hạ sốt phù hợp trẻ em.",
+            medicalNeeds: [.commonMedicine, .chronicMaintenance],
+            medicalDescription: "Cấp thuốc điều trị tăng huyết áp cho ông Khoa và thuốc hạ sốt cho bé Châu.",
             isColdOrWet: true,
             blanketAvailability: .notEnough,
             areBlanketsEnough: false,
-            blanketRequestCount: 2,
+            blanketRequestCount: 3,
             clothingStatus: .partiallyLacking,
-            clothingPersonIds: [childId],
+            clothingPersonIds: [personIds.adult, personIds.child, personIds.elderly],
             clothingInfoByPerson: [
-                childId: ClothingPersonInfo(personId: childId, gender: .male)
+                personIds.adult: ClothingPersonInfo(personId: personIds.adult, gender: .male),
+                personIds.child: ClothingPersonInfo(personId: personIds.child, gender: .female),
+                personIds.elderly: ClothingPersonInfo(personId: personIds.elderly, gender: .male)
             ]
         )
     }
 
-    static func makeRescueData(peopleCount: PeopleCount, people: [Person]) -> RescueData {
+    static func makeRescueData(peopleCount: PeopleCount, people: [Person], personIds: PersonIds) -> RescueData {
         RescueData(
             situation: RescueSituation.trapped.rawValue,
-            otherSituationDescription: "",
+            otherSituationDescription: "Mắc kẹt trong nhà ngập nước",
             peopleCount: peopleCount,
             people: people,
             hasInjured: true,
-            injuredPersonIds: [elderlyId],
+            injuredPersonIds: [personIds.child, personIds.elderly],
             medicalInfoByPerson: [
-                elderlyId: PersonMedicalInfo(
-                    personId: elderlyId,
+                personIds.elderly: PersonMedicalInfo(
+                    personId: personIds.elderly,
                     medicalIssues: [
-                        MedicalIssue.fracture.rawValue,
-                        MedicalIssue.chronicDisease.rawValue,
-                        MedicalIssue.needsMedicalDevice.rawValue,
-                        MedicalIssue.breathingDifficulty.rawValue,
-                        MedicalIssue.cannotMove.rawValue
+                        MedicalIssue.cannotMove.rawValue,
+                        MedicalIssue.unconscious.rawValue,
+                        MedicalIssue.headInjury.rawValue,
+                        MedicalIssue.confusion.rawValue,
+                        MedicalIssue.chronicDisease.rawValue
                     ],
-                    otherDescription: ""
+                    otherDescription: "Ông Khoa bị không thể di chuyển, bất tỉnh, chấn thương đầu và mất phương hướng."
+                ),
+                personIds.child: PersonMedicalInfo(
+                    personId: personIds.child,
+                    medicalIssues: [
+                        MedicalIssue.highFever.rawValue
+                    ],
+                    otherDescription: "Bé Châu đang sốt cao, cần đưa tới nơi an toàn để can thiệp y tế."
                 )
             ],
             medicalIssues: [],
             otherMedicalDescription: "",
-            othersAreStable: false
+            othersAreStable: true
         )
+    }
+
+    private static func profile(
+        named name: String,
+        type: Person.PersonType,
+        in profiles: [EmergencyRelativeProfile]
+    ) -> EmergencyRelativeProfile? {
+        let targetName = normalizedName(name)
+        return profiles.first {
+            $0.personType == type && normalizedName($0.displayName) == targetName
+        }
+    }
+
+    private static func personId(
+        named name: String,
+        type: Person.PersonType,
+        fallback: String,
+        in people: [Person]
+    ) -> String {
+        let targetName = normalizedName(name)
+        return people.first {
+            $0.type == type && normalizedName($0.displayName) == targetName
+        }?.id ?? people.first {
+            $0.type == type
+        }?.id ?? fallback
+    }
+
+    private static func normalizedName(_ name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "vi_VN"))
     }
 }
 
@@ -2395,10 +2494,12 @@ final class SOSFormData: ObservableObject {
         }
     }
 
-    func applyQuickFillSample() {
+    func applyQuickFillSample(availableProfiles: [EmergencyRelativeProfile] = []) {
         appliedPreset = nil
         reportingTarget = .self
         reportingTargetSelectionMade = true
+        victimName = ""
+        victimPhone = ""
         resolvedAddress = SOSQuickFillSample.demoAddress
         addressQuery = SOSQuickFillSample.demoAddress
         manualLocation = SOSManualLocation(
@@ -2407,14 +2508,34 @@ final class SOSFormData: ObservableObject {
             accuracy: nil
         )
 
+        if let demoProfiles = SOSQuickFillSample.orderedDemoProfiles(from: availableProfiles) {
+            applySelectedRelativeProfiles(demoProfiles)
+        } else {
+            personSourceMode = .manual
+            selectedRelativeSnapshots = []
+            setSharedPeopleCountSilently(SOSQuickFillSample.peopleCount)
+            sharedPeople = SOSQuickFillSample.manualPeople()
+            rescueData.peopleCount = sharedPeopleCount
+            reliefData.peopleCount = sharedPeopleCount
+            rescueData.people = sharedPeople
+        }
+
+        let personIds = SOSQuickFillSample.personIds(from: sharedPeople)
+
         selectedTypes = [.rescue, .relief]
         additionalDescription = SOSQuickFillSample.additionalDescription
-        supplementalMedicalContextItems = SOSQuickFillSample.medicalContextItems
+        supplementalMedicalContextItems = usesSavedRelativeProfiles
+            ? []
+            : SOSQuickFillSample.makeMedicalContextItems(personIds: personIds)
 
-        reliefData = SOSQuickFillSample.makeReliefData(peopleCount: sharedPeopleCount)
+        reliefData = SOSQuickFillSample.makeReliefData(
+            peopleCount: sharedPeopleCount,
+            personIds: personIds
+        )
         rescueData = SOSQuickFillSample.makeRescueData(
             peopleCount: sharedPeopleCount,
-            people: sharedPeople
+            people: sharedPeople,
+            personIds: personIds
         )
 
         let validIds = Set(sharedPeople.map(\.id))

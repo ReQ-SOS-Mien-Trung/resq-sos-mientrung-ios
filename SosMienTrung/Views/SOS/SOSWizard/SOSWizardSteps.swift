@@ -13,6 +13,7 @@ import MapKit
 
 struct Step0ReportingModeView: View {
     @ObservedObject var formData: SOSFormData
+    @ObservedObject private var relativeProfileStore = RelativeProfileStore.shared
 
     var body: some View {
         ScrollView {
@@ -35,7 +36,7 @@ struct Step0ReportingModeView: View {
 
                 SOSQuickFillEntryCard {
                     withAnimation(.easeInOut(duration: 0.25)) {
-                        formData.applyQuickFillSample()
+                        formData.applyQuickFillSample(availableProfiles: relativeProfileStore.profiles)
                     }
                 }
                 .padding(.horizontal)
@@ -72,7 +73,7 @@ private struct SOSQuickFillEntryCard: View {
                         .foregroundColor(DS.Colors.info)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Demo")
+                        Text("Demo gia đình")
                             .font(DS.Typography.headline)
                             .foregroundColor(DS.Colors.text)
                     }
@@ -1573,8 +1574,17 @@ struct Step2AReliefView: View {
 
 struct Step2BRescueView: View {
     @ObservedObject var formData: SOSFormData
-    @State private var selectedPersonForMedical: Person? = nil
-    @State private var isShowingMedicalForm = false
+    let onOpenMedicalForm: ((Person) -> Void)?
+    @State private var internalMedicalFormTarget: MedicalFormPresentationTarget?
+    @State private var medicalPresentationRequestID = UUID()
+
+    init(
+        formData: SOSFormData,
+        onOpenMedicalForm: ((Person) -> Void)? = nil
+    ) {
+        self.formData = formData
+        self.onOpenMedicalForm = onOpenMedicalForm
+    }
     
     var body: some View {
         ScrollView {
@@ -1627,32 +1637,60 @@ struct Step2BRescueView: View {
             // Mặc định set hasInjured = true để hiển thị danh sách người
             formData.rescueData.hasInjured = true
         }
-        .sheet(isPresented: $isShowingMedicalForm, onDismiss: {
-            selectedPersonForMedical = nil
-        }) {
-            Group {
-                if let person = selectedPersonForMedical {
-                    PersonMedicalFormSheet(
-                        person: person,
-                        formData: formData,
-                        onDismiss: dismissMedicalForm
-                    )
-                }
-            }
-        }
+        .medicalFormSheet(target: $internalMedicalFormTarget, formData: formData)
     }
 
     private func presentMedicalForm(for person: Person) {
-        selectedPersonForMedical = formData.person(for: person.id) ?? person
-        // Defer presentation until the injured-row layout update has committed.
-        DispatchQueue.main.async {
-            isShowingMedicalForm = true
+        let resolvedPerson = formData.person(for: person.id) ?? person
+        let requestID = UUID()
+        medicalPresentationRequestID = requestID
+
+        // Let the injured-row update and TabView page transaction settle before presenting.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard medicalPresentationRequestID == requestID,
+                  formData.rescueData.injuredPersonIds.contains(resolvedPerson.id) else {
+                return
+            }
+
+            if let onOpenMedicalForm {
+                onOpenMedicalForm(resolvedPerson)
+            } else {
+                internalMedicalFormTarget = MedicalFormPresentationTarget(person: resolvedPerson)
+            }
         }
     }
+}
 
-    private func dismissMedicalForm() {
-        isShowingMedicalForm = false
-        selectedPersonForMedical = nil
+struct MedicalFormPresentationTarget: Identifiable {
+    let person: Person
+
+    var id: String {
+        person.id
+    }
+}
+
+private struct MedicalFormSheetPresenter: ViewModifier {
+    @Binding var target: MedicalFormPresentationTarget?
+    @ObservedObject var formData: SOSFormData
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $target) { target in
+                PersonMedicalFormSheet(
+                    person: target.person,
+                    formData: formData,
+                    onDismiss: { self.target = nil }
+                )
+            }
+    }
+}
+
+extension View {
+    func medicalFormSheet(
+        target: Binding<MedicalFormPresentationTarget?>,
+        formData: SOSFormData
+    ) -> some View {
+        modifier(MedicalFormSheetPresenter(target: target, formData: formData))
     }
 }
 

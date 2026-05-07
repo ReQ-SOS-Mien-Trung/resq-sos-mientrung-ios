@@ -1207,6 +1207,7 @@ struct SOSWizardContent: View {
     @Binding var isSending: Bool
     var onSend: () -> Void
     @State private var showRelativeProfilePicker = false
+    @State private var medicalFormTarget: MedicalFormPresentationTarget?
     
     var body: some View {
         ZStack {
@@ -1240,7 +1241,10 @@ struct SOSWizardContent: View {
                     Step2AReliefView(formData: formData)
                         .tag(SOSWizardStep.relief)
                     
-                    Step2BRescueView(formData: formData)
+                    Step2BRescueView(
+                        formData: formData,
+                        onOpenMedicalForm: presentMedicalForm
+                    )
                         .tag(SOSWizardStep.rescue)
                     
                     Step3AdditionalInfoView(formData: formData)
@@ -1339,6 +1343,12 @@ struct SOSWizardContent: View {
                 }
             }
         }
+        .medicalFormSheet(target: $medicalFormTarget, formData: formData)
+    }
+
+    private func presentMedicalForm(for person: Person) {
+        guard medicalFormTarget?.id != person.id else { return }
+        medicalFormTarget = MedicalFormPresentationTarget(person: person)
     }
 }
 

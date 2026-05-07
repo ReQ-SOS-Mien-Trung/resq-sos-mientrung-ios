@@ -23,6 +23,7 @@ struct SOSWizardView: View {
     @State private var backendErrorMessage = ""
     @State private var showTermsSheet = false
     @State private var showRelativeProfilePicker = false
+    @State private var medicalFormTarget: MedicalFormPresentationTarget?
     
     init(bridgefyManager: BridgefyNetworkManager) {
         self.bridgefyManager = bridgefyManager
@@ -55,7 +56,10 @@ struct SOSWizardView: View {
                         Step2AReliefView(formData: formData)
                             .tag(SOSWizardStep.relief)
                         
-                        Step2BRescueView(formData: formData)
+                        Step2BRescueView(
+                            formData: formData,
+                            onOpenMedicalForm: presentMedicalForm
+                        )
                             .tag(SOSWizardStep.rescue)
                         
                         Step3AdditionalInfoView(formData: formData)
@@ -120,6 +124,7 @@ struct SOSWizardView: View {
                 // Cập nhật khi trạng thái mạng thay đổi
                 updateAutoInfoWithLocation(locationManager.currentLocation)
             }
+            .medicalFormSheet(target: $medicalFormTarget, formData: formData)
         }
     }
     
@@ -195,6 +200,11 @@ struct SOSWizardView: View {
                 formData.applySelectedRelativeProfiles(profiles)
             }
         }
+    }
+
+    private func presentMedicalForm(for person: Person) {
+        guard medicalFormTarget?.id != person.id else { return }
+        medicalFormTarget = MedicalFormPresentationTarget(person: person)
     }
     
     // MARK: - Relief Disclaimer

@@ -82,7 +82,6 @@ final class SosMienTrungTests: XCTestCase {
             description: "Di chuyển đến 18.351, 105.902. Thực hiện cứu hộ 5 người bị ảnh hưởng bởi sạt lở đất.",
             imageUrl: nil,
             targetVictimSummary: nil,
-            priority: "High",
             estimatedTime: 2,
             sosRequestId: 3,
             depotId: nil,
@@ -111,7 +110,6 @@ final class SosMienTrungTests: XCTestCase {
             description: "Thực hiện sơ cứu tại 18.351, 105.902 cho 2 người bị thương.",
             imageUrl: nil,
             targetVictimSummary: nil,
-            priority: "High",
             estimatedTime: 2,
             sosRequestId: 3,
             depotId: nil,
@@ -692,6 +690,110 @@ final class SosMienTrungTests: XCTestCase {
         XCTAssertTrue(formData.savedProfileContextMessage?.contains("Bà Ngoại") == true)
         XCTAssertTrue(formData.savedProfileContextMessage?.contains("Khả năng vận động: Không thể tự di chuyển") == true)
         XCTAssertTrue(formData.savedProfileContextMessage?.contains("Khó di chuyển") == true)
+    }
+
+    func testQuickFillSampleWithoutSavedProfilesMatchesDemoFamilyScenario() throws {
+        let formData = SOSFormData()
+
+        formData.applyQuickFillSample()
+
+        XCTAssertEqual(formData.personSourceMode, .manual)
+        XCTAssertEqual(formData.sharedPeopleCount, PeopleCount(adults: 1, children: 1, elderly: 1))
+        XCTAssertEqual(formData.sharedPeople.map(\.displayName), ["Huỳnh Kim Cương", "Châu", "Khoa"])
+        XCTAssertEqual(formData.selectedTypes, [.rescue, .relief])
+        XCTAssertEqual(formData.reliefData.supplies, Set([.water, .food, .clothes, .blanket, .medicine]))
+        XCTAssertFalse(formData.reliefData.supplies.contains(.other))
+        XCTAssertEqual(formData.reliefData.otherSupplyDescription, "")
+        XCTAssertEqual(formData.reliefData.medicineConditions, [.chronicDisease, .highFever])
+        XCTAssertEqual(formData.reliefData.medicalNeeds, [.commonMedicine, .chronicMaintenance])
+        XCTAssertTrue(formData.reliefData.medicalDescription.contains("Thuốc điều trị tăng huyết áp"))
+        XCTAssertTrue(formData.reliefData.medicineOtherDescription.contains("bé Châu đang sốt cao"))
+        XCTAssertEqual(formData.reliefData.clothingPersonIds, ["adult_1", "child_1", "elderly_1"])
+        XCTAssertEqual(formData.reliefData.clothingInfoByPerson["adult_1"]?.gender, .male)
+        XCTAssertEqual(formData.reliefData.clothingInfoByPerson["child_1"]?.gender, .female)
+        XCTAssertEqual(formData.reliefData.clothingInfoByPerson["elderly_1"]?.gender, .male)
+
+        let khoaMedicalInfo = try XCTUnwrap(formData.rescueData.medicalInfoByPerson["elderly_1"])
+        XCTAssertEqual(
+            khoaMedicalInfo.medicalIssues,
+            [
+                MedicalIssue.cannotMove.rawValue,
+                MedicalIssue.unconscious.rawValue,
+                MedicalIssue.headInjury.rawValue,
+                MedicalIssue.confusion.rawValue,
+                MedicalIssue.chronicDisease.rawValue
+            ]
+        )
+        let chauMedicalInfo = try XCTUnwrap(formData.rescueData.medicalInfoByPerson["child_1"])
+        XCTAssertEqual(
+            chauMedicalInfo.medicalIssues,
+            [MedicalIssue.highFever.rawValue]
+        )
+        XCTAssertEqual(formData.rescueData.injuredPersonIds, ["child_1", "elderly_1"])
+        XCTAssertTrue(formData.rescueData.othersAreStable)
+        XCTAssertTrue(formData.additionalDescription.contains("Nước đang dâng rất nhanh"))
+        XCTAssertTrue(formData.additionalDescription.contains("Bé Châu đang sốt cao"))
+
+        let quickFillText = [
+            formData.additionalDescription,
+            formData.reliefData.otherSupplyDescription,
+            formData.reliefData.medicalDescription,
+            formData.reliefData.medicineOtherDescription,
+            formData.supplementalMedicalContextItems
+                .flatMap { [$0.displayName] + $0.summaryLines }
+                .joined(separator: " ")
+        ].joined(separator: " ")
+        XCTAssertFalse(quickFillText.contains("Thảo"))
+        XCTAssertFalse(quickFillText.contains("Dị ứng hải sản"))
+        XCTAssertFalse(quickFillText.contains("Tiểu đường"))
+        XCTAssertFalse(quickFillText.contains("Hen suyễn"))
+        XCTAssertFalse(quickFillText.contains("Bình oxy"))
+        XCTAssertFalse(quickFillText.contains("Pin sạc dự phòng"))
+    }
+
+    func testQuickFillSampleUsesSavedDemoProfilesWhenAvailable() throws {
+        let formData = SOSFormData()
+        let profiles = makeDemoQuickFillProfiles()
+        let unrelatedProfile = EmergencyRelativeProfile(
+            id: "relative-unrelated",
+            displayName: "An",
+            personType: .adult,
+            relationGroup: .giaDinh
+        )
+
+        formData.applyQuickFillSample(availableProfiles: [unrelatedProfile] + profiles)
+
+        XCTAssertEqual(formData.personSourceMode, .savedProfiles)
+        XCTAssertEqual(formData.selectedRelativeSnapshots.map(\.displayName), ["Huỳnh Kim Cương", "Châu", "Khoa"])
+        XCTAssertEqual(formData.sharedPeople.map(\.displayName), ["Huỳnh Kim Cương", "Châu", "Khoa"])
+        XCTAssertTrue(formData.supplementalMedicalContextItems.isEmpty)
+        XCTAssertEqual(formData.sharedPeopleCount, PeopleCount(adults: 1, children: 1, elderly: 1))
+
+        let khoaSnapshot = try XCTUnwrap(formData.selectedRelativeSnapshots.first { $0.displayName == "Khoa" })
+        let chauSnapshot = try XCTUnwrap(formData.selectedRelativeSnapshots.first { $0.displayName == "Châu" })
+        let khoaMedicalInfo = try XCTUnwrap(formData.rescueData.medicalInfoByPerson[khoaSnapshot.personId])
+        XCTAssertEqual(
+            khoaMedicalInfo.medicalIssues,
+            [
+                MedicalIssue.cannotMove.rawValue,
+                MedicalIssue.unconscious.rawValue,
+                MedicalIssue.headInjury.rawValue,
+                MedicalIssue.confusion.rawValue,
+                MedicalIssue.chronicDisease.rawValue
+            ]
+        )
+        let chauMedicalInfo = try XCTUnwrap(formData.rescueData.medicalInfoByPerson[chauSnapshot.personId])
+        XCTAssertEqual(
+            chauMedicalInfo.medicalIssues,
+            [MedicalIssue.highFever.rawValue]
+        )
+        XCTAssertEqual(formData.reliefData.clothingInfoByPerson[khoaSnapshot.personId]?.gender, .male)
+        XCTAssertEqual(formData.reliefData.clothingInfoByPerson[chauSnapshot.personId]?.gender, .female)
+        XCTAssertTrue(formData.reliefData.medicalDescription.contains("Thuốc điều trị tăng huyết áp"))
+    }
+
+    func testElderlyMedicalIssuePickerIncludesHeadInjury() {
+        XCTAssertTrue(MedicalIssue.issuesForPersonType(.elderly).contains(.headInjury))
     }
 
     func testSavedRelativeProfilesAlsoDriveVictimInfoInSelfMode() {
@@ -1558,7 +1660,6 @@ final class SosMienTrungTests: XCTestCase {
             description: "Sample activity \(id)",
             imageUrl: nil,
             targetVictimSummary: nil,
-            priority: "High",
             estimatedTime: 15,
             sosRequestId: nil,
             depotId: nil,
@@ -1574,6 +1675,54 @@ final class SosMienTrungTests: XCTestCase {
             completedBy: nil,
             targetVictims: nil
         )
+    }
+
+    private func makeDemoQuickFillProfiles() -> [EmergencyRelativeProfile] {
+        [
+            EmergencyRelativeProfile(
+                id: "demo-huynh-kim-cuong",
+                displayName: "Huỳnh Kim Cương",
+                phoneNumber: "+84374745872",
+                personType: .adult,
+                gender: .male,
+                relationGroup: .giaDinh,
+                medicalProfile: RelativeMedicalProfile(
+                    mobilityStatus: .normal
+                ),
+                medicalBaselineNote: "Người lớn khỏe mạnh"
+            ),
+            EmergencyRelativeProfile(
+                id: "demo-chau",
+                displayName: "Châu",
+                personType: .child,
+                gender: .female,
+                relationGroup: .giaDinh,
+                medicalBaselineNote: "Trẻ nhỏ, dễ sốt cao khi bị cô lập trong vùng ngập"
+            ),
+            EmergencyRelativeProfile(
+                id: "demo-khoa",
+                displayName: "Khoa",
+                personType: .elderly,
+                gender: .male,
+                relationGroup: .giaDinh,
+                medicalProfile: RelativeMedicalProfile(
+                    chronicConditions: [.hypertension],
+                    hasLongTermMedication: true,
+                    longTermMedications: [
+                        LongTermMedicationEntry(
+                            id: "demo-khoa-hypertension-med",
+                            name: "Thuốc điều trị tăng huyết áp",
+                            frequency: "hằng ngày",
+                            note: "Cần duy trì khi bị cô lập trong vùng ngập"
+                        )
+                    ],
+                    mobilityStatus: .needsSupport
+                ),
+                medicalBaselineNote: "Cha lớn tuổi có bệnh nền tăng huyết áp",
+                specialNeedsNote: "Cần hỗ trợ di chuyển",
+                specialDietNote: "Ăn nhạt, hạn chế muối"
+            )
+        ]
     }
 
     private final class MockMissionActivityRemoteService: MissionActivityRemoteService {
