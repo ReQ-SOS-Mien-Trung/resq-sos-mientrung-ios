@@ -418,12 +418,12 @@ enum RescueSituation: String, Codable, CaseIterable, Identifiable {
     /// Hệ số nhân tình huống (dùng cho priority)
     var situationMultiplier: Double {
         switch self {
-        case .flooding: return 1.5
-        case .collapsed: return 1.5
-        case .trapped: return 1.3
-        case .dangerZone: return 1.3
-        case .cannotMove: return 1.2
-        case .other: return 1.0
+        case .flooding: return 1.2
+        case .collapsed: return 1.2
+        case .trapped: return 1.15
+        case .dangerZone: return 1.15
+        case .cannotMove: return 1.1
+        case .other: return 1.05
         }
     }
     
@@ -874,7 +874,7 @@ private enum SOSQuickFillSample {
     static let demoLongitude = 107.592778
     static let demoAddress = "2 Trần Hưng Đạo, Phú Hòa, Thành phố Huế"
 
-    static let additionalDescription = "Nước đang dâng rất nhanh, nhà có dấu hiệu sắp sập. Ông Khoa không thể di chuyển, bất tỉnh, chấn thương đầu và mất phương hướng. Bé Châu đang sốt cao, cần được đưa tới nơi an toàn để can thiệp y tế."
+    static let additionalDescription = "Nước đang dâng nhanh, Ông Khoa đang mệt người, hãy mang thuốc huyết áp cho ông và lấy thuốc hạ sốt và sữa hộp cho bé Châu"
 
     struct PersonIds {
         let adult: String
@@ -958,14 +958,14 @@ private enum SOSQuickFillSample {
             specialDietNeed: .both,
             specialDietPersonIds: [personIds.child, personIds.elderly],
             specialDietInfoByPerson: [
-                personIds.child: PersonSpecialDietInfo(personId: personIds.child, dietDescription: "Ưu tiên thức ăn mềm, dễ tiêu và đủ nước"),
+                personIds.child: PersonSpecialDietInfo(personId: personIds.child, dietDescription: "Ưu tiên thức ăn mềm và sữa hộp"),
                 personIds.elderly: PersonSpecialDietInfo(personId: personIds.elderly, dietDescription: "Ăn nhạt, hạn chế muối")
             ],
             needsUrgentMedicine: true,
             medicineConditions: [.chronicDisease, .highFever],
-            medicineOtherDescription: "Ông Khoa cần Thuốc điều trị tăng huyết áp; bé Châu đang sốt cao cần thuốc hạ sốt phù hợp trẻ em.",
+            medicineOtherDescription: "",
             medicalNeeds: [.commonMedicine, .chronicMaintenance],
-            medicalDescription: "Cấp thuốc điều trị tăng huyết áp cho ông Khoa và thuốc hạ sốt cho bé Châu.",
+            medicalDescription: "cần thuốc hạ sốt và thuốc huyết áp",
             isColdOrWet: true,
             blanketAvailability: .notEnough,
             areBlanketsEnough: false,
@@ -982,8 +982,8 @@ private enum SOSQuickFillSample {
 
     static func makeRescueData(peopleCount: PeopleCount, people: [Person], personIds: PersonIds) -> RescueData {
         RescueData(
-            situation: RescueSituation.trapped.rawValue,
-            otherSituationDescription: "Mắc kẹt trong nhà ngập nước",
+            situation: RescueSituation.flooding.rawValue,
+            otherSituationDescription: "",
             peopleCount: peopleCount,
             people: people,
             hasInjured: true,
@@ -992,13 +992,10 @@ private enum SOSQuickFillSample {
                 personIds.elderly: PersonMedicalInfo(
                     personId: personIds.elderly,
                     medicalIssues: [
-                        MedicalIssue.cannotMove.rawValue,
-                        MedicalIssue.unconscious.rawValue,
-                        MedicalIssue.headInjury.rawValue,
-                        MedicalIssue.confusion.rawValue,
-                        MedicalIssue.chronicDisease.rawValue
+                        MedicalIssue.chronicDisease.rawValue,
+                        MedicalIssue.breathingDifficulty.rawValue
                     ],
-                    otherDescription: "Ông Khoa bị không thể di chuyển, bất tỉnh, chấn thương đầu và mất phương hướng."
+                    otherDescription: ""
                 ),
                 personIds.child: PersonMedicalInfo(
                     personId: personIds.child,

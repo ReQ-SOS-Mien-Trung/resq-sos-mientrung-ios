@@ -779,13 +779,13 @@ struct SOSRuleConfig: Codable, Equatable {
         medicalScore: SOSRuleMedicalScoreConfig = SOSRuleMedicalScoreConfig(),
         reliefScore: SOSRuleReliefScoreConfig = SOSRuleReliefScoreConfig(),
         situationMultiplier: [String: Double] = [
-            "FLOODING": 1.5,
-            "COLLAPSED": 1.5,
-            "TRAPPED": 1.3,
-            "DANGER_ZONE": 1.3,
-            "CANNOT_MOVE": 1.2,
-            "OTHER": 1.0,
-            "DEFAULT_WHEN_NULL": 1.0
+            "FLOODING": 1.2,
+            "COLLAPSED": 1.2,
+            "TRAPPED": 1.15,
+            "DANGER_ZONE": 1.15,
+            "CANNOT_MOVE": 1.1,
+            "OTHER": 1.05,
+            "DEFAULT_WHEN_NULL": 1.05
         ],
         priorityLevel: SOSRulePriorityLevelConfig = SOSRulePriorityLevelConfig(),
         uiConstraints: SOSRuleUIConstraintsConfig = SOSRuleUIConstraintsConfig(),
@@ -833,7 +833,12 @@ struct SOSRuleConfig: Codable, Equatable {
         self.priorityScore = try container.decodeIfPresent(SOSRulePriorityScoreConfig.self, forKey: .priorityScore) ?? fallback.priorityScore
         self.medicalScore = try container.decodeIfPresent(SOSRuleMedicalScoreConfig.self, forKey: .medicalScore) ?? fallback.medicalScore
         self.reliefScore = try container.decodeIfPresent(SOSRuleReliefScoreConfig.self, forKey: .reliefScore) ?? fallback.reliefScore
-        self.situationMultiplier = try container.decodeIfPresent([String: Double].self, forKey: .situationMultiplier) ?? fallback.situationMultiplier
+        let decodedSituationMultiplier = try container.decodeIfPresent([String: Double].self, forKey: .situationMultiplier)
+            ?? fallback.situationMultiplier
+        self.situationMultiplier = Self.normalizedSituationMultipliers(
+            decodedSituationMultiplier,
+            fallback: fallback.situationMultiplier
+        )
         self.priorityLevel = try container.decodeIfPresent(SOSRulePriorityLevelConfig.self, forKey: .priorityLevel) ?? fallback.priorityLevel
         self.uiConstraints = try container.decodeIfPresent(SOSRuleUIConstraintsConfig.self, forKey: .uiConstraints) ?? fallback.uiConstraints
         self.uiOptions = try container.decodeIfPresent(SOSRuleUIOptionsConfig.self, forKey: .uiOptions) ?? fallback.uiOptions
@@ -955,6 +960,41 @@ struct SOSSelectionOption: Identifiable, Hashable {
 }
 
 extension SOSRuleConfig {
+    nonisolated private static let situationMultiplierMin = 1.05
+    nonisolated private static let situationMultiplierMax = 1.2
+
+    nonisolated static func normalizedSituationMultipliers(
+        _ source: [String: Double],
+        fallback: [String: Double]
+    ) -> [String: Double] {
+        var normalized: [String: Double] = [:]
+
+        for (key, value) in source {
+            let normalizedKey = normalizeKey(key)
+            guard !normalizedKey.isEmpty else { continue }
+            let fallbackValue = fallback.first { normalizeKey($0.key) == normalizedKey }?.value
+                ?? situationMultiplierMin
+            normalized[normalizedKey] = normalizedSituationMultiplierValue(value, fallback: fallbackValue)
+        }
+
+        for (key, value) in fallback {
+            let normalizedKey = normalizeKey(key)
+            guard !normalizedKey.isEmpty else { continue }
+            normalized[normalizedKey, default: value] = value
+        }
+
+        return normalized
+    }
+
+    nonisolated private static func normalizedSituationMultiplierValue(_ value: Double, fallback: Double) -> Double {
+        guard value.isFinite,
+              value >= situationMultiplierMin,
+              value <= situationMultiplierMax else {
+            return fallback
+        }
+        return value
+    }
+
     nonisolated static func normalizeKey(_ raw: String?) -> String {
         raw?
             .trimmingCharacters(in: .whitespacesAndNewlines)

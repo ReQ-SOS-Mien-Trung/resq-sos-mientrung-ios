@@ -290,26 +290,12 @@ struct Step0AutoInfoView: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
 
-                                if formData.usesSavedRelativeProfiles {
-                                    SavedRelativeProfilesCard(
-                                        formData: formData,
-                                        onChangeSelection: { showRelativeProfilePicker = true },
-                                        onSwitchToManual: { formData.switchToManualPersonSelection() }
-                                    )
-                                }
-
                                 Text("Tên là bắt buộc. Số điện thoại có thể để trống nếu không rõ.")
                                     .font(.caption)
                                     .foregroundColor(DS.Colors.textSecondary)
                             }
                         } else {
-                            if formData.usesSavedRelativeProfiles {
-                                SavedRelativeProfilesCard(
-                                    formData: formData,
-                                    onChangeSelection: { showRelativeProfilePicker = true },
-                                    onSwitchToManual: { formData.switchToManualPersonSelection() }
-                                )
-                            } else if let user = UserProfile.shared.currentUser {
+                            if let user = UserProfile.shared.currentUser {
                                 InfoCard(
                                     icon: "person.fill",
                                     iconColor: .indigo,

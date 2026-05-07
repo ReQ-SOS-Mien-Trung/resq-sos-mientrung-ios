@@ -204,6 +204,17 @@ final class VoiceSOSAgentViewModel: ObservableObject {
         conversationState = .idle
     }
 
+    func startConversationIfReady() {
+        guard isAuthorized, isOnDeviceAIAvailable else { return }
+        startConversation()
+    }
+
+    func skipCurrentAISpeech() {
+        guard conversationState == .aiSpeaking else { return }
+        speechSynthesis.stopSpeaking()
+        handleAIFinishedSpeaking()
+    }
+
     // MARK: - AI Speaking
 
     private func aiSpeak(_ text: String) {
@@ -272,7 +283,7 @@ final class VoiceSOSAgentViewModel: ObservableObject {
                 aiSpeak("Mình gặp chút lỗi khi phân tích thông tin, nhưng mình sẽ gửi SOS ngay với những gì đã ghi nhận.")
             } else {
                 followUpCount += 1
-                aiSpeak("Mình chưa nghe rõ thông tin cứu hộ, bạn hãy nói lại giúp mình số người và tình hình hiện tại nhé.")
+                aiSpeak("Mình gặp lỗi kết nối khi xử lý thông tin, bạn vui lòng nói lại yêu cầu cứu hộ nhé.")
             }
         }
     }

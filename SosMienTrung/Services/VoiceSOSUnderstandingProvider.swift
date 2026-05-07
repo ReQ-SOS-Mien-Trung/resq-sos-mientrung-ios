@@ -890,6 +890,7 @@ actor GeminiVoiceSOSUnderstandingProvider: VoiceSOSUnderstandingProvider {
             
             QUY TẮC:
             - TUYỆT ĐỐI KHÔNG tự bịa thông tin giả. Chỉ trích xuất từ hội thoại.
+            - situation là text mô tả tình huống cứu hộ bằng ngôn ngữ tự nhiên (STRING), KHÔNG bị ép enum. Ví dụ: "Bị mắc kẹt trên tầng cao do lũ bao vây", "Đang bị nước lũ cô lập không ra được".
             - Địa chỉ (address): Trích xuất thông tin vị trí vào trường 'address'.
             - missingFields: Phải có "LOCATION" nếu chưa biết địa chỉ.
             - Luôn đặt selectedTypes là ["RESCUE"].
@@ -944,22 +945,51 @@ actor GeminiVoiceSOSUnderstandingProvider: VoiceSOSUnderstandingProvider {
         throw VoiceSOSUnderstandingError.failed("Không có Gemini model khả dụng cho Voice SOS.")
     }
 
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 45
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     private func generateDraft(
         model: String,
         apiKey: String,
         httpBody: Data
     ) async throws -> VoiceSOSDraft {
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
+        guard var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent") else {
+            throw VoiceSOSUnderstandingError.failed("Không tạo được URL request.")
+        }
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        guard let url = components.url else {
+            throw VoiceSOSUnderstandingError.failed("Không tạo được URL request.")
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = httpBody
+        request.timeoutInterval = 30
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await Self.urlSession.data(for: request)
+        } catch let error as NSError where error.domain == NSURLErrorDomain && error.code == NSURLErrorTimedOut {
+            throw VoiceSOSUnderstandingError.failed("Không thể kết nối đến máy chủ AI. Vui lòng kiểm tra kết nối mạng hoặc API key.")
+        } catch {
+            throw VoiceSOSUnderstandingError.failed("Lỗi kết nối: \(error.localizedDescription)")
+        }
+
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
             let errorMsg = String(data: data, encoding: .utf8) ?? "Status \(httpResponse.statusCode)"
+            if httpResponse.statusCode == 400 {
+                throw VoiceSOSUnderstandingError.failed("API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại Keys.plist.")
+            }
+            if httpResponse.statusCode == 429 {
+                throw VoiceSOSUnderstandingError.failed("Đã vượt quá giới hạn yêu cầu API. Vui lòng thử lại sau.")
+            }
             throw GeminiVoiceSOSAPIError(
                 model: model,
                 statusCode: httpResponse.statusCode,

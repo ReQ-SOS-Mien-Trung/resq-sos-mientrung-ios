@@ -100,8 +100,9 @@ struct VoiceSOSAgentView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
-                Task {
+                Task { @MainActor in
                     await viewModel.requestPermissions()
+                    viewModel.startConversationIfReady()
                 }
             }
             .onDisappear {
@@ -430,7 +431,7 @@ struct VoiceSOSAgentView: View {
             // Mic button area
             switch viewModel.conversationState {
             case .idle:
-                startButton
+                idleAutoStartIndicator
 
             case .aiSpeaking:
                 aiSpeakingIndicator
@@ -465,27 +466,21 @@ struct VoiceSOSAgentView: View {
         )
     }
 
-    // MARK: - Start Button
+    // MARK: - Auto Start Indicator
 
-    private var startButton: some View {
-        Button {
-            viewModel.startConversation()
-        } label: {
-            HStack(spacing: DS.Spacing.sm) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 20, weight: .bold))
-                Text(viewModel.isOnDeviceAIAvailable ? "HÃY BẮT ĐẦU HỎI" : "VOICE SOS KHÔNG KHẢ DỤNG")
-                    .font(DS.Typography.headline)
-                    .tracking(1)
+    private var idleAutoStartIndicator: some View {
+        HStack(spacing: DS.Spacing.sm) {
+            if viewModel.isAuthorized && viewModel.isOnDeviceAIAvailable {
+                ProgressView()
+                    .scaleEffect(0.85)
+
+                Text("Đang chuẩn bị Voice SOS...")
+                    .font(DS.Typography.body)
+                    .foregroundColor(DS.Colors.textSecondary)
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DS.Spacing.md)
-            .background(DS.Colors.danger)
-            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
         }
-        .disabled(!viewModel.isAuthorized || !viewModel.isOnDeviceAIAvailable)
-        .opacity(viewModel.isAuthorized && viewModel.isOnDeviceAIAvailable ? 1.0 : 0.5)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, DS.Spacing.sm)
     }
 
     // MARK: - AI Speaking Indicator
@@ -502,8 +497,7 @@ struct VoiceSOSAgentView: View {
             Spacer()
 
             Button {
-                viewModel.speechSynthesis.stopSpeaking()
-                viewModel.manualStartListening()
+                viewModel.skipCurrentAISpeech()
             } label: {
                 Text("Bỏ qua")
                     .font(DS.Typography.caption)
