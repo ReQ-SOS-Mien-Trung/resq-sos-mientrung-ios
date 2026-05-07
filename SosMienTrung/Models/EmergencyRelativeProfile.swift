@@ -876,7 +876,11 @@ final class RelativeProfileStore: ObservableObject {
             hasLoadedRemoteSnapshot = true
             remoteProfilesById = dictionary(from: sortedRemoteProfiles)
 
-            let mergedProfiles = mergeProfiles(local: localSnapshot, remote: sortedRemoteProfiles)
+            let localSnapshotForMerge = sanitizedLocalSnapshotForRemoteMerge(
+                localSnapshot,
+                remote: sortedRemoteProfiles
+            )
+            let mergedProfiles = mergeProfiles(local: localSnapshotForMerge, remote: sortedRemoteProfiles)
             if profilesEqual(mergedProfiles, profiles) == false {
                 profiles = mergedProfiles
                 persist(mergedProfiles, for: userId)
@@ -896,6 +900,73 @@ final class RelativeProfileStore: ObservableObject {
                 print("❌ Failed to sync relative profiles: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func sanitizedLocalSnapshotForRemoteMerge(
+        _ localProfiles: [EmergencyRelativeProfile],
+        remote remoteProfiles: [EmergencyRelativeProfile]
+    ) -> [EmergencyRelativeProfile] {
+        guard isDemoFamilyRemoteSeed(remoteProfiles) else {
+            return localProfiles
+        }
+
+        let remoteIds = Set(remoteProfiles.map { canonicalProfileId($0.id) })
+        return localProfiles.filter { profile in
+            let profileId = canonicalProfileId(profile.id)
+            if remoteIds.contains(profileId) {
+                return false
+            }
+
+            let normalizedName = Self.normalizedDemoProfileName(profile.displayName)
+            return Self.demoFamilyProfileNames.contains(normalizedName) == false
+                && Self.legacyDemoFamilyProfileNames.contains(normalizedName) == false
+        }
+    }
+
+    private func isDemoFamilyRemoteSeed(_ profiles: [EmergencyRelativeProfile]) -> Bool {
+        guard profiles.count == 3 else {
+            return false
+        }
+
+        return profiles.contains { profile in
+            Self.normalizedDemoProfileName(profile.displayName) == "huỳnh kim cương"
+                && profile.personType == .adult
+                && profile.gender == .male
+                && profile.phoneNumber == "+84374745872"
+                && profile.medicalProfile.chronicConditions.isEmpty
+                && profile.medicalProfile.mobilityStatus == .normal
+        }
+            && profiles.contains { profile in
+                Self.normalizedDemoProfileName(profile.displayName) == "khoa"
+                    && profile.personType == .elderly
+                    && profile.gender == .male
+                    && profile.medicalProfile.chronicConditions.contains(.hypertension)
+                    && profile.medicalProfile.longTermMedications.contains { medication in
+                        medication.name == "Thuốc điều trị tăng huyết áp"
+                    }
+            }
+            && profiles.contains { profile in
+                Self.normalizedDemoProfileName(profile.displayName) == "châu"
+                    && profile.personType == .child
+                    && profile.gender == .female
+                    && profile.medicalProfile.specialSituation.isYoungChild
+            }
+    }
+
+    private static let demoFamilyProfileNames: Set<String> = [
+        "huỳnh kim cương",
+        "khoa",
+        "châu"
+    ]
+
+    private static let legacyDemoFamilyProfileNames: Set<String> = [
+        "an",
+        "thảo"
+    ]
+
+    private static func normalizedDemoProfileName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(with: Locale(identifier: "vi_VN"))
     }
 
     private func flushLocalChangesToServer(
