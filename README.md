@@ -92,7 +92,7 @@ sudo gem install cocoapods
 **Clone the Repository**
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/ReQ-SOS-Mien-Trung/resq-sos-mientrung-ios
 cd resq-sos-mientrung-ios
 ```
 
